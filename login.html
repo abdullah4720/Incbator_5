@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>دخول المشاركين — نموذج التحقق من استيفاء متطلبات التحكيم | حاضنة ابتكار 5</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Cairo:wght@700;800;900&display=swap" rel="stylesheet">
+<!--
+  مكتبة Supabase JS — عبر CDN. إذا كانت الشبكة عندك تحظر jsdelivr/unpkg
+  (كما حصل سابقًا مع منصة "ابتكر للتعليم")، نزّل الملف وضمّنه محليًا بدل هذا السطر.
+-->
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --navy-950:#12103C; --navy-800:#1A1852; --navy-700:#242066;
+  --teal-600:#0E7C7B; --teal-500:#149493; --teal-100:#E4F3F2;
+  --gold-500:#C9A24B; --gold-100:#F7EFDD;
+  --purple-500:#6B4FA0; --green-500:#2FA36B;
+  --paper:#F5F6F9; --card:#FFFFFF;
+  --ink-900:#121826; --ink-600:#4C5568; --ink-400:#8790A3;
+  --line:#E1E4EB; --danger:#C0392B; --danger-100:#FBEAE8;
+  --success:#1E8E5A; --success-100:#E7F5EE;
+  --radius:16px; --shadow:0 10px 40px rgba(18,16,60,.10);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;}
+body{
+  background:radial-gradient(circle at 20% 0%, rgba(14,124,123,.10), transparent 45%),
+              radial-gradient(circle at 100% 100%, rgba(201,162,75,.10), transparent 40%),
+              var(--paper);
+  color:var(--ink-900);font-family:'IBM Plex Sans Arabic',sans-serif;font-size:15px;line-height:1.7;
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+}
+.mono{font-family:'IBM Plex Mono',monospace;}
+.display{font-family:'Cairo',sans-serif;}
+.stage{width:100%;max-width:440px;position:relative;}
+
+.brand-row{display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:26px;}
+.brand-mark{width:46px;height:46px;flex:none;}
+.brand-mark svg{width:100%;height:100%;}
+.brand-name{text-align:right;}
+.brand-eyebrow{font-size:11px;letter-spacing:.06em;color:var(--teal-600);font-weight:700;text-transform:uppercase;font-family:'Cairo',sans-serif;}
+.brand-title{font-size:16px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;}
+
+.card{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:34px 30px;position:relative;overflow:hidden;
+}
+.card::before{content:'';position:absolute;top:0;right:0;left:0;height:5px;background:linear-gradient(90deg,var(--teal-600) 0%,var(--teal-600) 35%,var(--purple-500) 35%,var(--purple-500) 60%,var(--gold-500) 60%,var(--gold-500) 82%,var(--green-500) 82%,var(--green-500) 100%);}
+.card::after{content:'';position:absolute;bottom:0;right:0;left:0;height:4px;background:var(--gold-500);}
+.bk{position:absolute;width:20px;height:20px;border:2px solid var(--gold-500);opacity:.55;}
+.bk.tl{top:14px;right:14px;border-left:none;border-bottom:none;}
+.bk.br{bottom:14px;left:14px;border-right:none;border-top:none;}
+
+h1{font-size:20px;font-weight:800;color:var(--navy-800);margin:0 0 6px;font-family:'Cairo',sans-serif;}
+h1::after{content:'';display:block;width:38px;height:3px;background:var(--teal-600);border-radius:2px;margin-top:9px;}
+.sub{font-size:13px;color:var(--ink-600);margin:14px 0 22px;}
+.restricted-note{background:var(--gold-100);border:1px solid #E9D6AB;border-radius:10px;padding:10px 14px;font-size:12px;color:#7A5C1E;margin-bottom:22px;display:flex;gap:8px;}
+
+.eq-ticks{width:100%;height:26px;display:block;margin-bottom:22px;}
+
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:13px;font-weight:600;margin-bottom:7px;color:var(--ink-900);}
+input[type=text],input[type=email],input[type=password]{
+  width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:14.5px;
+  background:#fff;color:var(--ink-900);font-family:inherit;
+}
+input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(14,124,123,.13);}
+.field-hint{font-size:11.5px;color:var(--ink-400);margin-top:5px;}
+
+.btn{width:100%;border:none;border-radius:10px;padding:13px;font-size:14.5px;font-weight:700;cursor:pointer;transition:all .15s;}
+.btn-primary{background:var(--navy-800);color:#fff;}
+.btn-primary:hover:not(:disabled){background:var(--navy-700);}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+.btn-ghost{background:transparent;color:var(--teal-600);font-size:13px;font-weight:600;padding:10px;}
+
+.err-box{background:var(--danger-100);border:1px solid #EBC3BE;color:var(--danger);border-radius:10px;padding:11px 14px;font-size:12.5px;margin-bottom:16px;display:none;}
+.err-box.show{display:block;}
+
+.success-stage{display:none;text-align:center;}
+.success-stage.show{display:block;}
+.success-icon{width:56px;height:56px;border-radius:50%;background:var(--success-100);color:var(--success);display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 16px;}
+.success-email{display:inline-block;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:5px 12px;margin-top:6px;font-size:13px;}
+.resend-row{margin-top:20px;font-size:12.5px;color:var(--ink-400);}
+
+.footer-note{text-align:center;font-size:11.5px;color:var(--ink-400);margin-top:20px;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;margin-inline-end:8px;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="brand-row">
+    <div class="brand-mark">
+      <svg viewBox="0 0 44 44" fill="none">
+        <rect x="3" y="3" width="38" height="38" rx="9" fill="#0E7C7B"/>
+        <path d="M11 15 L11 11 L15 11" stroke="#C9A24B" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <path d="M33 15 L33 11 L29 11" stroke="#C9A24B" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <path d="M11 29 L11 33 L15 33" stroke="#C9A24B" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <path d="M33 29 L33 33 L29 33" stroke="#C9A24B" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <text x="22" y="28" font-family="Cairo, sans-serif" font-size="16" font-weight="800" fill="#fff" text-anchor="middle">5</text>
+      </svg>
+    </div>
+    <div class="brand-name">
+      <div class="brand-eyebrow">حاضنة الابتكار — النسخة الخامسة</div>
+      <div class="brand-title">دخول المشاركين</div>
+    </div>
+  </div>
+
+  <svg class="eq-ticks" viewBox="0 0 440 26" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="8"   y="8"  width="3.5" height="14" rx="1.75" fill="#6B4FA0"/>
+    <rect x="28"  y="3"  width="3.5" height="20" rx="1.75" fill="#2FA36B"/>
+    <rect x="48"  y="11" width="3.5" height="10" rx="1.75" fill="#C9A24B"/>
+    <rect x="68"  y="6"  width="3.5" height="17" rx="1.75" fill="#0E7C7B"/>
+    <rect x="88"  y="10" width="3.5" height="12" rx="1.75" fill="#6B4FA0"/>
+    <rect x="108" y="2"  width="3.5" height="21" rx="1.75" fill="#C9A24B"/>
+    <rect x="128" y="9"  width="3.5" height="13" rx="1.75" fill="#2FA36B"/>
+    <rect x="148" y="5"  width="3.5" height="18" rx="1.75" fill="#0E7C7B"/>
+    <rect x="168" y="8"  width="3.5" height="14" rx="1.75" fill="#C9A24B"/>
+    <rect x="188" y="1"  width="3.5" height="22" rx="1.75" fill="#6B4FA0"/>
+    <rect x="208" y="10" width="3.5" height="12" rx="1.75" fill="#2FA36B"/>
+    <rect x="228" y="6"  width="3.5" height="17" rx="1.75" fill="#0E7C7B"/>
+    <rect x="248" y="9"  width="3.5" height="13" rx="1.75" fill="#C9A24B"/>
+    <rect x="268" y="3"  width="3.5" height="20" rx="1.75" fill="#6B4FA0"/>
+    <rect x="288" y="11" width="3.5" height="10" rx="1.75" fill="#2FA36B"/>
+    <rect x="308" y="5"  width="3.5" height="18" rx="1.75" fill="#0E7C7B"/>
+    <rect x="328" y="8"  width="3.5" height="14" rx="1.75" fill="#C9A24B"/>
+    <rect x="348" y="2"  width="3.5" height="21" rx="1.75" fill="#6B4FA0"/>
+    <rect x="368" y="10" width="3.5" height="12" rx="1.75" fill="#2FA36B"/>
+    <rect x="388" y="6"  width="3.5" height="17" rx="1.75" fill="#0E7C7B"/>
+    <rect x="408" y="9"  width="3.5" height="13" rx="1.75" fill="#C9A24B"/>
+    <rect x="428" y="4"  width="3.5" height="19" rx="1.75" fill="#6B4FA0"/>
+  </svg>
+
+  <div class="card">
+    <span class="bk tl"></span><span class="bk br"></span>
+
+    <div id="stepIdentity">
+      <h1>الدخول إلى نموذج التحقق</h1>
+      <p class="sub">أدخل رقم مشروعك في المنصة وبريد قائد الفريق المسجَّل لدينا.</p>
+
+      <div class="restricted-note">🔒 الدخول مقتصر على الفرق المسجَّلة رسميًا في حاضنة ابتكار 5.</div>
+
+      <div class="err-box" id="errBox1"></div>
+
+      <div class="field">
+        <label for="projectId">رقم المشروع في المنصة</label>
+        <input type="text" id="projectId" placeholder="مثال: INV5-2026-00842">
+        <div class="field-hint">تجده في رسالة تأكيد التسجيل أو في لوحتك على منصة حاضنة ابتكار.</div>
+      </div>
+      <div class="field">
+        <label for="leaderEmail">البريد الإلكتروني لقائد الفريق</label>
+        <input type="email" id="leaderEmail" placeholder="name@example.com">
+      </div>
+
+      <button class="btn btn-primary" id="continueBtn">استمرار</button>
+    </div>
+
+    <div id="stepSetup" style="display:none">
+      <h1>إنشاء كلمة مرور</h1>
+      <p class="sub">هذه أول مرة تدخل فيها فريقكم — أنشئ كلمة مرور خاصة بفريقك لاستخدامها في كل دخول لاحق.</p>
+      <div class="err-box" id="errBox2"></div>
+      <div class="field">
+        <label for="newPassword">كلمة المرور الجديدة</label>
+        <input type="password" id="newPassword" placeholder="8 أحرف على الأقل">
+      </div>
+      <div class="field">
+        <label for="confirmPassword">تأكيد كلمة المرور</label>
+        <input type="password" id="confirmPassword" placeholder="أعد كتابة كلمة المرور">
+        <div class="field-hint">احفظها في مكان آمن — يستخدمها قائد الفريق فقط لكل دخول لاحق لهذا المشروع.</div>
+      </div>
+      <button class="btn btn-primary" id="setupBtn">إنشاء كلمة المرور والدخول</button>
+      <button class="btn btn-ghost" id="backBtn1" style="width:100%">رجوع</button>
+    </div>
+
+    <div id="stepPassword" style="display:none">
+      <h1>أدخل كلمة المرور</h1>
+      <p class="sub">أدخل كلمة مرور فريقك لإكمال الدخول إلى النموذج.</p>
+      <div class="err-box" id="errBox3"></div>
+      <div class="field">
+        <label for="loginPassword">كلمة المرور</label>
+        <input type="password" id="loginPassword" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary" id="loginBtn">دخول</button>
+      <button class="btn btn-ghost" id="backBtn2" style="width:100%">رجوع</button>
+      <div class="footer-note">نسيت كلمة المرور؟ تواصل مع فريق البرنامج لإعادة تعيينها.</div>
+    </div>
+
+    <div class="success-stage" id="successStage">
+      <div class="success-icon">✓</div>
+      <h1>تم التحقق بنجاح</h1>
+      <p class="sub">جارٍ تحويلك إلى نموذج التحقق…</p>
+    </div>
+  </div>
+
+
+  <div class="footer-note">لأي استفسار حول الدخول، تواصل مع فريق البرنامج على <span class="mono">icip@qu.edu.sa</span></div>
+</div>
+
+<script>
+/* ==========================================================================
+   دخول المشاركين — حاضنة ابتكار 5
+   ==========================================================================
+   الخطوة 1: رقم المشروع + البريد → check_login_stage() يحدد إن كان الفريق
+   يدخل لأول مرة (needs_setup) أو لديه كلمة مرور مسبقًا (ready)، أو مرفوض
+   (not_found) أو مقفل مؤقتًا بعد محاولات فاشلة متكررة (locked).
+   الخطوة 2أ: إنشاء كلمة مرور لأول مرة → set_participant_password()
+   الخطوة 2ب: دخول بكلمة مرور موجودة → verify_project_login()
+   كلتاهما تُصدران توكن جلسة صالحًا 24 ساعة يُخزَّن ويُرسَل كرأس x-form-token
+   مع كل طلب Supabase لاحق من verify-form.html — بدونه ترفض RLS كل الوصول.
+   ========================================================================== */
+
+// ⚠️ عدّل القيمتين التاليتين ببيانات مشروعك الفعلية في Supabase قبل النشر:
+const SUPABASE_URL = "https://YOUR-PROJECT-REF.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR-ANON-PUBLIC-KEY";
+
+const sb = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+const steps = {
+  identity: document.getElementById('stepIdentity'),
+  setup: document.getElementById('stepSetup'),
+  password: document.getElementById('stepPassword'),
+  success: document.getElementById('successStage'),
+};
+const els = {
+  projectId: document.getElementById('projectId'),
+  leaderEmail: document.getElementById('leaderEmail'),
+  newPassword: document.getElementById('newPassword'),
+  confirmPassword: document.getElementById('confirmPassword'),
+  loginPassword: document.getElementById('loginPassword'),
+  continueBtn: document.getElementById('continueBtn'),
+  setupBtn: document.getElementById('setupBtn'),
+  loginBtn: document.getElementById('loginBtn'),
+  backBtn1: document.getElementById('backBtn1'),
+  backBtn2: document.getElementById('backBtn2'),
+  errBox1: document.getElementById('errBox1'),
+  errBox2: document.getElementById('errBox2'),
+  errBox3: document.getElementById('errBox3'),
+};
+
+function showStep(name){
+  Object.values(steps).forEach(s=>s.style.display='none');
+  steps[name].style.display='block';
+}
+function showErr(box, msg){ box.textContent = msg; box.classList.add('show'); }
+function clearErr(box){ box.classList.remove('show'); }
+function setBtnLoading(btn, loading, label){
+  btn.disabled = loading;
+  btn.innerHTML = loading ? '<span class="spinner"></span>جارٍ التحقق…' : label;
+}
+
+let currentProjectId = '';
+let currentEmail = '';
+
+/* ---------------- الخطوة 1: تحديد مرحلة الدخول المناسبة ---------------- */
+async function handleContinue(){
+  clearErr(els.errBox1);
+  const projectId = els.projectId.value.trim();
+  const email = els.leaderEmail.value.trim().toLowerCase();
+
+  if(!projectId || !email){ showErr(els.errBox1, 'يرجى تعبئة رقم المشروع والبريد الإلكتروني.'); return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ showErr(els.errBox1, 'صيغة البريد الإلكتروني غير صحيحة.'); return; }
+  if(!sb){ showErr(els.errBox1, 'تعذّر تحميل مكتبة الاتصال بقاعدة البيانات. يرجى المحاولة لاحقًا.'); return; }
+
+  setBtnLoading(els.continueBtn, true, 'استمرار');
+  try{
+    const { data: stage, error } = await sb.rpc('check_login_stage', { p_project_id: projectId, p_email: email });
+    setBtnLoading(els.continueBtn, false, 'استمرار');
+    if(error){ showErr(els.errBox1, 'حدث خطأ تقني. يرجى المحاولة مرة أخرى.'); return; }
+
+    currentProjectId = projectId;
+    currentEmail = email;
+
+    if(stage === 'not_found'){ showErr(els.errBox1, 'رقم المشروع أو البريد الإلكتروني غير مطابق لسجلات البرنامج.'); return; }
+    if(stage === 'locked'){ showErr(els.errBox1, 'تم قفل الدخول مؤقتًا بعد عدة محاولات فاشلة. يرجى المحاولة بعد 15 دقيقة أو التواصل مع فريق البرنامج.'); return; }
+    if(stage === 'needs_setup'){ showStep('setup'); return; }
+    if(stage === 'ready'){ showStep('password'); return; }
+    showErr(els.errBox1, 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
+  } catch(e){
+    setBtnLoading(els.continueBtn, false, 'استمرار');
+    showErr(els.errBox1, 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
+  }
+}
+
+/* ---------------- الخطوة 2أ: إنشاء كلمة مرور لأول مرة ---------------- */
+async function handleSetup(){
+  clearErr(els.errBox2);
+  const p1 = els.newPassword.value;
+  const p2 = els.confirmPassword.value;
+
+  if(p1.length < 8){ showErr(els.errBox2, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.'); return; }
+  if(p1 !== p2){ showErr(els.errBox2, 'كلمتا المرور غير متطابقتين.'); return; }
+
+  setBtnLoading(els.setupBtn, true, 'إنشاء كلمة المرور والدخول');
+  try{
+    const { data: token, error } = await sb.rpc('set_participant_password', {
+      p_project_id: currentProjectId, p_email: currentEmail, p_password: p1,
+    });
+    if(error){ setBtnLoading(els.setupBtn, false, 'إنشاء كلمة المرور والدخول'); showErr(els.errBox2, 'حدث خطأ: ' + error.message); return; }
+    if(!token){ setBtnLoading(els.setupBtn, false, 'إنشاء كلمة المرور والدخول'); showErr(els.errBox2, 'تعذّر إنشاء كلمة المرور — قد تكون كلمة مرور موجودة مسبقًا. أعد تحميل الصفحة وحاول الدخول بها.'); return; }
+    completeLogin(token);
+  } catch(e){
+    setBtnLoading(els.setupBtn, false, 'إنشاء كلمة المرور والدخول');
+    showErr(els.errBox2, 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
+  }
+}
+
+/* ---------------- الخطوة 2ب: دخول بكلمة مرور موجودة ---------------- */
+async function handleLogin(){
+  clearErr(els.errBox3);
+  const pwd = els.loginPassword.value;
+  if(!pwd){ showErr(els.errBox3, 'يرجى إدخال كلمة المرور.'); return; }
+
+  setBtnLoading(els.loginBtn, true, 'دخول');
+  try{
+    const { data: token, error } = await sb.rpc('verify_project_login', {
+      p_project_id: currentProjectId, p_email: currentEmail, p_password: pwd,
+    });
+    setBtnLoading(els.loginBtn, false, 'دخول');
+    if(error){ showErr(els.errBox3, 'حدث خطأ تقني. يرجى المحاولة مرة أخرى.'); return; }
+    if(!token){ showErr(els.errBox3, 'كلمة المرور غير صحيحة. تنبيه: بعد 5 محاولات فاشلة يُقفل الدخول مؤقتًا لمدة 15 دقيقة.'); return; }
+    completeLogin(token);
+  } catch(e){
+    setBtnLoading(els.loginBtn, false, 'دخول');
+    showErr(els.errBox3, 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
+  }
+}
+
+function completeLogin(token){
+  sessionStorage.setItem('ib5_session', JSON.stringify({
+    project_id: currentProjectId,
+    team_leader_email: currentEmail,
+    token: token,
+    entered_at: new Date().toISOString(),
+  }));
+  showStep('success');
+  setTimeout(()=>{
+    window.location.href = 'verify-form.html?project=' + encodeURIComponent(currentProjectId);
+  }, 700);
+}
+
+els.continueBtn.addEventListener('click', handleContinue);
+els.setupBtn.addEventListener('click', handleSetup);
+els.loginBtn.addEventListener('click', handleLogin);
+els.backBtn1.addEventListener('click', ()=>{ clearErr(els.errBox1); showStep('identity'); });
+els.backBtn2.addEventListener('click', ()=>{ clearErr(els.errBox1); showStep('identity'); });
+[els.projectId, els.leaderEmail].forEach(inp=>inp.addEventListener('keydown', e=>{ if(e.key==='Enter') handleContinue(); }));
+[els.newPassword, els.confirmPassword].forEach(inp=>inp.addEventListener('keydown', e=>{ if(e.key==='Enter') handleSetup(); }));
+els.loginPassword.addEventListener('keydown', e=>{ if(e.key==='Enter') handleLogin(); });
+
+/* ---------------- تعبئة مسبقة إن وُجدت جلسة سابقة في هذا المتصفح ---------------- */
+(function prefillFromSession(){
+  try{
+    const raw = sessionStorage.getItem('ib5_session');
+    if(!raw) return;
+    const s = JSON.parse(raw);
+    if(s && s.project_id){ els.projectId.value = s.project_id; els.leaderEmail.value = s.team_leader_email || ''; }
+  }catch(e){}
+})();
+</script>
+</body>
+</html>

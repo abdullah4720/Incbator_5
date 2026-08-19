@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لوحة تحكم المشرفين — نموذج التحقق من استيفاء متطلبات التحكيم</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Cairo:wght@700;800;900&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --navy-950:#12103C; --navy-800:#1A1852; --navy-700:#242066;
+  --teal-600:#0E7C7B; --teal-500:#149493; --teal-100:#E4F3F2;
+  --gold-500:#C9A24B; --gold-100:#F7EFDD;
+  --eq-green:#2FA36B;
+  --paper:#F5F6F9; --card:#FFFFFF;
+  --ink-900:#121826; --ink-600:#4C5568; --ink-400:#8790A3;
+  --line:#E1E4EB;
+  --danger:#C0392B; --danger-100:#FBEAE8;
+  --success:#1E8E5A; --success-100:#E7F5EE;
+  --amber:#B4790F; --amber-100:#FBF1DF;
+  --purple:#6B4FA0; --purple-100:#EFE8F9;
+  --radius:14px; --shadow:0 4px 20px rgba(11,11,61,0.06);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{background:var(--paper);color:var(--ink-900);font-family:'IBM Plex Sans Arabic',sans-serif;font-size:14.5px;line-height:1.65;-webkit-font-smoothing:antialiased;}
+.mono{font-family:'IBM Plex Mono',monospace;}
+button,select,input,textarea{font-family:inherit;}
+
+/* ===== topbar ===== */
+.topbar{background:linear-gradient(180deg,var(--navy-950) 0%,var(--navy-800) 100%);color:#fff;padding:16px 26px;position:sticky;top:0;z-index:50;box-shadow:0 6px 24px rgba(11,11,61,.18);}
+.topbar-inner{max-width:1320px;margin:0 auto;display:flex;align-items:center;gap:16px;}
+.brand-mark{width:40px;height:40px;flex:none;}
+.brand-mark svg{width:100%;height:100%;}
+.brand-text{flex:1;min-width:0;}
+.brand-eyebrow{font-size:11px;letter-spacing:.06em;color:var(--gold-500);font-weight:700;text-transform:uppercase;font-family:'Cairo',sans-serif;}
+.brand-title{font-size:16px;font-weight:800;margin-top:3px;font-family:'Cairo',sans-serif;}
+.admin-chip{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:6px 14px;font-size:12px;display:flex;align-items:center;gap:8px;flex:none;}
+.admin-chip .av{width:22px;height:22px;border-radius:50%;background:var(--teal-500);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;}
+
+.tabs{max-width:1320px;margin:0 auto;display:flex;gap:4px;margin-top:14px;overflow-x:auto;}
+.tab-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.65);border-radius:10px 10px 0 0;padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;}
+.tab-btn.active{background:var(--paper);color:var(--navy-800);border-color:var(--paper);}
+
+/* ===== layout ===== */
+.wrap{max-width:1320px;margin:0 auto;padding:26px;}
+@media(max-width:700px){.wrap{padding:16px;}}
+.view{display:none;}
+.view.active{display:block;}
+
+.grid{display:grid;gap:18px;}
+.kpi-row{grid-template-columns:repeat(4,1fr);}
+@media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:520px){.kpi-row{grid-template-columns:1fr;}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px 22px;}
+.kpi-card{position:relative;overflow:hidden;}
+.kpi-card::before{content:'';position:absolute;top:0;right:0;left:0;height:3px;}
+.kpi-card:nth-child(4n+1)::before{background:var(--teal-600);}
+.kpi-card:nth-child(4n+2)::before{background:var(--purple);}
+.kpi-card:nth-child(4n+3)::before{background:var(--gold-500);}
+.kpi-card:nth-child(4n+4)::before{background:var(--eq-green);}
+.kpi-card .kicon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:10px;}
+.kpi-card .kval{font-family:'Cairo',sans-serif;font-size:28px;font-weight:800;color:var(--navy-800);}
+.kpi-card .klabel{font-size:12.5px;color:var(--ink-600);margin-top:4px;}
+.kpi-card .kdelta{font-size:11.5px;margin-top:8px;display:inline-flex;gap:4px;align-items:center;font-weight:600;}
+.kdelta.up{color:var(--success);} .kdelta.down{color:var(--danger);} .kdelta.flat{color:var(--ink-400);}
+
+.section-title-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;}
+.section-title-row h2{font-size:17px;font-weight:800;color:var(--navy-800);margin:0;font-family:'Cairo',sans-serif;}
+.section-title-row h2::after{content:'';display:block;width:28px;height:3px;background:var(--teal-600);border-radius:2px;margin-top:7px;}
+.section-title-row p{font-size:12.5px;color:var(--ink-600);margin:3px 0 0;}
+
+.two-col-layout{display:grid;grid-template-columns:1.3fr 1fr;gap:18px;margin-top:18px;}
+@media(max-width:960px){.two-col-layout{grid-template-columns:1fr;}}
+
+/* donut */
+.donut-wrap{display:flex;align-items:center;gap:24px;flex-wrap:wrap;}
+.donut{width:150px;height:150px;border-radius:50%;flex:none;}
+.donut-legend{display:flex;flex-direction:column;gap:9px;flex:1;min-width:160px;}
+.legend-row{display:flex;align-items:center;gap:9px;font-size:12.5px;}
+.legend-dot{width:10px;height:10px;border-radius:3px;flex:none;}
+.legend-row b{margin-inline-start:auto;font-family:'IBM Plex Mono',monospace;}
+
+/* bar rows */
+.bar-row{margin-bottom:14px;}
+.bar-row:last-child{margin-bottom:0;}
+.bar-row .br-head{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px;}
+.bar-row .br-head b{font-family:'IBM Plex Mono',monospace;color:var(--navy-800);}
+.br-track{height:9px;background:var(--paper);border-radius:6px;overflow:hidden;border:1px solid var(--line);}
+.br-fill{height:100%;border-radius:6px;}
+
+table{width:100%;border-collapse:collapse;}
+th{text-align:right;font-size:11.5px;color:var(--ink-400);font-weight:600;padding:0 10px 10px;border-bottom:1px solid var(--line);text-transform:uppercase;letter-spacing:.03em;}
+td{padding:12px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+.table-wrap{overflow-x:auto;}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;border-radius:999px;padding:4px 11px;white-space:nowrap;}
+.badge.ok{background:var(--success-100);color:var(--success);}
+.badge.no{background:var(--danger-100);color:var(--danger);}
+.badge.mid{background:var(--amber-100);color:var(--amber);}
+.badge.role-admin{background:var(--purple-100);color:var(--purple);}
+.badge.role-reviewer{background:var(--teal-100);color:var(--teal-600);}
+.badge.role-viewer{background:#EEF0F4;color:var(--ink-600);}
+.badge.status-active{background:var(--success-100);color:var(--success);}
+.badge.status-suspended{background:var(--danger-100);color:var(--danger);}
+
+.btn{border:none;border-radius:9px;padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;}
+.btn-primary{background:var(--navy-800);color:#fff;}
+.btn-primary:hover{background:var(--navy-700);}
+.btn-ghost{background:#fff;color:var(--ink-900);border:1.5px solid var(--line);}
+.btn-ghost:hover{border-color:var(--ink-400);}
+.btn-danger-ghost{background:#fff;color:var(--danger);border:1.5px solid var(--danger-100);}
+.btn-danger-ghost:hover{background:var(--danger-100);}
+.btn-sm{padding:6px 12px;font-size:12px;border-radius:7px;}
+.btn-gold{background:var(--gold-500);color:var(--navy-950);}
+.icon-btn{background:none;border:none;cursor:pointer;color:var(--ink-400);font-size:14px;padding:5px;border-radius:6px;}
+.icon-btn:hover{background:var(--paper);color:var(--ink-900);}
+.icon-btn.danger:hover{color:var(--danger);}
+
+input[type=text],input[type=email],input[type=number],input[type=date],input[type=datetime-local],textarea,select{
+  width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink-900);font-size:13.5px;
+}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(14,124,123,.13);}
+label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900);margin-bottom:6px;}
+.field-inline{margin-bottom:14px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+@media(max-width:600px){.grid2{grid-template-columns:1fr;}}
+
+.toggle{position:relative;width:40px;height:22px;flex:none;}
+.toggle input{opacity:0;width:0;height:0;}
+.toggle .tk{position:absolute;inset:0;background:var(--line);border-radius:22px;cursor:pointer;transition:.2s;}
+.toggle .tk::before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;}
+.toggle input:checked + .tk{background:var(--teal-600);}
+.toggle input:checked + .tk::before{transform:translateX(-18px);}
+
+/* ===== builder ===== */
+.builder-layout{display:grid;grid-template-columns:280px 1fr;gap:18px;}
+@media(max-width:900px){.builder-layout{grid-template-columns:1fr;}}
+.section-nav{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:8px;}
+.section-nav-item{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border-radius:9px;cursor:pointer;font-size:13px;}
+.section-nav-item:hover{background:var(--paper);}
+.section-nav-item.active{background:var(--teal-100);color:var(--navy-800);font-weight:700;}
+.section-nav-item .snum{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-400);background:#fff;border:1px solid var(--line);border-radius:6px;padding:2px 7px;flex:none;}
+.section-nav-item.active .snum{background:var(--navy-800);color:#fff;border-color:var(--navy-800);}
+.section-nav-actions{display:flex;gap:6px;}
+.add-section-btn{width:100%;margin-top:6px;border:1.5px dashed var(--teal-500);border-radius:9px;padding:10px;text-align:center;color:var(--teal-600);font-weight:600;font-size:12.5px;cursor:pointer;background:var(--teal-100);}
+
+.q-card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:10px;background:var(--paper);}
+.q-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+.q-type-tag{font-family:'IBM Plex Mono',monospace;font-size:10.5px;background:#fff;border:1px solid var(--line);color:var(--ink-600);border-radius:6px;padding:3px 8px;flex:none;}
+.q-label{font-size:13.5px;font-weight:600;color:var(--ink-900);margin-top:6px;}
+.q-meta{font-size:11.5px;color:var(--ink-400);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap;}
+.q-actions{display:flex;gap:4px;flex:none;}
+.q-cond{margin-top:8px;font-size:11.5px;background:var(--gold-100);color:#7A5C1E;border-radius:7px;padding:6px 10px;display:inline-block;}
+.req-tag{color:var(--danger);}
+
+.editor-box{border:1.5px solid var(--teal-500);border-radius:12px;padding:16px;margin-bottom:14px;background:#fff;box-shadow:0 2px 12px rgba(14,124,123,.08);}
+.editor-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;}
+.opt-chip-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.opt-chip{background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:4px 10px;font-size:12px;display:flex;align-items:center;gap:6px;}
+.opt-chip button{background:none;border:none;color:var(--danger);cursor:pointer;font-size:11px;}
+.opt-add-row{display:flex;gap:8px;margin-top:8px;}
+.opt-add-row input{flex:1;}
+
+.add-q-btn{width:100%;border:1.5px dashed var(--teal-500);border-radius:10px;padding:12px;text-align:center;color:var(--teal-600);font-weight:600;font-size:13px;cursor:pointer;background:var(--teal-100);}
+
+.filter-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+.filter-row select,.filter-row input{width:auto;min-width:150px;}
+.search-box{flex:1;min-width:200px;}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(11,11,61,.45);display:none;align-items:center;justify-content:center;z-index:100;padding:20px;}
+.modal-overlay.show{display:flex;}
+.modal-box{background:#fff;border-radius:16px;padding:26px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+.modal-box h3{margin:0 0 4px;font-size:16px;color:var(--navy-800);}
+.modal-box p{margin:0 0 18px;font-size:12.5px;color:var(--ink-600);}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;}
+
+.toast{position:fixed;bottom:22px;right:50%;transform:translateX(50%);background:var(--navy-950);color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:200;opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;display:flex;align-items:center;gap:8px;}
+.toast.show{opacity:1;transform:translateX(50%) translateY(-4px);}
+.toast .tdot{width:7px;height:7px;border-radius:50%;background:var(--teal-500);}
+
+.empty-hint{text-align:center;padding:30px;color:var(--ink-400);font-size:13px;}
+.eq-divider{width:100%;height:20px;display:block;background:var(--paper);}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--navy-800);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none;}
+.user-cell{display:flex;align-items:center;gap:10px;}
+.user-cell .un{font-weight:600;font-size:13px;} .user-cell .ue{font-size:11.5px;color:var(--ink-400);}
+</style>
+</head>
+<body>
+
+<div id="loadingScreen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;color:var(--ink-400);font-size:13px;">جارٍ التحقق من الجلسة…</div>
+
+<div id="authScreen" style="display:none;min-height:100vh;align-items:center;justify-content:center;padding:24px;">
+  <div style="width:100%;max-width:400px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:30px;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:0;right:0;left:0;height:4px;background:linear-gradient(90deg,var(--teal-600),var(--purple),var(--gold-500),var(--eq-green));"></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:22px">
+      <div style="width:38px;height:38px">
+        <svg viewBox="0 0 44 44" fill="none"><rect x="3" y="3" width="38" height="38" rx="9" fill="#0E7C7B"/><text x="22" y="28" font-family="Cairo, sans-serif" font-size="16" font-weight="800" fill="#fff" text-anchor="middle">5</text></svg>
+      </div>
+      <div><div style="font-size:11px;color:var(--teal-600);font-weight:700;font-family:'Cairo',sans-serif">حاضنة الابتكار — النسخة الخامسة</div><div style="font-size:15px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif">دخول فريق البرنامج</div></div>
+    </div>
+    <div id="authStageRequest">
+      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 16px">أدخل بريدك الرسمي المسجَّل ضمن فريق البرنامج — سنرسل لك رابط دخول آمن.</p>
+      <div id="authErrBox" style="display:none;background:var(--danger-100);color:var(--danger);border-radius:9px;padding:10px 13px;font-size:12.5px;margin-bottom:14px"></div>
+      <div class="field-inline"><label class="flabel">البريد الإلكتروني</label><input type="email" id="authEmail" placeholder="name@qu.edu.sa"></div>
+      <button class="btn btn-primary" id="authSendBtn" style="width:100%">إرسال رابط الدخول</button>
+    </div>
+    <div id="authStageSent" style="display:none;text-align:center">
+      <div style="width:48px;height:48px;border-radius:50%;background:var(--success-100);color:var(--success);display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto 14px">✓</div>
+      <p style="font-size:13px;color:var(--ink-900);margin:0 0 4px;font-weight:600">تحقّق من بريدك</p>
+      <p style="font-size:12px;color:var(--ink-600);margin:0">أرسلنا رابط دخول إلى <span class="mono" id="authSentEmail"></span></p>
+    </div>
+    <div id="authStageDenied" style="display:none;text-align:center">
+      <div style="width:48px;height:48px;border-radius:50%;background:var(--danger-100);color:var(--danger);display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto 14px">⛔</div>
+      <p style="font-size:13px;color:var(--ink-900);margin:0 0 4px;font-weight:600">هذا البريد غير مصرَّح له بالدخول</p>
+      <p style="font-size:12px;color:var(--ink-600);margin:0 0 16px">تواصل مع مدير النظام لإضافتك إلى فريق البرنامج.</p>
+      <button class="btn btn-ghost" id="authSignOutBtn" style="width:100%">رجوع</button>
+    </div>
+  </div>
+</div>
+
+<div id="appShell" style="display:none">
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand-mark">
+      <svg viewBox="0 0 44 44" fill="none">
+        <rect x="3" y="3" width="38" height="38" rx="9" fill="#0E7C7B"/>
+        <path d="M11 15 L11 11 L15 11" stroke="#C9A24B" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <path d="M33 15 L33 11 L29 11" stroke="#C9A24B" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <path d="M11 29 L11 33 L15 33" stroke="#C9A24B" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <path d="M33 29 L33 33 L29 33" stroke="#C9A24B" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <text x="22" y="27" font-family="IBM Plex Mono, monospace" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">5</text>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <div class="brand-eyebrow">حاضنة الابتكار — النسخة الخامسة</div>
+      <div class="brand-title">لوحة تحكم فريق البرنامج — نموذج التحقق من استيفاء متطلبات التحكيم</div>
+    </div>
+    <div class="admin-chip"><span class="av" id="meAvatar">ع</span><span id="meName">—</span><button class="icon-btn" id="signOutBtn" title="تسجيل الخروج" style="margin-inline-start:4px">⏻</button></div>
+  </div>
+  <div class="tabs" id="tabs"></div>
+</div>
+<svg class="eq-divider" viewBox="0 0 1320 20" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="20" y="6" width="3" height="9" rx="1.5" fill="#6B4FA0"/><rect x="60" y="2" width="3" height="15" rx="1.5" fill="#2FA36B"/>
+  <rect x="100" y="7" width="3" height="8" rx="1.5" fill="#C9A24B"/><rect x="140" y="4" width="3" height="12" rx="1.5" fill="#0E7C7B"/>
+  <rect x="180" y="6" width="3" height="9" rx="1.5" fill="#6B4FA0"/><rect x="220" y="1" width="3" height="16" rx="1.5" fill="#C9A24B"/>
+  <rect x="260" y="5" width="3" height="10" rx="1.5" fill="#2FA36B"/><rect x="300" y="3" width="3" height="13" rx="1.5" fill="#0E7C7B"/>
+  <rect x="340" y="6" width="3" height="9" rx="1.5" fill="#C9A24B"/><rect x="380" y="1" width="3" height="16" rx="1.5" fill="#6B4FA0"/>
+  <rect x="420" y="5" width="3" height="10" rx="1.5" fill="#2FA36B"/><rect x="460" y="4" width="3" height="12" rx="1.5" fill="#0E7C7B"/>
+  <rect x="500" y="7" width="3" height="8" rx="1.5" fill="#C9A24B"/><rect x="540" y="2" width="3" height="15" rx="1.5" fill="#6B4FA0"/>
+  <rect x="580" y="6" width="3" height="9" rx="1.5" fill="#2FA36B"/><rect x="620" y="4" width="3" height="12" rx="1.5" fill="#0E7C7B"/>
+  <rect x="660" y="5" width="3" height="10" rx="1.5" fill="#C9A24B"/><rect x="700" y="1" width="3" height="16" rx="1.5" fill="#6B4FA0"/>
+  <rect x="740" y="6" width="3" height="9" rx="1.5" fill="#2FA36B"/><rect x="780" y="3" width="3" height="13" rx="1.5" fill="#0E7C7B"/>
+  <rect x="820" y="7" width="3" height="8" rx="1.5" fill="#C9A24B"/><rect x="860" y="2" width="3" height="15" rx="1.5" fill="#6B4FA0"/>
+  <rect x="900" y="5" width="3" height="10" rx="1.5" fill="#2FA36B"/><rect x="940" y="4" width="3" height="12" rx="1.5" fill="#0E7C7B"/>
+  <rect x="980" y="6" width="3" height="9" rx="1.5" fill="#C9A24B"/><rect x="1020" y="1" width="3" height="16" rx="1.5" fill="#6B4FA0"/>
+  <rect x="1060" y="5" width="3" height="10" rx="1.5" fill="#2FA36B"/><rect x="1100" y="3" width="3" height="13" rx="1.5" fill="#0E7C7B"/>
+  <rect x="1140" y="7" width="3" height="8" rx="1.5" fill="#C9A24B"/><rect x="1180" y="2" width="3" height="15" rx="1.5" fill="#6B4FA0"/>
+  <rect x="1220" y="6" width="3" height="9" rx="1.5" fill="#2FA36B"/><rect x="1260" y="4" width="3" height="12" rx="1.5" fill="#0E7C7B"/>
+  <rect x="1300" y="7" width="3" height="8" rx="1.5" fill="#C9A24B"/>
+</svg>
+
+<div class="wrap">
+  <div class="view" id="view-dashboard"></div>
+  <div class="view" id="view-builder"></div>
+  <div class="view" id="view-eligibility"></div>
+  <div class="view" id="view-users"></div>
+  <div class="view" id="view-settings"></div>
+</div>
+</div>
+
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-box">
+    <h3 id="confirmTitle">تأكيد الحذف</h3>
+    <p id="confirmText">هل أنت متأكد؟ لا يمكن التراجع عن هذا الإجراء.</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="confirmCancel">إلغاء</button>
+      <button class="btn btn-danger-ghost" id="confirmOk">حذف</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span class="tdot"></span><span id="toastText"></span></div>
+
+<script>
+/* ==========================================================================
+   لوحة تحكم فريق البرنامج — حاضنة ابتكار 5
+   مرتبطة بـ Supabase Auth (Magic Link) لفريق البرنامج فقط. الدخول يتطلب
+   بريدًا موجودًا مسبقًا في admin_users بحالة "نشط" — أي بريد آخر يُرفض حتى
+   لو نجح الدخول عبر Supabase Auth نفسها (راجع link_admin_account في schema.sql).
+   ========================================================================== */
+
+// ⚠️ عدّل القيمتين التاليتين ببيانات مشروعك الفعلية في Supabase قبل النشر:
+const SUPABASE_URL = "https://YOUR-PROJECT-REF.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR-ANON-PUBLIC-KEY";
+
+const sb = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+let currentAdmin = null; // {name, role, email}
+
+function showAuthStage(stage){
+  ['authStageRequest','authStageSent','authStageDenied'].forEach(id=>{
+    document.getElementById(id).style.display = (id === stage) ? 'block' : 'none';
+  });
+}
+
+async function sendAdminMagicLink(){
+  const email = document.getElementById('authEmail').value.trim().toLowerCase();
+  const errBox = document.getElementById('authErrBox');
+  errBox.style.display = 'none';
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    errBox.textContent = 'صيغة البريد الإلكتروني غير صحيحة.'; errBox.style.display = 'block'; return;
+  }
+  const btn = document.getElementById('authSendBtn');
+  btn.disabled = true; btn.textContent = 'جارٍ الإرسال…';
+  try{
+    const { error } = await sb.auth.signInWithOtp({
+      email, options: { emailRedirectTo: window.location.origin + window.location.pathname }
+    });
+    if(error){ errBox.textContent = 'تعذّر إرسال رابط الدخول: ' + error.message; errBox.style.display = 'block'; btn.disabled=false; btn.textContent='إرسال رابط الدخول'; return; }
+    document.getElementById('authSentEmail').textContent = email;
+    showAuthStage('authStageSent');
+  } catch(e){
+    errBox.textContent = 'حدث خطأ غير متوقع. حاول مرة أخرى.'; errBox.style.display = 'block';
+    btn.disabled=false; btn.textContent='إرسال رابط الدخول';
+  }
+}
+
+async function initAdminApp(){
+  if(!sb){
+    document.getElementById('loadingScreen').textContent = 'تعذّر تحميل مكتبة الاتصال بقاعدة البيانات.';
+    return;
+  }
+  const { data: { session } } = await sb.auth.getSession();
+  document.getElementById('loadingScreen').style.display = 'none';
+
+  if(!session){
+    document.getElementById('authScreen').style.display = 'flex';
+    showAuthStage('authStageRequest');
+    document.getElementById('authSendBtn').addEventListener('click', sendAdminMagicLink);
+    document.getElementById('authEmail').addEventListener('keydown', e=>{ if(e.key==='Enter') sendAdminMagicLink(); });
+    document.getElementById('authSignOutBtn').addEventListener('click', ()=>{ showAuthStage('authStageRequest'); });
+    return;
+  }
+
+  // جلسة Supabase Auth موجودة — اربط الحساب بسجل admin_users إن كان معتمَدًا
+  await sb.rpc('link_admin_account');
+  const { data: profile, error: profErr } = await sb.rpc('current_admin_profile');
+  const me = Array.isArray(profile) ? profile[0] : profile;
+
+  if(profErr || !me){
+    document.getElementById('authScreen').style.display = 'flex';
+    showAuthStage('authStageDenied');
+    document.getElementById('authSignOutBtn').addEventListener('click', async ()=>{
+      await sb.auth.signOut();
+      window.location.reload();
+    });
+    return;
+  }
+
+  currentAdmin = me;
+  document.getElementById('meName').textContent = me.name;
+  document.getElementById('meAvatar').textContent = initials(me.name);
+  document.getElementById('signOutBtn').addEventListener('click', async ()=>{
+    await sb.auth.signOut();
+    window.location.reload();
+  });
+
+  document.getElementById('appShell').style.display = 'block';
+  await loadAllAdminData();
+  renderAll();
+}
+
+/* ---------------- إحصاءات لوحة القيادة (تُعبَّى من Supabase عند الدخول) ---------------- */
+let DASH_STATS = {
+  totalTeams: 0, totalParticipants: 0, cities: 0, daysLeft: 0,
+  readiness: { ready:0, needsCompletion:0, notReady:0, needsManualReview:0 },
+  requirements: [
+    {key:"commercial_registration", label:"السجل التجاري", pct:0},
+    {key:"camp_attendance", label:"حضور المعسكر", pct:0},
+    {key:"team_size", label:"عدد أعضاء الفريق", pct:0},
+    {key:"prototype", label:"النموذج الأولي", pct:0},
+    {key:"pitch_deck", label:"العرض الاستثماري", pct:0},
+    {key:"market_validation", label:"التحقق من احتياج السوق", pct:0},
+  ],
+  tracks: [],
+  recent: [],
+};
+
+async function loadDashboardStats(){
+  try{
+    const { data, error } = await sb.rpc('get_dashboard_stats');
+    if(error) throw error;
+    const s = data;
+
+    const rb = s.readiness_breakdown || {};
+    DASH_STATS.totalTeams = s.total_teams || 0;
+    DASH_STATS.totalParticipants = s.total_participants || 0;
+    DASH_STATS.cities = s.cities || 0;
+    DASH_STATS.daysLeft = s.deadline_at ? Math.max(0, Math.ceil((new Date(s.deadline_at) - new Date()) / 86400000)) : 0;
+    DASH_STATS.readiness = {
+      ready: rb.ready_to_advance || 0,
+      needsCompletion: (rb.needs_completion || 0) + (rb.pending || 0),
+      notReady: rb.not_ready || 0,
+      needsManualReview: rb.needs_manual_review || 0,
+    };
+
+    const reqCounts = {};
+    (s.requirement_breakdown || []).forEach(r=>{
+      reqCounts[r.requirement] = reqCounts[r.requirement] || { ok:0, total:0 };
+      reqCounts[r.requirement].total += Number(r.cnt);
+      if(r.status === 'ok') reqCounts[r.requirement].ok += Number(r.cnt);
+    });
+    DASH_STATS.requirements.forEach(req=>{
+      const c = reqCounts[req.key];
+      req.pct = c && c.total ? Math.round(c.ok / c.total * 100) : 0;
+    });
+
+    const trackTotal = Object.values(s.track_breakdown || {}).reduce((a,b)=>a+Number(b),0) || 1;
+    DASH_STATS.tracks = Object.entries(s.track_breakdown || {}).map(([label,cnt])=>({
+      label, pct: Math.round(Number(cnt)/trackTotal*100)
+    }));
+
+    const statusBadgeMap = { submitted:'ok', draft:'mid', needs_completion:'no' };
+    DASH_STATS.recent = (s.recent_forms || []).map(r=>({
+      id: r.project_id, name: r.project_name, track: r.track || '—',
+      pct: r.completion_pct || 0, status: statusBadgeMap[r.status] || 'mid',
+      updated: relativeTime(r.updated_at),
+    }));
+  } catch(e){
+    showToast('تعذّر تحميل إحصاءات لوحة القيادة: ' + (e.message || 'خطأ غير معروف'));
+  }
+}
+function relativeTime(iso){
+  if(!iso) return '—';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs/60000);
+  if(mins < 1) return 'الآن';
+  if(mins < 60) return `منذ ${mins} دقيقة`;
+  const hrs = Math.floor(mins/60);
+  if(hrs < 24) return `منذ ${hrs} ساعة`;
+  return `منذ ${Math.floor(hrs/24)} يوم`;
+}
+
+/* ---------------- أنواع الحقول المتاحة في بناء النموذج ---------------- */
+const FIELD_TYPES = [
+  {v:"text",l:"نص قصير"}, {v:"textarea",l:"نص طويل"}, {v:"select",l:"قائمة منسدلة"},
+  {v:"radio",l:"اختيار واحد"}, {v:"multiselect",l:"اختيار متعدد"}, {v:"number",l:"رقم"},
+  {v:"date",l:"تاريخ"}, {v:"email",l:"بريد إلكتروني"}, {v:"url",l:"رابط"},
+  {v:"file",l:"رفع ملف (PDF)"}, {v:"video",l:"فيديو (رفع أو رابط)"},
+];
+function typeLabel(v){ const t=FIELD_TYPES.find(x=>x.v===v); return t?t.l:v; }
+const OPTION_TYPES = ["select","radio","multiselect"];
+
+/* ---------------- أسئلة النموذج (تُحمَّل من Supabase عند بدء التشغيل) ---------------- */
+let sections = [];
+
+/* ---------------- المستخدمون والأدوار (تُحمَّل من Supabase) ---------------- */
+const ROLES = [
+  {v:"admin", l:"مدير النظام", desc:"صلاحية كاملة: تعديل النموذج، المستخدمين، مراجعة كل الطلبات، وتصدير البيانات."},
+  {v:"reviewer", l:"مراجع", desc:"مراجعة الطلبات وتقييم الاستيفاء وإعادة الطلبات لاستكمال البيانات."},
+  {v:"viewer", l:"مشاهد", desc:"عرض لوحة القيادة والطلبات دون صلاحية التعديل."},
+];
+function roleLabel(v){ const r=ROLES.find(x=>x.v===v); return r?r.l:v; }
+
+let users = [];
+
+/* ---------------- الفرق المؤهّلة للدخول (eligible_projects) ---------------- */
+// هذا الجدول هو ما تتحقق منه صفحة login.html قبل إصدار أي جلسة دخول —
+// (رقم المشروع + البريد) يحدّدان الفريق، وكلمة المرور ينشئها المشارك بنفسه
+// في أول دخول. الإداري لا يرى كلمة المرور أبدًا — فقط يمسحها عند نسيانها.
+const TRACKS = ["مسار الابتكار","مسار التحديات"];
+const DOMAINS = ["صحة الإنسان","الريادة في الطاقة والصناعة","اقتصاديات المستقبل","استدامة البيئة والاحتياجات الأساسية"];
+
+let eligibleProjects = [];
+let pendingImportRows = []; // معاينة قبل التأكيد النهائي للاستيراد
+
+/* ---------------- إعدادات النموذج (تُحمَّل من Supabase) ---------------- */
+let formSettings = {
+  programName: "", formTitle: "", deadline: "",
+  isOpen: true, allowEdit: true, notifyBefore48: true, notifyBefore24: true,
+  maxPdfMb: 10, maxVideoMb: 200, maxVideoMinutes: 5, maxFilesPerField: 5,
+};
+
+/* ---------------- تحميل جميع بيانات لوحة التحكم من Supabase ---------------- */
+async function loadSectionsAndQuestions(){
+  const { data: secRows, error: secErr } = await sb.from('form_sections').select('*').order('order_index');
+  if(secErr){ showToast('تعذّر تحميل الأقسام: '+secErr.message); return; }
+  const { data: qRows, error: qErr } = await sb.from('form_questions').select('*').order('order_index');
+  if(qErr){ showToast('تعذّر تحميل الأسئلة: '+qErr.message); return; }
+  sections = (secRows||[]).map(s => ({
+    id: s.id, title: s.title, desc: s.description || '',
+    questions: (qRows||[]).filter(q=>q.section_id===s.id).map(q=>({
+      id: q.field_key, dbId: q.id, label: q.label, type: q.type, required: q.required,
+      options: (q.options && q.options.length) ? q.options : undefined,
+      cond: (q.condition_expr && q.condition_expr.note) ? q.condition_expr.note : undefined,
+    })),
+  }));
+  if(sections.length && !sections.find(s=>s.id===activeSectionId)) activeSectionId = sections[0].id;
+}
+async function loadEligibleProjects(){
+  const { data, error } = await sb.from('eligible_projects').select('*').order('created_at', { ascending:false });
+  if(error){ showToast('تعذّر تحميل الفرق المؤهّلة: '+error.message); return; }
+  eligibleProjects = (data||[]).map(p=>({
+    project_id: p.project_id, project_name: p.project_name, track: p.track, domain: p.domain,
+    team_leader_name: p.team_leader_name, team_leader_email: p.team_leader_email,
+    team_leader_phone: p.team_leader_phone, is_active: p.is_active,
+    has_password: !!p.password_set_at, source: "—",
+  }));
+}
+async function loadUsers(){
+  const { data, error } = await sb.from('admin_users').select('*').order('created_at');
+  if(error){ showToast('تعذّر تحميل المستخدمين: '+error.message); return; }
+  users = (data||[]).map(u=>({
+    id: u.id, name: u.name, email: u.email, role: u.role, status: u.status,
+    lastLogin: u.last_login_at ? relativeTime(u.last_login_at) : "لم يسجّل الدخول بعد",
+  }));
+}
+async function loadFormSettings(){
+  const { data, error } = await sb.from('form_settings').select('*').eq('id', 1).maybeSingle();
+  if(error || !data){ if(error) showToast('تعذّر تحميل إعدادات النموذج: '+error.message); return; }
+  formSettings = {
+    programName: data.program_name, formTitle: data.form_title,
+    deadline: data.deadline_at ? new Date(data.deadline_at).toISOString().slice(0,16) : "",
+    isOpen: data.is_open, allowEdit: data.allow_edit_after_submit,
+    notifyBefore48: data.notify_before_48h, notifyBefore24: data.notify_before_24h,
+    maxPdfMb: data.max_pdf_mb, maxVideoMb: data.max_video_mb,
+    maxVideoMinutes: data.max_video_minutes, maxFilesPerField: data.max_files_per_field,
+  };
+}
+async function loadAllAdminData(){
+  await Promise.all([
+    loadDashboardStats(),
+    loadSectionsAndQuestions(),
+    loadEligibleProjects(),
+    loadUsers(),
+    loadFormSettings(),
+  ]);
+}
+
+/* ---------------- حالة الواجهة ---------------- */
+let activeTab = "dashboard";
+let activeSectionId = 1;
+let editingQuestion = null; // {sectionId, questionId|null}
+let pendingDelete = null; // {type,payload}
+
+/* ---------------- أدوات عامة ---------------- */
+function showToast(msg){
+  const t=document.getElementById('toast');
+  document.getElementById('toastText').textContent=msg;
+  t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer=setTimeout(()=>t.classList.remove('show'),2600);
+}
+function uid(prefix){ return prefix+"_"+Math.random().toString(36).slice(2,8); }
+function openConfirm(text, onOk){
+  document.getElementById('confirmText').textContent = text;
+  const modal = document.getElementById('confirmModal');
+  modal.classList.add('show');
+  const ok = document.getElementById('confirmOk');
+  const cancel = document.getElementById('confirmCancel');
+  const cleanup = ()=>{ modal.classList.remove('show'); ok.onclick=null; cancel.onclick=null; };
+  ok.onclick = ()=>{ onOk(); cleanup(); };
+  cancel.onclick = cleanup;
+}
+
+/* ---------------- التبويبات ---------------- */
+const TABS = [
+  {id:"dashboard", l:"لوحة القيادة", adminOnly:false},
+  {id:"builder", l:"الأسئلة والنموذج", adminOnly:true},
+  {id:"eligibility", l:"الفرق المؤهّلة للدخول", adminOnly:true},
+  {id:"users", l:"المستخدمون والأدوار", adminOnly:true},
+  {id:"settings", l:"إعدادات النموذج", adminOnly:true},
+];
+function visibleTabs(){
+  return TABS.filter(t => !t.adminOnly || (currentAdmin && currentAdmin.role === 'admin'));
+}
+function renderTabs(){
+  const tabs = visibleTabs();
+  if(!tabs.find(t=>t.id===activeTab)) activeTab = tabs[0].id;
+  document.getElementById('tabs').innerHTML = tabs.map(t=>`
+    <button class="tab-btn ${activeTab===t.id?'active':''}" data-tab="${t.id}">${t.l}</button>
+  `).join('');
+  document.querySelectorAll('[data-tab]').forEach(b=>{
+    b.addEventListener('click',()=>{ activeTab=b.dataset.tab; renderAll(); });
+  });
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+activeTab).classList.add('active');
+}
+
+/* ==========================================================================
+   لوحة القيادة
+   ========================================================================== */
+function donutCSS(){
+  const r=DASH_STATS.readiness;
+  const total = r.ready+r.needsCompletion+r.notReady+r.needsManualReview;
+  if(total===0) return 'var(--line)';
+  const segs = [
+    {v:r.ready, c:"var(--success)"},
+    {v:r.needsCompletion, c:"var(--amber)"},
+    {v:r.notReady, c:"var(--danger)"},
+    {v:r.needsManualReview, c:"var(--purple)"},
+  ];
+  let acc=0, stops=[];
+  segs.forEach(s=>{
+    const start = acc/total*360; acc+=s.v; const end = acc/total*360;
+    stops.push(`${s.c} ${start}deg ${end}deg`);
+  });
+  return `conic-gradient(${stops.join(',')})`;
+}
+function renderDashboard(){
+  const s = DASH_STATS;
+  const el = document.getElementById('view-dashboard');
+  el.innerHTML = `
+    <div class="section-title-row">
+      <div><h2>لوحة القيادة</h2><p>نظرة عامة على حالة الطلبات المستلمة فعليًا من قاعدة البيانات.</p></div>
+      <button class="btn btn-ghost" id="exportBtn">تصدير Excel / CSV</button>
+    </div>
+
+    <div class="grid kpi-row">
+      <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">📋</div>
+        <div class="kval mono">${s.totalTeams}</div><div class="klabel">إجمالي الطلبات المستلمة</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--gold-100);color:#7A5C1E">👥</div>
+        <div class="kval mono">${s.totalParticipants.toLocaleString('en-US')}</div><div class="klabel">إجمالي المشاركين</div>
+        <div class="kdelta flat">عبر ${s.cities} مدينة</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">✓</div>
+        <div class="kval mono">${s.totalTeams ? Math.round(s.readiness.ready/s.totalTeams*100) : 0}%</div><div class="klabel">مستوفٍ للانتقال بالكامل</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">⏳</div>
+        <div class="kval mono">${s.daysLeft}</div><div class="klabel">أيام متبقية على الموعد النهائي</div>
+        <div class="kdelta down">${formSettings.deadline ? 'الموعد: '+new Date(formSettings.deadline).toLocaleDateString('ar-SA') : 'لم يُحدَّد موعد بعد'}</div></div>
+    </div>
+
+    <div class="two-col-layout">
+      <div class="card">
+        <div class="section-title-row"><div><h2>الجاهزية الإجمالية</h2><p>توزيع الطلبات حسب حالة الاستيفاء الست للمتطلبات</p></div></div>
+        <div class="donut-wrap">
+          <div class="donut" style="background:${donutCSS()}"></div>
+          <div class="donut-legend">
+            <div class="legend-row"><span class="legend-dot" style="background:var(--success)"></span>مستوفٍ للانتقال<b>${s.readiness.ready}</b></div>
+            <div class="legend-row"><span class="legend-dot" style="background:var(--amber)"></span>يحتاج إلى استكمال<b>${s.readiness.needsCompletion}</b></div>
+            <div class="legend-row"><span class="legend-dot" style="background:var(--danger)"></span>غير مستوفٍ<b>${s.readiness.notReady}</b></div>
+            <div class="legend-row"><span class="legend-dot" style="background:var(--purple)"></span>يحتاج مراجعة يدوية<b>${s.readiness.needsManualReview}</b></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-title-row"><div><h2>الاستيفاء حسب المتطلب</h2><p>نسبة الطلبات المستوفية لكل متطلب</p></div></div>
+        ${s.requirements.map(r=>`
+          <div class="bar-row"><div class="br-head"><span>${r.label}</span><b>${r.pct}%</b></div>
+          <div class="br-track"><div class="br-fill" style="width:${r.pct}%;background:${r.pct>=70?'var(--success)':r.pct>=45?'var(--amber)':'var(--danger)'}"></div></div></div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px">
+      <div class="section-title-row"><div><h2>آخر الطلبات المحدَّثة</h2><p>أحدث خمس طلبات بحسب وقت آخر تحديث</p></div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>رقم المشروع</th><th>اسم الفريق</th><th>المسار</th><th>نسبة الاكتمال</th><th>الحالة</th><th>آخر تحديث</th></tr></thead>
+        <tbody>${s.recent.map(r=>`
+          <tr><td class="mono">${r.id}</td><td>${r.name}</td><td>${r.track}</td>
+          <td>${r.pct}%</td><td>${statusBadge(r.status)}</td><td style="color:var(--ink-400)">${r.updated}</td></tr>
+        `).join('')}</tbody>
+      </table></div>
+    </div>
+  `;
+  document.getElementById('exportBtn').addEventListener('click',()=>{
+    showToast('سيتم تفعيل التصدير الفعلي عند ربط قاعدة البيانات');
+  });
+}
+function statusBadge(st){
+  const map = {ok:["مستوفٍ للانتقال","ok"],mid:["يحتاج استكمال","mid"],no:["غير مستوفٍ","no"],review:["يحتاج مراجعة يدوية","mid"]};
+  const [t,c]=map[st]||["—","mid"];
+  return `<span class="badge ${c}">${t}</span>`;
+}
+
+/* ==========================================================================
+   بناء النموذج (الأقسام والأسئلة الديناميكية)
+   ========================================================================== */
+function renderBuilder(){
+  const el = document.getElementById('view-builder');
+  el.innerHTML = `
+    <div class="section-title-row">
+      <div><h2>الأسئلة والنموذج</h2><p>أضف أو عدّل أو احذف الأقسام والأسئلة — التغييرات هنا تنعكس مباشرة على نموذج المشارك.</p></div>
+    </div>
+    <div class="builder-layout">
+      <div class="section-nav" id="sectionNav"></div>
+      <div class="card" id="questionsPane"></div>
+    </div>
+  `;
+  if(sections.length === 0){
+    document.getElementById('sectionNav').innerHTML = `<div class="add-section-btn" id="addSectionBtn">+ إضافة أول قسم</div>`;
+    document.getElementById('addSectionBtn').addEventListener('click', async ()=>{
+      const title = prompt("عنوان القسم الجديد:");
+      if(!title) return;
+      const { data, error } = await sb.from('form_sections').insert({ title, order_index: 1 }).select().single();
+      if(error){ showToast('تعذّر إضافة القسم: '+error.message); return; }
+      sections.push({id:data.id, title:data.title, desc:data.description||"", questions:[]});
+      activeSectionId = data.id;
+      renderBuilder(); showToast('تمت إضافة القسم');
+    });
+    document.getElementById('questionsPane').innerHTML = `<div class="empty-hint">لا توجد أقسام بعد — أضف قسمًا من القائمة الجانبية للبدء.</div>`;
+    return;
+  }
+  const section = sections.find(s=>s.id===activeSectionId) || sections[0];
+  renderSectionNav();
+  renderQuestionsPane(section);
+}
+function renderSectionNav(){
+  const nav = document.getElementById('sectionNav');
+  nav.innerHTML = sections.map(s=>`
+    <div class="section-nav-item ${s.id===activeSectionId?'active':''}" data-sec="${s.id}">
+      <div style="display:flex;align-items:center;gap:10px;overflow:hidden">
+        <span class="snum">${s.id}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.title}</span>
+      </div>
+      <div class="section-nav-actions">
+        <button class="icon-btn" data-editsection="${s.id}" title="تعديل عنوان القسم">✎</button>
+        <button class="icon-btn danger" data-delsection="${s.id}" title="حذف القسم">🗑</button>
+      </div>
+    </div>
+  `).join('') + `<div class="add-section-btn" id="addSectionBtn">+ إضافة قسم جديد</div>`;
+
+  nav.querySelectorAll('[data-sec]').forEach(n=>{
+    n.addEventListener('click',(e)=>{ if(e.target.closest('button')) return; activeSectionId=parseInt(n.dataset.sec); renderBuilder(); });
+  });
+  nav.querySelectorAll('[data-editsection]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const sec = sections.find(x=>x.id===parseInt(b.dataset.editsection));
+      const nt = prompt("عنوان القسم:", sec.title);
+      if(!nt) return;
+      const prev = sec.title;
+      sec.title = nt; renderBuilder();
+      const { error } = await sb.from('form_sections').update({ title: nt }).eq('id', sec.id);
+      if(error){ sec.title = prev; renderBuilder(); showToast('تعذّر التحديث: '+error.message); return; }
+      showToast('تم تحديث عنوان القسم');
+    });
+  });
+  nav.querySelectorAll('[data-delsection]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const id = parseInt(b.dataset.delsection);
+      openConfirm('حذف هذا القسم سيحذف كل أسئلته المرتبطة به. هل تريد الاستمرار؟', async ()=>{
+        const { error } = await sb.from('form_sections').delete().eq('id', id);
+        if(error){ showToast('تعذّر الحذف: '+error.message); return; }
+        sections = sections.filter(x=>x.id!==id);
+        if(activeSectionId===id && sections.length) activeSectionId = sections[0].id;
+        renderBuilder(); showToast('تم حذف القسم');
+      });
+    });
+  });
+  document.getElementById('addSectionBtn').addEventListener('click', async ()=>{
+    const title = prompt("عنوان القسم الجديد:");
+    if(!title) return;
+    const orderIndex = Math.max(0, ...sections.map(s=>s.id)) + 1;
+    const { data, error } = await sb.from('form_sections').insert({ title, order_index: orderIndex }).select().single();
+    if(error){ showToast('تعذّر إضافة القسم: '+error.message); return; }
+    sections.push({id:data.id, title:data.title, desc:data.description||"", questions:[]});
+    activeSectionId = data.id;
+    renderBuilder(); showToast('تمت إضافة القسم');
+  });
+}
+function renderQuestionsPane(section){
+  const pane = document.getElementById('questionsPane');
+  let html = `<div class="section-title-row">
+      <div><h2 class="mono" style="font-family:'IBM Plex Sans Arabic'">${section.title}</h2><p>${section.desc||'—'} · ${section.questions.length} سؤال</p></div>
+    </div>`;
+  html += section.questions.map(q=>questionCardHTML(section.id,q)).join('');
+  html += `<div class="add-q-btn" id="addQBtn">+ إضافة سؤال جديد لهذا القسم</div>`;
+  pane.innerHTML = html;
+
+  pane.querySelectorAll('[data-editq]').forEach(b=>{
+    b.addEventListener('click',()=>{ editingQuestion={sectionId:section.id, questionId:b.dataset.editq}; renderBuilder(); openEditorFor(section.id, b.dataset.editq); });
+  });
+  pane.querySelectorAll('[data-delq]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      openConfirm('هل تريد حذف هذا السؤال نهائيًا؟', async ()=>{
+        const q = section.questions.find(x=>x.id===b.dataset.delq);
+        const { error } = await sb.from('form_questions').delete().eq('id', q.dbId);
+        if(error){ showToast('تعذّر الحذف: '+error.message); return; }
+        section.questions = section.questions.filter(x=>x.id!==b.dataset.delq);
+        renderBuilder(); showToast('تم حذف السؤال');
+      });
+    });
+  });
+  document.getElementById('addQBtn').addEventListener('click',()=>{
+    openEditorFor(section.id, null);
+  });
+}
+function questionCardHTML(sectionId, q){
+  return `<div class="q-card">
+    <div class="q-head">
+      <div style="flex:1;min-width:0">
+        <span class="q-type-tag">${typeLabel(q.type)}</span>
+        <div class="q-label">${q.label}${q.required?' <span class="req-tag">*</span>':''}</div>
+        <div class="q-meta">
+          <span class="mono">${q.id}</span>
+          ${q.options?`<span>${q.options.length} خيار</span>`:''}
+        </div>
+        ${q.cond?`<div class="q-cond">${q.cond}</div>`:''}
+      </div>
+      <div class="q-actions">
+        <button class="icon-btn" data-editq="${q.id}" title="تعديل">✎</button>
+        <button class="icon-btn danger" data-delq="${q.id}" title="حذف">🗑</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------------- محرر السؤال (إضافة / تعديل) ---------------- */
+function openEditorFor(sectionId, questionId){
+  const section = sections.find(s=>s.id===sectionId);
+  const existing = questionId ? section.questions.find(q=>q.id===questionId) : null;
+  const draft = existing ? JSON.parse(JSON.stringify(existing)) : {id:uid('f'), label:"", type:"text", required:true, options:[], cond:""};
+
+  const pane = document.getElementById('questionsPane');
+  const box = document.createElement('div');
+  box.className = 'editor-box';
+  box.innerHTML = `
+    <div class="field-inline"><label class="flabel">نص السؤال</label><input type="text" id="ed_label" value="${draft.label.replace(/"/g,'&quot;')}" placeholder="مثال: رقم السجل التجاري"></div>
+    <div class="grid2">
+      <div class="field-inline"><label class="flabel">نوع الحقل</label>
+        <select id="ed_type">${FIELD_TYPES.map(t=>`<option value="${t.v}" ${draft.type===t.v?'selected':''}>${t.l}</option>`).join('')}</select>
+      </div>
+      <div class="field-inline"><label class="flabel">إلزامي؟</label>
+        <div style="display:flex;align-items:center;gap:10px;padding-top:6px">
+          <div class="toggle"><input type="checkbox" id="ed_required" ${draft.required?'checked':''}><label class="tk" for="ed_required"></label></div>
+          <span style="font-size:12.5px;color:var(--ink-600)">حقل إلزامي التعبئة</span>
+        </div>
+      </div>
+    </div>
+    <div class="field-inline" id="ed_options_wrap" style="display:${OPTION_TYPES.includes(draft.type)?'block':'none'}">
+      <label class="flabel">خيارات القائمة</label>
+      <div class="opt-chip-row" id="ed_opts_row">${(draft.options||[]).map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">✕</button></span>`).join('')}</div>
+      <div class="opt-add-row"><input type="text" id="ed_new_opt" placeholder="أضف خيارًا واضغط Enter"><button type="button" class="btn btn-ghost btn-sm" id="ed_add_opt">إضافة</button></div>
+    </div>
+    <div class="field-inline"><label class="flabel">شرط الظهور (اختياري)</label>
+      <input type="text" id="ed_cond" value="${(draft.cond||'').replace(/"/g,'&quot;')}" placeholder="مثال: يظهر إذا: هل يوجد سجل تجاري = نعم">
+      <div style="font-size:11.5px;color:var(--ink-400);margin-top:5px">وصف نصي حر يوضّح للمراجع منطق الإظهار — يُترجم لاحقًا إلى قاعدة شرطية فعلية عند الربط بقاعدة البيانات.</div>
+    </div>
+    <div class="editor-actions">
+      <button class="btn btn-ghost btn-sm" id="ed_cancel">إلغاء</button>
+      <button class="btn btn-primary btn-sm" id="ed_save">${existing?'حفظ التعديلات':'إضافة السؤال'}</button>
+    </div>
+  `;
+  pane.appendChild(box);
+  box.scrollIntoView({behavior:'smooth', block:'center'});
+
+  document.getElementById('ed_type').addEventListener('change',(e)=>{
+    document.getElementById('ed_options_wrap').style.display = OPTION_TYPES.includes(e.target.value) ? 'block':'none';
+  });
+  function addOpt(){
+    const inp = document.getElementById('ed_new_opt');
+    const v = inp.value.trim();
+    if(!v) return;
+    draft.options = draft.options||[];
+    draft.options.push(v);
+    inp.value='';
+    document.getElementById('ed_opts_row').innerHTML = draft.options.map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">✕</button></span>`).join('');
+    document.getElementById('ed_opts_row').querySelectorAll('[data-rmopt]').forEach(b=>{
+      b.addEventListener('click',()=>{ draft.options.splice(parseInt(b.dataset.rmopt),1); addOpt.refresh&&addOpt.refresh(); document.getElementById('ed_opts_row').innerHTML = draft.options.map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">✕</button></span>`).join(''); attachRemoveHandlers(); });
+    });
+  }
+  function attachRemoveHandlers(){
+    document.getElementById('ed_opts_row').querySelectorAll('[data-rmopt]').forEach(b=>{
+      b.addEventListener('click',()=>{ draft.options.splice(parseInt(b.dataset.rmopt),1); document.getElementById('ed_opts_row').innerHTML = draft.options.map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">✕</button></span>`).join(''); attachRemoveHandlers(); });
+    });
+  }
+  attachRemoveHandlers();
+  document.getElementById('ed_add_opt').addEventListener('click',addOpt);
+  document.getElementById('ed_new_opt').addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); addOpt(); }});
+
+  document.getElementById('ed_cancel').addEventListener('click',()=>{ box.remove(); });
+  document.getElementById('ed_save').addEventListener('click', async ()=>{
+    const label = document.getElementById('ed_label').value.trim();
+    if(!label){ showToast('يرجى كتابة نص السؤال'); return; }
+    draft.label = label;
+    draft.type = document.getElementById('ed_type').value;
+    draft.required = document.getElementById('ed_required').checked;
+    draft.cond = document.getElementById('ed_cond').value.trim();
+    if(!OPTION_TYPES.includes(draft.type)) delete draft.options;
+
+    const saveBtn = document.getElementById('ed_save');
+    saveBtn.disabled = true; saveBtn.textContent = 'جارٍ الحفظ…';
+
+    const dbPayload = {
+      label: draft.label, type: draft.type, required: draft.required,
+      options: draft.options && draft.options.length ? draft.options : null,
+      condition_expr: draft.cond ? { note: draft.cond } : null,
+    };
+
+    if(existing){
+      const { error } = await sb.from('form_questions').update(dbPayload).eq('id', existing.dbId);
+      if(error){ showToast('تعذّر الحفظ: '+error.message); saveBtn.disabled=false; saveBtn.textContent='حفظ التعديلات'; return; }
+      draft.dbId = existing.dbId;
+      const idx = section.questions.findIndex(q=>q.id===existing.id);
+      section.questions[idx] = draft;
+      showToast('تم حفظ التعديلات');
+    } else {
+      const { data, error } = await sb.from('form_questions').insert({
+        ...dbPayload, section_id: section.id, field_key: draft.id, order_index: section.questions.length,
+      }).select().single();
+      if(error){ showToast('تعذّر إضافة السؤال: '+error.message); saveBtn.disabled=false; saveBtn.textContent='إضافة السؤال'; return; }
+      draft.dbId = data.id;
+      section.questions.push(draft);
+      showToast('تمت إضافة السؤال');
+    }
+    renderBuilder();
+  });
+}
+
+/* ==========================================================================
+   الفرق المؤهّلة للدخول — استيراد وإدارة eligible_projects
+   ========================================================================== */
+let eligFilter = { q:"", track:"", status:"" };
+
+function isValidEmail(e){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((e||'').trim()); }
+
+function filteredEligible(){
+  return eligibleProjects.filter(p=>{
+    if(eligFilter.track && p.track!==eligFilter.track) return false;
+    if(eligFilter.status && (eligFilter.status==='active') !== !!p.is_active) return false;
+    if(eligFilter.q){
+      const q = eligFilter.q.toLowerCase();
+      const hay = (p.project_id+" "+p.project_name+" "+p.team_leader_name+" "+p.team_leader_email).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function renderEligibility(){
+  const el = document.getElementById('view-eligibility');
+  const total = eligibleProjects.length;
+  const withEmail = eligibleProjects.filter(p=>isValidEmail(p.team_leader_email)).length;
+  el.innerHTML = `
+    <div class="section-title-row">
+      <div><h2>الفرق المؤهّلة للدخول</h2><p>القائمة التي تتحقق منها صفحة الدخول (رقم المشروع + البريد)، ثم ينشئ كل فريق كلمة مروره بنفسه — لا يدخل أي بريد غير موجود هنا.</p></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" id="exportEligBtn">تصدير CSV</button>
+        <button class="btn btn-primary" id="openImportBtn">استيراد من ملف CSV</button>
+      </div>
+    </div>
+
+    <div class="grid kpi-row" style="margin-bottom:18px">
+      <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">📇</div>
+        <div class="kval mono">${total}</div><div class="klabel">فريق مسجَّل في قائمة الأهلية</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">✓</div>
+        <div class="kval mono">${withEmail}</div><div class="klabel">بريد إلكتروني صالح ومحفوظ</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--amber-100);color:var(--amber)">🔑</div>
+        <div class="kval mono">${eligibleProjects.filter(p=>!p.has_password).length}</div><div class="klabel">فريق لم يُنشئ كلمة مرور بعد</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">⛔</div>
+        <div class="kval mono">${eligibleProjects.filter(p=>!p.is_active).length}</div><div class="klabel">معطَّل عن الدخول حاليًا</div></div>
+    </div>
+
+    <div id="importPanel"></div>
+
+    <div class="card">
+      <div class="filter-row">
+        <input type="text" class="search-box" id="eligSearch" placeholder="ابحث برقم المشروع، اسم الفريق، أو البريد الإلكتروني…" value="${eligFilter.q}">
+        <select id="eligTrackFilter"><option value="">كل المسارات</option>${TRACKS.map(t=>`<option ${eligFilter.track===t?'selected':''}>${t}</option>`).join('')}</select>
+        <select id="eligStatusFilter">
+          <option value="">كل الحالات</option>
+          <option value="active" ${eligFilter.status==='active'?'selected':''}>مفعَّل</option>
+          <option value="inactive" ${eligFilter.status==='inactive'?'selected':''}>معطَّل</option>
+        </select>
+        <button class="btn btn-ghost" id="addOneBtn">+ إضافة فريق واحد يدويًا</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th><th>قائد الفريق</th><th>البريد الإلكتروني</th><th>كلمة المرور</th><th>الحالة</th><th>المصدر</th><th></th></tr></thead>
+        <tbody id="eligTbody"></tbody>
+      </table></div>
+    </div>
+  `;
+  renderEligTbody();
+
+  document.getElementById('eligSearch').addEventListener('input', e=>{ eligFilter.q=e.target.value; renderEligTbody(); });
+  document.getElementById('eligTrackFilter').addEventListener('change', e=>{ eligFilter.track=e.target.value; renderEligTbody(); });
+  document.getElementById('eligStatusFilter').addEventListener('change', e=>{ eligFilter.status=e.target.value; renderEligTbody(); });
+  document.getElementById('addOneBtn').addEventListener('click', ()=>openEligEditor(null));
+  document.getElementById('openImportBtn').addEventListener('click', openImportPanel);
+  document.getElementById('exportEligBtn').addEventListener('click', exportEligibleCSV);
+}
+
+function renderEligTbody(){
+  const tb = document.getElementById('eligTbody');
+  const rows = filteredEligible();
+  if(rows.length===0){ tb.innerHTML = `<tr><td colspan="8"><div class="empty-hint">لا توجد نتائج مطابقة</div></td></tr>`; return; }
+  tb.innerHTML = rows.map(p=>`
+    <tr>
+      <td class="mono">${p.project_id}</td>
+      <td>${p.project_name}</td>
+      <td>${p.track||'—'}</td>
+      <td>${p.team_leader_name}</td>
+      <td class="mono" style="${isValidEmail(p.team_leader_email)?'':'color:var(--danger)'}">${p.team_leader_email||'—'}</td>
+      <td>
+        ${p.has_password
+          ? `<span class="badge ok">مُنشَأة</span> <button class="icon-btn danger" data-resetpw="${p.project_id}" title="إعادة تعيين (نسيان كلمة المرور)">↻</button>`
+          : `<span class="badge mid">لم تُنشأ بعد</span>`}
+      </td>
+      <td><span class="badge ${p.is_active?'ok':'no'}">${p.is_active?'مفعَّل':'معطَّل'}</span></td>
+      <td style="color:var(--ink-400);font-size:12px">${p.source||'يدوي'}</td>
+      <td style="text-align:left"><div style="display:flex;gap:4px;justify-content:flex-end">
+        <button class="icon-btn" data-editelig="${p.project_id}" title="تعديل">✎</button>
+        <button class="icon-btn" data-toggleelig="${p.project_id}" title="${p.is_active?'تعطيل':'تفعيل'}">${p.is_active?'⏸':'▶'}</button>
+        <button class="icon-btn danger" data-delelig="${p.project_id}" title="حذف">🗑</button>
+      </div></td>
+    </tr>
+  `).join('');
+  tb.querySelectorAll('[data-resetpw]').forEach(b=>b.addEventListener('click',()=>resetPassword(b.dataset.resetpw)));
+  tb.querySelectorAll('[data-editelig]').forEach(b=>b.addEventListener('click',()=>openEligEditor(b.dataset.editelig)));
+  tb.querySelectorAll('[data-toggleelig]').forEach(b=>b.addEventListener('click', async ()=>{
+    const p = eligibleProjects.find(x=>x.project_id===b.dataset.toggleelig);
+    const prev = p.is_active;
+    p.is_active = !p.is_active; renderEligTbody();
+    const { error } = await sb.from('eligible_projects').update({ is_active: p.is_active }).eq('project_id', p.project_id);
+    if(error){ p.is_active = prev; renderEligTbody(); showToast('تعذّر التحديث: '+error.message); return; }
+    showToast(p.is_active?'تم تفعيل دخول الفريق':'تم تعطيل دخول الفريق');
+  }));
+  tb.querySelectorAll('[data-delelig]').forEach(b=>b.addEventListener('click',()=>{
+    openConfirm('حذف هذا الفريق من قائمة الأهلية سيمنعه فورًا من الدخول لاحقًا. هل تريد الاستمرار؟', async ()=>{
+      const { error } = await sb.from('eligible_projects').delete().eq('project_id', b.dataset.delelig);
+      if(error){ showToast('تعذّر الحذف: '+error.message); return; }
+      eligibleProjects = eligibleProjects.filter(x=>x.project_id!==b.dataset.delelig);
+      renderEligTbody(); showToast('تم حذف الفريق من قائمة الأهلية');
+    });
+  }));
+}
+
+/* ---------------- إعادة تعيين كلمة مرور فريق (عند نسيانها) ---------------- */
+function resetPassword(projectId){
+  const p = eligibleProjects.find(x=>x.project_id===projectId);
+  openConfirm(`سيتم مسح كلمة مرور فريق "${p.project_name}" الحالية. سيحتاج قائد الفريق لإنشاء كلمة مرور جديدة في دخوله التالي. هل تريد الاستمرار؟`, async ()=>{
+    const { error } = await sb.rpc('admin_reset_password', { p_project_id: projectId });
+    if(error){ showToast('تعذّر إعادة التعيين: '+error.message); return; }
+    p.has_password = false;
+    renderEligTbody();
+    showToast(`تم مسح كلمة مرور "${p.project_name}" — سيُنشئ الفريق كلمة مرور جديدة عند دخوله القادم`);
+  });
+}
+
+/* ---------------- إضافة / تعديل فريق واحد ---------------- */
+function openEligEditor(projectId){
+  const existing = projectId ? eligibleProjects.find(p=>p.project_id===projectId) : null;
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.innerHTML = `
+    <h3>${existing?'تعديل فريق':'إضافة فريق يدويًا'}</h3>
+    <p>هذه البيانات هي ما يطابقها المشارك في صفحة الدخول (رقم المشروع + البريد)، ثم يُنشئ كلمة مروره بنفسه.</p>
+    <div class="grid2">
+      <div class="field-inline"><label class="flabel">رقم المشروع</label><input type="text" id="em_pid" value="${existing?existing.project_id:''}" ${existing?'disabled':''} placeholder="INV5-2026-00XXX"></div>
+      <div class="field-inline"><label class="flabel">المسار</label><select id="em_track">${TRACKS.map(t=>`<option ${existing&&existing.track===t?'selected':''}>${t}</option>`).join('')}</select></div>
+    </div>
+    <div class="field-inline"><label class="flabel">اسم المشروع</label><input type="text" id="em_pname" value="${existing?existing.project_name.replace(/"/g,'&quot;'):''}"></div>
+    <div class="field-inline"><label class="flabel">المجال</label><select id="em_domain">${DOMAINS.map(d=>`<option ${existing&&existing.domain===d?'selected':''}>${d}</option>`).join('')}</select></div>
+    <div class="field-inline"><label class="flabel">اسم قائد الفريق</label><input type="text" id="em_lname" value="${existing?existing.team_leader_name.replace(/"/g,'&quot;'):''}"></div>
+    <div class="grid2">
+      <div class="field-inline"><label class="flabel">البريد الإلكتروني (المعتمَد للدخول)</label><input type="email" id="em_email" value="${existing?existing.team_leader_email:''}"></div>
+      <div class="field-inline"><label class="flabel">رقم الجوال</label><input type="text" id="em_phone" value="${existing?existing.team_leader_phone||'':''}"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="em_cancel">إلغاء</button>
+      <button class="btn btn-primary" id="em_save">${existing?'حفظ':'إضافة'}</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('em_cancel').addEventListener('click',()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('em_save').addEventListener('click', async ()=>{
+    const pid = document.getElementById('em_pid').value.trim();
+    const email = document.getElementById('em_email').value.trim().toLowerCase();
+    const pname = document.getElementById('em_pname').value.trim();
+    const lname = document.getElementById('em_lname').value.trim();
+    if(!pid || !email || !pname || !lname){ showToast('يرجى تعبئة رقم المشروع والاسم والبريد الإلكتروني'); return; }
+    if(!isValidEmail(email)){ showToast('صيغة البريد الإلكتروني غير صحيحة'); return; }
+    if(!existing && eligibleProjects.some(p=>p.project_id===pid)){ showToast('رقم المشروع مستخدَم بالفعل'); return; }
+    const record = {
+      project_id: pid, project_name: pname,
+      track: document.getElementById('em_track').value,
+      domain: document.getElementById('em_domain').value,
+      team_leader_name: lname, team_leader_email: email,
+      team_leader_phone: document.getElementById('em_phone').value.trim(),
+      is_active: existing ? existing.is_active : true,
+    };
+    const saveBtn = document.getElementById('em_save');
+    saveBtn.disabled = true; saveBtn.textContent = 'جارٍ الحفظ…';
+
+    if(existing){
+      const { error } = await sb.from('eligible_projects').update(record).eq('project_id', pid);
+      if(error){ showToast('تعذّر الحفظ: '+error.message); saveBtn.disabled=false; saveBtn.textContent='حفظ'; return; }
+      const idx = eligibleProjects.findIndex(p=>p.project_id===pid);
+      eligibleProjects[idx] = { ...eligibleProjects[idx], ...record };
+      showToast('تم حفظ بيانات الفريق');
+    } else {
+      const { error } = await sb.from('eligible_projects').insert(record);
+      if(error){ showToast('تعذّر الإضافة: '+error.message); saveBtn.disabled=false; saveBtn.textContent='إضافة'; return; }
+      eligibleProjects.push({ ...record, source:"يدوي", has_password:false });
+      showToast('تمت إضافة الفريق إلى قائمة الأهلية');
+    }
+    modal.classList.remove('show');
+    restoreConfirmModal();
+    renderEligTbody();
+  });
+}
+
+/* ---------------- استيراد CSV ---------------- */
+function openImportPanel(){
+  const panel = document.getElementById('importPanel');
+  panel.innerHTML = `
+    <div class="card" style="margin-bottom:18px;border-color:var(--teal-500)">
+      <div class="section-title-row"><div>
+        <h2>استيراد قائمة الفرق من ملف CSV</h2>
+        <p>الأعمدة المطلوبة بالترتيب: <span class="mono">project_id, project_name, track, domain, team_leader_name, team_leader_email, team_leader_phone</span></p>
+      </div></div>
+      <input type="file" id="csvInput" accept=".csv" style="margin-bottom:12px">
+      <div id="importPreviewWrap"></div>
+    </div>
+  `;
+  document.getElementById('csvInput').addEventListener('change', handleCsvFile);
+}
+function parseCSV(text){
+  const lines = text.replace(/\r/g,'').split('\n').filter(l=>l.trim().length>0);
+  if(lines.length<2) return [];
+  const splitLine = (line)=>{
+    // دعم مبسّط للحقول المحاطة بعلامات تنصيص تحتوي فواصل
+    const out=[]; let cur=''; let inQuotes=false;
+    for(let i=0;i<line.length;i++){
+      const ch=line[i];
+      if(ch==='"'){ inQuotes=!inQuotes; continue; }
+      if(ch===',' && !inQuotes){ out.push(cur.trim()); cur=''; continue; }
+      cur+=ch;
+    }
+    out.push(cur.trim());
+    return out;
+  };
+  const headers = splitLine(lines[0]).map(h=>h.trim().toLowerCase());
+  return lines.slice(1).map(line=>{
+    const cells = splitLine(line);
+    const row = {};
+    headers.forEach((h,i)=>{ row[h] = cells[i]!==undefined ? cells[i] : ''; });
+    return row;
+  });
+}
+function handleCsvFile(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    const rows = parseCSV(ev.target.result);
+    if(rows.length===0){ showToast('الملف فارغ أو غير صالح'); return; }
+    pendingImportRows = rows.map(r=>{
+      const project_id = r.project_id || '';
+      const team_leader_email = (r.team_leader_email||'').trim().toLowerCase();
+      const errors = [];
+      if(!project_id) errors.push('رقم المشروع مفقود');
+      if(!team_leader_email) errors.push('البريد الإلكتروني مفقود');
+      else if(!isValidEmail(team_leader_email)) errors.push('صيغة البريد غير صحيحة');
+      if(!r.team_leader_name) errors.push('اسم قائد الفريق مفقود');
+      const isDuplicateInFile = rows.filter(x=>x.project_id===project_id).length>1;
+      if(isDuplicateInFile) errors.push('رقم المشروع مكرَّر داخل الملف');
+      const existsAlready = eligibleProjects.some(p=>p.project_id===project_id);
+      return {
+        project_id, project_name:r.project_name||'', track:r.track||TRACKS[0], domain:r.domain||'',
+        team_leader_name:r.team_leader_name||'', team_leader_email, team_leader_phone:r.team_leader_phone||'',
+        is_active:true, source:"استيراد CSV",
+        errors, willUpdate: existsAlready,
+      };
+    });
+    renderImportPreview();
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+function renderImportPreview(){
+  const wrap = document.getElementById('importPreviewWrap');
+  const validCount = pendingImportRows.filter(r=>r.errors.length===0).length;
+  const errorCount = pendingImportRows.length - validCount;
+  const newCount = pendingImportRows.filter(r=>r.errors.length===0 && !r.willUpdate).length;
+  const updateCount = pendingImportRows.filter(r=>r.errors.length===0 && r.willUpdate).length;
+  wrap.innerHTML = `
+    <div class="req-banner" style="margin-bottom:14px">
+      تم قراءة <b>${pendingImportRows.length}</b> صفًا — <b>${newCount}</b> فريق جديد، <b>${updateCount}</b> تحديث لفريق موجود، و<b>${errorCount}</b> صف يحتوي أخطاء ولن يُستورد.
+      <br>لا حاجة لتحديد كلمة مرور هنا — كل فريق يُنشئ كلمة مروره بنفسه في أول دخول عبر صفحة الدخول.
+    </div>
+    <div class="table-wrap" style="max-height:340px;overflow-y:auto">
+      <table>
+        <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>قائد الفريق</th><th>البريد الإلكتروني</th><th>الحالة</th></tr></thead>
+        <tbody>${pendingImportRows.map(r=>`
+          <tr>
+            <td class="mono">${r.project_id||'—'}</td>
+            <td>${r.project_name||'—'}</td>
+            <td>${r.team_leader_name||'—'}</td>
+            <td class="mono">${r.team_leader_email||'—'}</td>
+            <td>${r.errors.length? `<span class="badge no">${r.errors[0]}</span>` : (r.willUpdate?`<span class="badge mid">تحديث</span>`:`<span class="badge ok">جديد</span>`)}</td>
+          </tr>
+        `).join('')}</tbody>
+      </table>
+    </div>
+    <div class="editor-actions">
+      <button class="btn btn-ghost" id="cancelImportBtn">إلغاء</button>
+      <button class="btn btn-primary" id="confirmImportBtn" ${validCount===0?'disabled':''}>تأكيد استيراد ${validCount} فريق</button>
+    </div>
+  `;
+  document.getElementById('cancelImportBtn').addEventListener('click',()=>{ pendingImportRows=[]; document.getElementById('importPanel').innerHTML=''; });
+  document.getElementById('confirmImportBtn').addEventListener('click', confirmImport);
+}
+async function confirmImport(){
+  const validRows = pendingImportRows.filter(r=>r.errors.length===0);
+  const btn = document.getElementById('confirmImportBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'جارٍ الاستيراد…'; }
+
+  const dbRows = validRows.map(r=>({
+    project_id:r.project_id, project_name:r.project_name, track:r.track, domain:r.domain,
+    team_leader_name:r.team_leader_name, team_leader_email:r.team_leader_email,
+    team_leader_phone:r.team_leader_phone, is_active:true,
+  }));
+
+  // استيراد على دفعات (500 صف لكل دفعة) لتفادي حدود حجم الطلب الواحد
+  const chunkSize = 500;
+  let importedCount = 0;
+  for(let i=0; i<dbRows.length; i+=chunkSize){
+    const chunk = dbRows.slice(i, i+chunkSize);
+    const { error } = await sb.from('eligible_projects').upsert(chunk, { onConflict: 'project_id' });
+    if(error){ showToast('تعذّر استيراد بعض الصفوف: '+error.message); break; }
+    importedCount += chunk.length;
+  }
+
+  validRows.slice(0, importedCount).forEach(r=>{
+    const idx = eligibleProjects.findIndex(p=>p.project_id===r.project_id);
+    const record = {project_id:r.project_id, project_name:r.project_name, track:r.track, domain:r.domain,
+      team_leader_name:r.team_leader_name, team_leader_email:r.team_leader_email, team_leader_phone:r.team_leader_phone,
+      is_active:true, source:"استيراد CSV", has_password: idx>-1 ? eligibleProjects[idx].has_password : false};
+    if(idx>-1) eligibleProjects[idx] = {...eligibleProjects[idx], ...record};
+    else eligibleProjects.push(record);
+  });
+
+  showToast(`تم استيراد ${importedCount} فريق إلى قائمة الأهلية`);
+  pendingImportRows = [];
+  document.getElementById('importPanel').innerHTML = '';
+  renderEligTbody();
+  renderEligibility();
+}
+function exportEligibleCSV(){
+  const headers = ["project_id","project_name","track","domain","team_leader_name","team_leader_email","team_leader_phone","is_active"];
+  const lines = [headers.join(',')].concat(
+    eligibleProjects.map(p=>headers.map(h=>`"${String(p[h]??'').replace(/"/g,'""')}"`).join(','))
+  );
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'eligible_projects.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* ==========================================================================
+   المستخدمون والأدوار
+   ========================================================================== */
+function initials(name){ return name.trim().split(' ').slice(0,2).map(w=>w[0]).join(''); }
+function renderUsers(){
+  const el = document.getElementById('view-users');
+  el.innerHTML = `
+    <div class="section-title-row">
+      <div><h2>المستخدمون والأدوار</h2><p>إدارة فريق البرنامج وصلاحيات الوصول إلى النموذج ولوحة المراجعة.</p></div>
+      <button class="btn btn-primary" id="addUserBtn">+ إضافة مستخدم</button>
+    </div>
+
+    <div class="card" style="margin-bottom:18px">
+      <div class="section-title-row"><div><h2>الأدوار المتاحة</h2></div></div>
+      <div class="grid2" style="grid-template-columns:repeat(3,1fr)">
+        ${ROLES.map(r=>`<div style="border:1px solid var(--line);border-radius:10px;padding:14px">
+          <span class="badge role-${r.v}">${r.l}</span>
+          <div style="font-size:12px;color:var(--ink-600);margin-top:8px">${r.desc}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap"><table>
+        <thead><tr><th>المستخدم</th><th>الدور</th><th>الحالة</th><th>آخر دخول</th><th></th></tr></thead>
+        <tbody id="usersTbody"></tbody>
+      </table></div>
+    </div>
+  `;
+  renderUsersTbody();
+  document.getElementById('addUserBtn').addEventListener('click',()=>openUserEditor(null));
+}
+function renderUsersTbody(){
+  const tb = document.getElementById('usersTbody');
+  tb.innerHTML = users.map(u=>`
+    <tr>
+      <td><div class="user-cell"><div class="avatar">${initials(u.name)}</div><div><div class="un">${u.name}</div><div class="ue">${u.email}</div></div></div></td>
+      <td><span class="badge role-${u.role}">${roleLabel(u.role)}</span></td>
+      <td><span class="badge status-${u.status}">${u.status==='active'?'نشط':'موقوف'}</span></td>
+      <td style="color:var(--ink-400)">${u.lastLogin}</td>
+      <td style="text-align:left"><div style="display:flex;gap:4px;justify-content:flex-end">
+        <button class="icon-btn" data-edituser="${u.id}" title="تعديل">✎</button>
+        <button class="icon-btn" data-toggleuser="${u.id}" title="${u.status==='active'?'إيقاف':'تفعيل'}">${u.status==='active'?'⏸':'▶'}</button>
+        <button class="icon-btn danger" data-deluser="${u.id}" title="حذف">🗑</button>
+      </div></td>
+    </tr>
+  `).join('');
+  tb.querySelectorAll('[data-edituser]').forEach(b=>b.addEventListener('click',()=>openUserEditor(b.dataset.edituser)));
+  tb.querySelectorAll('[data-toggleuser]').forEach(b=>b.addEventListener('click', async ()=>{
+    const u = users.find(x=>x.id===b.dataset.toggleuser);
+    const prev = u.status;
+    u.status = u.status==='active'?'suspended':'active'; renderUsersTbody();
+    const { error } = await sb.from('admin_users').update({ status: u.status }).eq('id', u.id);
+    if(error){ u.status = prev; renderUsersTbody(); showToast('تعذّر التحديث: '+error.message); return; }
+    showToast(u.status==='active'?'تم تفعيل المستخدم':'تم إيقاف المستخدم');
+  }));
+  tb.querySelectorAll('[data-deluser]').forEach(b=>b.addEventListener('click',()=>{
+    openConfirm('هل تريد حذف هذا المستخدم نهائيًا من فريق البرنامج؟', async ()=>{
+      const { error } = await sb.from('admin_users').delete().eq('id', b.dataset.deluser);
+      if(error){ showToast('تعذّر الحذف: '+error.message); return; }
+      users = users.filter(x=>x.id!==b.dataset.deluser);
+      renderUsersTbody(); showToast('تم حذف المستخدم');
+    });
+  }));
+}
+function openUserEditor(userId){
+  const existing = userId ? users.find(u=>u.id===userId) : null;
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.innerHTML = `
+    <h3>${existing?'تعديل مستخدم':'إضافة مستخدم جديد'}</h3>
+    <p>الشخص المُضاف يدخل بنفسه لاحقًا من صفحة الدخول الإدارية بهذا البريد بالضبط (Magic Link) — لا حاجة لكلمة مرور.</p>
+    <div class="field-inline"><label class="flabel">الاسم الكامل</label><input type="text" id="um_name" value="${existing?existing.name.replace(/"/g,'&quot;'):''}"></div>
+    <div class="field-inline"><label class="flabel">البريد الإلكتروني</label><input type="email" id="um_email" value="${existing?existing.email:''}" ${existing?'disabled':''}></div>
+    <div class="field-inline"><label class="flabel">الدور</label>
+      <select id="um_role">${ROLES.map(r=>`<option value="${r.v}" ${existing&&existing.role===r.v?'selected':''}>${r.l}</option>`).join('')}</select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="um_cancel">إلغاء</button>
+      <button class="btn btn-primary" id="um_save">${existing?'حفظ':'إضافة'}</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('um_cancel').addEventListener('click',()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('um_save').addEventListener('click', async ()=>{
+    const name = document.getElementById('um_name').value.trim();
+    const email = document.getElementById('um_email').value.trim().toLowerCase();
+    const role = document.getElementById('um_role').value;
+    if(!name||!email){ showToast('يرجى تعبئة الاسم والبريد الإلكتروني'); return; }
+    const saveBtn = document.getElementById('um_save');
+    saveBtn.disabled = true; saveBtn.textContent = 'جارٍ الحفظ…';
+
+    if(existing){
+      const { error } = await sb.from('admin_users').update({ name, role }).eq('id', existing.id);
+      if(error){ showToast('تعذّر الحفظ: '+error.message); saveBtn.disabled=false; saveBtn.textContent='حفظ'; return; }
+      existing.name=name; existing.role=role;
+      showToast('تم حفظ بيانات المستخدم');
+    } else {
+      const { data, error } = await sb.from('admin_users').insert({ name, email, role, status:'active' }).select().single();
+      if(error){ showToast('تعذّر الإضافة: '+error.message); saveBtn.disabled=false; saveBtn.textContent='إضافة'; return; }
+      users.push({id:data.id, name, email, role, status:"active", lastLogin:"لم يسجّل الدخول بعد"});
+      showToast('تمت إضافة المستخدم — بإمكانه الدخول الآن من صفحة الدخول الإدارية بهذا البريد');
+    }
+    modal.classList.remove('show');
+    restoreConfirmModal();
+    renderUsersTbody();
+  });
+}
+function restoreConfirmModal(){
+  const box = document.querySelector('#confirmModal .modal-box');
+  if(!document.getElementById('confirmTitle')){
+    box.innerHTML = `
+      <h3 id="confirmTitle">تأكيد الحذف</h3>
+      <p id="confirmText">هل أنت متأكد؟ لا يمكن التراجع عن هذا الإجراء.</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="confirmCancel">إلغاء</button>
+        <button class="btn btn-danger-ghost" id="confirmOk">حذف</button>
+      </div>`;
+  }
+}
+
+/* ==========================================================================
+   إعدادات النموذج
+   ========================================================================== */
+function renderSettings(){
+  const el = document.getElementById('view-settings');
+  const totalQuestions = sections.reduce((a,s)=>a+s.questions.length,0);
+  const totalRequired = sections.reduce((a,s)=>a+s.questions.filter(q=>q.required).length,0);
+  el.innerHTML = `
+    <div class="section-title-row"><div><h2>إعدادات النموذج</h2><p>معلومات عامة عن النموذج، الموعد النهائي، وضبط قواعد رفع الملفات.</p></div></div>
+
+    <div class="two-col-layout">
+      <div class="card">
+        <div class="section-title-row"><div><h2>معلومات عامة</h2></div></div>
+        <div class="field-inline"><label class="flabel">اسم البرنامج</label><input type="text" id="st_program" value="${formSettings.programName}"></div>
+        <div class="field-inline"><label class="flabel">عنوان النموذج</label><input type="text" id="st_title" value="${formSettings.formTitle}"></div>
+        <div class="grid2">
+          <div class="field-inline"><label class="flabel">الموعد النهائي للتقديم</label><input type="datetime-local" id="st_deadline" value="${formSettings.deadline}"></div>
+          <div class="field-inline"><label class="flabel">حالة استقبال الطلبات</label>
+            <div style="display:flex;align-items:center;gap:10px;padding-top:6px">
+              <div class="toggle"><input type="checkbox" id="st_open" ${formSettings.isOpen?'checked':''}><label class="tk" for="st_open"></label></div>
+              <span style="font-size:12.5px;color:var(--ink-600)">${formSettings.isOpen?'الاستقبال مفتوح حاليًا':'الاستقبال متوقف حاليًا'}</span>
+            </div>
+          </div>
+        </div>
+        <div class="field-inline">
+          <label class="flabel">الإشعارات البريدية التلقائية</label>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px"><div class="toggle"><input type="checkbox" id="st_notify48" ${formSettings.notifyBefore48?'checked':''}><label class="tk" for="st_notify48"></label></div><span style="font-size:12.5px">تنبيه قبل 48 ساعة من الموعد النهائي</span></div>
+            <div style="display:flex;align-items:center;gap:10px"><div class="toggle"><input type="checkbox" id="st_notify24" ${formSettings.notifyBefore24?'checked':''}><label class="tk" for="st_notify24"></label></div><span style="font-size:12.5px">تنبيه قبل 24 ساعة من الموعد النهائي</span></div>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="saveSettingsBtn" style="margin-top:6px">حفظ الإعدادات</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div class="card">
+          <div class="section-title-row"><div><h2>ملخص النموذج</h2></div></div>
+          <div class="bar-row"><div class="br-head"><span>عدد الأقسام</span><b class="mono">${sections.length}</b></div></div>
+          <div class="bar-row"><div class="br-head"><span>عدد الأسئلة الكلي</span><b class="mono">${totalQuestions}</b></div></div>
+          <div class="bar-row"><div class="br-head"><span>الأسئلة الإلزامية</span><b class="mono">${totalRequired}</b></div></div>
+          <div class="bar-row"><div class="br-head"><span>عدد مستخدمي لوحة التحكم</span><b class="mono">${users.length}</b></div></div>
+        </div>
+        <div class="card">
+          <div class="section-title-row"><div><h2>ضبط رفع الملفات</h2></div></div>
+          <div class="grid2">
+            <div class="field-inline"><label class="flabel">الحد الأقصى لملف PDF (م.ب)</label><input type="number" id="st_pdf" value="${formSettings.maxPdfMb}"></div>
+            <div class="field-inline"><label class="flabel">عدد الملفات لكل حقل</label><input type="number" id="st_maxfiles" value="${formSettings.maxFilesPerField}"></div>
+            <div class="field-inline"><label class="flabel">الحد الأقصى لحجم الفيديو (م.ب)</label><input type="number" id="st_video_mb" value="${formSettings.maxVideoMb}"></div>
+            <div class="field-inline"><label class="flabel">الحد الأقصى لمدة الفيديو (دقيقة)</label><input type="number" id="st_video_min" value="${formSettings.maxVideoMinutes}"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('saveSettingsBtn').addEventListener('click', async ()=>{
+    const btn = document.getElementById('saveSettingsBtn');
+    formSettings.programName = document.getElementById('st_program').value;
+    formSettings.formTitle = document.getElementById('st_title').value;
+    formSettings.deadline = document.getElementById('st_deadline').value;
+    formSettings.isOpen = document.getElementById('st_open').checked;
+    formSettings.notifyBefore48 = document.getElementById('st_notify48').checked;
+    formSettings.notifyBefore24 = document.getElementById('st_notify24').checked;
+    formSettings.maxPdfMb = parseInt(document.getElementById('st_pdf').value)||10;
+    formSettings.maxFilesPerField = parseInt(document.getElementById('st_maxfiles').value)||5;
+    formSettings.maxVideoMb = parseInt(document.getElementById('st_video_mb').value)||200;
+    formSettings.maxVideoMinutes = parseInt(document.getElementById('st_video_min').value)||5;
+
+    btn.disabled = true; btn.textContent = 'جارٍ الحفظ…';
+    const { error } = await sb.from('form_settings').update({
+      program_name: formSettings.programName,
+      form_title: formSettings.formTitle,
+      deadline_at: formSettings.deadline ? new Date(formSettings.deadline).toISOString() : null,
+      is_open: formSettings.isOpen,
+      notify_before_48h: formSettings.notifyBefore48,
+      notify_before_24h: formSettings.notifyBefore24,
+      max_pdf_mb: formSettings.maxPdfMb,
+      max_files_per_field: formSettings.maxFilesPerField,
+      max_video_mb: formSettings.maxVideoMb,
+      max_video_minutes: formSettings.maxVideoMinutes,
+    }).eq('id', 1);
+
+    if(error){ showToast('تعذّر حفظ الإعدادات: '+error.message); btn.disabled=false; btn.textContent='حفظ الإعدادات'; return; }
+    showToast('تم حفظ إعدادات النموذج');
+    renderSettings();
+  });
+}
+
+/* ---------------- عرض شامل ---------------- */
+function renderAll(){
+  renderTabs();
+  if(activeTab==='dashboard') renderDashboard();
+  if(activeTab==='builder') renderBuilder();
+  if(activeTab==='eligibility') renderEligibility();
+  if(activeTab==='users') renderUsers();
+  if(activeTab==='settings') renderSettings();
+}
+initAdminApp();
+</script>
+</body>
+</html>
