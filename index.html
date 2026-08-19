@@ -3,238 +3,96 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>نموذج التحقق من استيفاء متطلبات التحكيم — حاضنة ابتكار 5</title>
+<title>دخول المشاركين — نموذج التحقق من استيفاء متطلبات التحكيم | حاضنة ابتكار 5</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Cairo:wght@700;800;900&display=swap" rel="stylesheet">
 <!--
-  مكتبة Supabase JS — عبر CDN. إذا كانت الشبكة عندك تحظر jsdelivr/unpkg،
-  نزّل الملف وضمّنه محليًا بدل هذا السطر.
+  مكتبة Supabase JS — عبر CDN. إذا كانت الشبكة عندك تحظر jsdelivr/unpkg
+  (كما حصل سابقًا مع منصة "ابتكر للتعليم")، نزّل الملف وضمّنه محليًا بدل هذا السطر.
 -->
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <style>
 :root{
-  --navy-950:#12103C;
-  --navy-800:#1A1852;
-  --navy-700:#242066;
-  --teal-600:#0E7C7B;
-  --teal-500:#149493;
-  --teal-100:#E4F3F2;
-  --gold-500:#C9A24B;
-  --gold-100:#F7EFDD;
-  --purple-500:#6B4FA0;
-  --green-500:#2FA36B;
-  --paper:#F5F6F9;
-  --card:#FFFFFF;
-  --ink-900:#121826;
-  --ink-600:#4C5568;
-  --ink-400:#8790A3;
-  --line:#E1E4EB;
-  --danger:#C0392B;
-  --danger-100:#FBEAE8;
-  --success:#1E8E5A;
-  --success-100:#E7F5EE;
-  --amber:#B4790F;
-  --amber-100:#FBF1DF;
-  --radius:14px;
-  --shadow:0 4px 20px rgba(11,11,61,0.06);
+  --navy-950:#12103C; --navy-800:#1A1852; --navy-700:#242066;
+  --teal-600:#0E7C7B; --teal-500:#149493; --teal-100:#E4F3F2;
+  --gold-500:#C9A24B; --gold-100:#F7EFDD;
+  --purple-500:#6B4FA0; --green-500:#2FA36B;
+  --paper:#F5F6F9; --card:#FFFFFF;
+  --ink-900:#121826; --ink-600:#4C5568; --ink-400:#8790A3;
+  --line:#E1E4EB; --danger:#C0392B; --danger-100:#FBEAE8;
+  --success:#1E8E5A; --success-100:#E7F5EE;
+  --radius:16px; --shadow:0 10px 40px rgba(18,16,60,.10);
 }
 *{box-sizing:border-box;}
-html,body{margin:0;padding:0;}
+html,body{margin:0;padding:0;height:100%;}
 body{
-  background:var(--paper);
-  color:var(--ink-900);
-  font-family:'IBM Plex Sans Arabic',sans-serif;
-  font-size:15px;
-  line-height:1.7;
-  -webkit-font-smoothing:antialiased;
+  background:radial-gradient(circle at 20% 0%, rgba(14,124,123,.10), transparent 45%),
+              radial-gradient(circle at 100% 100%, rgba(201,162,75,.10), transparent 40%),
+              var(--paper);
+  color:var(--ink-900);font-family:'IBM Plex Sans Arabic',sans-serif;font-size:15px;line-height:1.7;
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
 }
 .mono{font-family:'IBM Plex Mono',monospace;}
-button{font-family:inherit;}
-a{color:inherit;}
+.display{font-family:'Cairo',sans-serif;}
+.stage{width:100%;max-width:440px;position:relative;}
 
-/* ===== corner-bracket signature element ===== */
-.bracket-frame{position:relative;}
-.bracket-frame::before,.bracket-frame::after,
-.bracket-frame .bk-tl,.bracket-frame .bk-tr,.bracket-frame .bk-bl,.bracket-frame .bk-br{content:'';}
-.bk-corner{position:absolute;width:16px;height:16px;border:2px solid var(--gold-500);opacity:.9;}
-.bk-corner.tl{top:-1px;right:-1px;border-left:none;border-bottom:none;border-radius:6px 0 0 0;}
-.bk-corner.tr{top:-1px;left:-1px;border-right:none;border-bottom:none;border-radius:0 6px 0 0;}
-.bk-corner.bl{bottom:-1px;right:-1px;border-left:none;border-top:none;border-radius:0 0 0 6px;}
-.bk-corner.br{bottom:-1px;left:-1px;border-right:none;border-top:none;border-radius:0 0 6px 0;}
-
-/* ===== top bar ===== */
-.topbar{
-  background:linear-gradient(180deg,var(--navy-950) 0%,var(--navy-800) 100%);
-  color:#fff;padding:18px 28px;position:sticky;top:0;z-index:40;
-  box-shadow:0 6px 24px rgba(11,11,61,0.18);
-}
-.topbar-inner{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:16px;}
-.brand-mark{
-  position:relative;width:44px;height:44px;flex:none;
-  display:flex;align-items:center;justify-content:center;
-}
+.brand-row{display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:26px;}
+.brand-mark{width:46px;height:46px;flex:none;}
 .brand-mark svg{width:100%;height:100%;}
-.brand-text{flex:1;min-width:0;}
-.brand-eyebrow{font-size:11.5px;letter-spacing:.06em;color:var(--gold-500);font-weight:700;text-transform:uppercase;font-family:'Cairo',sans-serif;}
-.brand-title{font-size:17px;font-weight:800;margin-top:3px;font-family:'Cairo',sans-serif;}
-.brand-sub{font-size:12.5px;color:rgba(255,255,255,.6);margin-top:2px;}
-.project-pill{
-  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);
-  border-radius:999px;padding:7px 14px;font-size:12.5px;color:rgba(255,255,255,.85);
-  display:flex;align-items:center;gap:8px;flex:none;
+.brand-name{text-align:right;}
+.brand-eyebrow{font-size:11px;letter-spacing:.06em;color:var(--teal-600);font-weight:700;text-transform:uppercase;font-family:'Cairo',sans-serif;}
+.brand-title{font-size:16px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;}
+
+.card{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:34px 30px;position:relative;overflow:hidden;
 }
-.project-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--teal-500);box-shadow:0 0 0 3px rgba(20,148,147,.25);}
-.progress-shell{max-width:1180px;margin:12px auto 0;height:4px;background:rgba(255,255,255,.12);border-radius:4px;overflow:hidden;}
-.progress-fill{height:100%;background:linear-gradient(90deg,var(--teal-500),var(--gold-500));transition:width .35s ease;}
-.progress-label{max-width:1180px;margin:6px auto 0;font-size:11.5px;color:rgba(255,255,255,.55);display:flex;justify-content:space-between;}
+.card::before{content:'';position:absolute;top:0;right:0;left:0;height:5px;background:linear-gradient(90deg,var(--teal-600) 0%,var(--teal-600) 35%,var(--purple-500) 35%,var(--purple-500) 60%,var(--gold-500) 60%,var(--gold-500) 82%,var(--green-500) 82%,var(--green-500) 100%);}
+.card::after{content:'';position:absolute;bottom:0;right:0;left:0;height:4px;background:var(--gold-500);}
+.bk{position:absolute;width:20px;height:20px;border:2px solid var(--gold-500);opacity:.55;}
+.bk.tl{top:14px;right:14px;border-left:none;border-bottom:none;}
+.bk.br{bottom:14px;left:14px;border-right:none;border-top:none;}
 
-/* ===== layout ===== */
-.layout{max-width:1180px;margin:0 auto;padding:28px;display:grid;grid-template-columns:280px 1fr;gap:24px;align-items:start;}
-@media(max-width:920px){.layout{grid-template-columns:1fr;padding:16px;}}
+h1{font-size:20px;font-weight:800;color:var(--navy-800);margin:0 0 6px;font-family:'Cairo',sans-serif;}
+h1::after{content:'';display:block;width:38px;height:3px;background:var(--teal-600);border-radius:2px;margin-top:9px;}
+.sub{font-size:13px;color:var(--ink-600);margin:14px 0 22px;}
+.restricted-note{background:var(--gold-100);border:1px solid #E9D6AB;border-radius:10px;padding:10px 14px;font-size:12px;color:#7A5C1E;margin-bottom:22px;display:flex;gap:8px;}
 
-/* ===== stepper ===== */
-.stepper{position:sticky;top:112px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;}
-@media(max-width:920px){.stepper{position:static;overflow-x:auto;display:flex;padding:6px;}}
-.step-item{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;border-right:3px solid transparent;transition:background .15s;}
-.step-item:hover{background:var(--paper);}
-.step-item.active{background:var(--teal-100);border-right-color:var(--teal-600);}
-@media(max-width:920px){.step-item{border-right:none;border-bottom:3px solid transparent;flex:none;white-space:nowrap;}.step-item.active{border-bottom-color:var(--teal-600);}}
-.step-num{
-  width:26px;height:26px;border-radius:8px;flex:none;
-  display:flex;align-items:center;justify-content:center;
-  font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;
-  background:var(--paper);color:var(--ink-400);border:1px solid var(--line);
+.eq-ticks{width:100%;height:26px;display:block;margin-bottom:22px;}
+
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:13px;font-weight:600;margin-bottom:7px;color:var(--ink-900);}
+input[type=text],input[type=email],input[type=password]{
+  width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:14.5px;
+  background:#fff;color:var(--ink-900);font-family:inherit;
 }
-.step-item.active .step-num{background:var(--navy-800);color:#fff;border-color:var(--navy-800);}
-.step-item.done .step-num{background:var(--success-100);color:var(--success);border-color:var(--success);}
-.step-item.warn .step-num{background:var(--amber-100);color:var(--amber);border-color:var(--amber);}
-.step-title{font-size:13px;color:var(--ink-900);font-weight:500;}
-.step-item.active .step-title{color:var(--navy-800);font-weight:600;}
+input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(14,124,123,.13);}
+.field-hint{font-size:11.5px;color:var(--ink-400);margin-top:5px;}
 
-/* ===== main panel ===== */
-.panel{min-width:0;}
-.section-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:28px 30px;position:relative;}
-@media(max-width:600px){.section-card{padding:20px 16px;}}
-.section-head{padding-bottom:18px;margin-bottom:20px;border-bottom:1px solid var(--line);}
-.section-eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--teal-600);letter-spacing:.05em;font-weight:600;}
-.section-title{font-size:21px;font-weight:800;color:var(--navy-800);margin-top:6px;font-family:'Cairo',sans-serif;}
-.section-num-badge{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;color:#fff;font-family:'Cairo',sans-serif;font-weight:800;font-size:13px;margin-inline-end:8px;vertical-align:middle;}
-.section-title::after{content:'';display:block;width:34px;height:3px;background:var(--teal-600);border-radius:2px;margin-top:8px;}
-.section-desc{font-size:13.5px;color:var(--ink-600);margin-top:6px;}
-.req-banner{background:var(--gold-100);border:1px solid #E9D6AB;border-radius:10px;padding:11px 14px;font-size:13px;color:#7A5C1E;margin-bottom:20px;display:flex;gap:8px;align-items:flex-start;}
-.req-banner b{color:#5C4315;}
-
-.field{margin-bottom:18px;}
-.field-label{display:flex;gap:6px;font-size:13.5px;font-weight:600;color:var(--ink-900);margin-bottom:7px;}
-.field-label .req-star{color:var(--danger);}
-.field-hint{font-size:12px;color:var(--ink-400);margin-top:5px;}
-input[type=text],input[type=number],input[type=date],input[type=email],input[type=url],textarea,select{
-  width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:10px;
-  background:#fff;color:var(--ink-900);font-family:inherit;font-size:14px;
-  transition:border-color .15s, box-shadow .15s;
-}
-input:focus,textarea:focus,select:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(14,124,123,.13);}
-textarea{min-height:96px;resize:vertical;}
-select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='9'><path d='M1 1l6 6 6-6' stroke='%234C5568' stroke-width='1.6' fill='none'/></svg>");background-repeat:no-repeat;background-position:left 13px center;padding-left:34px;}
-input:disabled,select:disabled{background:#F0F1F4;color:var(--ink-400);}
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-@media(max-width:600px){.two-col{grid-template-columns:1fr;}}
-
-.choice-row{display:flex;flex-wrap:wrap;gap:10px;}
-.choice-pill{
-  border:1.5px solid var(--line);border-radius:10px;padding:10px 16px;font-size:13.5px;cursor:pointer;
-  display:flex;align-items:center;gap:8px;background:#fff;transition:all .15s;user-select:none;
-}
-.choice-pill:hover{border-color:var(--teal-500);}
-.choice-pill.selected{border-color:var(--teal-600);background:var(--teal-100);color:var(--navy-800);font-weight:600;}
-.choice-pill input{display:none;}
-.choice-pill .ck{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--ink-400);flex:none;display:flex;align-items:center;justify-content:center;}
-.choice-pill.selected .ck{background:var(--teal-600);border-color:var(--teal-600);}
-.choice-pill.selected .ck::after{content:'✓';color:#fff;font-size:10px;line-height:1;}
-.choice-pill.radio .ck{border-radius:50%;}
-.choice-pill.radio.selected .ck::after{content:'';width:6px;height:6px;border-radius:50%;background:#fff;}
-
-.stage-list{display:flex;flex-direction:column;gap:8px;}
-.stage-opt{border:1.5px solid var(--line);border-radius:12px;padding:13px 16px;cursor:pointer;display:flex;gap:12px;align-items:flex-start;transition:all .15s;}
-.stage-opt:hover{border-color:var(--teal-500);}
-.stage-opt.selected{border-color:var(--teal-600);background:var(--teal-100);}
-.stage-opt .ck{margin-top:3px;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--ink-400);flex:none;display:flex;align-items:center;justify-content:center;}
-.stage-opt.selected .ck{border-color:var(--teal-600);}
-.stage-opt.selected .ck::after{content:'';width:7px;height:7px;border-radius:50%;background:var(--teal-600);}
-.stage-opt .stage-txt b{font-size:14px;color:var(--ink-900);font-family:'Cairo',sans-serif;font-weight:700;}
-.stage-opt .stage-txt span{font-size:12.5px;color:var(--ink-600);display:block;margin-top:2px;}
-.stage-opt .stage-num{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--teal-600);font-weight:600;}
-
-.file-drop{
-  border:1.5px dashed var(--line);border-radius:12px;padding:16px;text-align:center;cursor:pointer;
-  background:var(--paper);transition:border-color .15s, background .15s;
-}
-.file-drop:hover{border-color:var(--teal-500);background:var(--teal-100);}
-.file-drop .fi-title{font-size:13px;font-weight:600;color:var(--navy-800);}
-.file-drop .fi-sub{font-size:11.5px;color:var(--ink-400);margin-top:3px;}
-.file-list{margin-top:10px;display:flex;flex-direction:column;gap:6px;}
-.file-chip{display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12.5px;}
-.file-chip .fc-name{display:flex;align-items:center;gap:8px;color:var(--ink-900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.file-chip .fc-size{color:var(--ink-400);font-family:'IBM Plex Mono',monospace;font-size:11px;flex:none;margin-inline-start:8px;}
-.file-chip .fc-remove{color:var(--danger);cursor:pointer;font-size:12px;flex:none;margin-inline-start:10px;background:none;border:none;}
-.video-toggle{display:flex;gap:8px;margin-bottom:10px;}
-.vt-btn{border:1.5px solid var(--line);border-radius:8px;padding:7px 14px;font-size:12.5px;cursor:pointer;background:#fff;}
-.vt-btn.active{background:var(--navy-800);color:#fff;border-color:var(--navy-800);}
-
-.member-card{border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:14px;position:relative;background:var(--paper);}
-.member-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
-.member-tag{font-family:'IBM Plex Mono',monospace;font-size:11.5px;background:var(--navy-800);color:#fff;border-radius:6px;padding:4px 10px;font-weight:600;}
-.member-remove{background:none;border:none;color:var(--danger);font-size:12.5px;cursor:pointer;}
-.add-member-btn{
-  width:100%;border:1.5px dashed var(--teal-500);border-radius:12px;padding:13px;text-align:center;
-  color:var(--teal-600);font-weight:600;font-size:13.5px;cursor:pointer;background:var(--teal-100);
-}
-
-.badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:999px;padding:5px 12px;}
-.badge.ok{background:var(--success-100);color:var(--success);}
-.badge.no{background:var(--danger-100);color:var(--danger);}
-.badge.mid{background:var(--amber-100);color:var(--amber);}
-.checklist-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;}
-@media(max-width:600px){.checklist-grid{grid-template-columns:1fr;}}
-.checklist-row{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fff;}
-.checklist-row .cr-label{font-size:13px;font-weight:600;color:var(--ink-900);}
-
-.declaration-box{background:var(--navy-950);color:rgba(255,255,255,.88);border-radius:12px;padding:20px 22px 24px;font-size:13px;line-height:2;margin-bottom:20px;position:relative;overflow:hidden;}
-.declaration-box::after{content:'';position:absolute;bottom:0;right:0;left:0;height:4px;background:var(--gold-500);}
-.declaration-box b{color:var(--gold-500);}
-
-.nav-row{display:flex;justify-content:space-between;align-items:center;margin-top:22px;gap:10px;flex-wrap:wrap;}
-.btn{border:none;border-radius:10px;padding:12px 22px;font-size:13.5px;font-weight:600;cursor:pointer;transition:all .15s;}
+.btn{width:100%;border:none;border-radius:10px;padding:13px;font-size:14.5px;font-weight:700;cursor:pointer;transition:all .15s;}
 .btn-primary{background:var(--navy-800);color:#fff;}
-.btn-primary:hover{background:var(--navy-700);}
-.btn-ghost{background:#fff;color:var(--ink-900);border:1.5px solid var(--line);}
-.btn-ghost:hover{border-color:var(--ink-400);}
-.btn-gold{background:var(--gold-500);color:var(--navy-950);}
-.btn-gold:hover{filter:brightness(1.06);}
-.btn:disabled{opacity:.45;cursor:not-allowed;}
-.side-actions{display:flex;gap:10px;}
+.btn-primary:hover:not(:disabled){background:var(--navy-700);}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+.btn-ghost{background:transparent;color:var(--teal-600);font-size:13px;font-weight:600;padding:10px;}
 
-.toast{
-  position:fixed;bottom:22px;right:50%;transform:translateX(50%);
-  background:var(--navy-950);color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;
-  box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:100;opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;
-  display:flex;align-items:center;gap:8px;
-}
-.toast.show{opacity:1;transform:translateX(50%) translateY(-4px);}
-.toast .tdot{width:7px;height:7px;border-radius:50%;background:var(--teal-500);}
+.err-box{background:var(--danger-100);border:1px solid #EBC3BE;color:var(--danger);border-radius:10px;padding:11px 14px;font-size:12.5px;margin-bottom:16px;display:none;}
+.err-box.show{display:block;}
 
-.error-text{color:var(--danger);font-size:12px;margin-top:5px;display:none;}
-.field.has-error input,.field.has-error textarea,.field.has-error select{border-color:var(--danger);}
-.field.has-error .error-text{display:block;}
+.success-stage{display:none;text-align:center;}
+.success-stage.show{display:block;}
+.success-icon{width:56px;height:56px;border-radius:50%;background:var(--success-100);color:var(--success);display:flex;align-items:center;justify-content:center;font-size:26px;margin:0 auto 16px;}
+.success-email{display:inline-block;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:5px 12px;margin-top:6px;font-size:13px;}
+.resend-row{margin-top:20px;font-size:12.5px;color:var(--ink-400);}
 
-.footer-note{max-width:1180px;margin:8px auto 40px;padding:0 28px;font-size:11.5px;color:var(--ink-400);text-align:center;}
-.eq-divider{width:100%;height:22px;display:block;background:var(--paper);}
+.footer-note{text-align:center;font-size:11.5px;color:var(--ink-400);margin-top:20px;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;margin-inline-end:8px;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <div class="topbar-inner">
+<div class="stage">
+  <div class="brand-row">
     <div class="brand-mark">
       <svg viewBox="0 0 44 44" fill="none">
         <rect x="3" y="3" width="38" height="38" rx="9" fill="#0E7C7B"/>
@@ -242,871 +100,157 @@ input:disabled,select:disabled{background:#F0F1F4;color:var(--ink-400);}
         <path d="M33 15 L33 11 L29 11" stroke="#C9A24B" stroke-width="2.2" fill="none" stroke-linecap="round"/>
         <path d="M11 29 L11 33 L15 33" stroke="#C9A24B" stroke-width="2.2" fill="none" stroke-linecap="round"/>
         <path d="M33 29 L33 33 L29 33" stroke="#C9A24B" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-        <text x="22" y="27" font-family="IBM Plex Mono, monospace" font-size="14" font-weight="700" fill="#fff" text-anchor="middle">5</text>
+        <text x="22" y="28" font-family="Cairo, sans-serif" font-size="16" font-weight="800" fill="#fff" text-anchor="middle">5</text>
       </svg>
     </div>
-    <div class="brand-text">
+    <div class="brand-name">
       <div class="brand-eyebrow">حاضنة الابتكار — النسخة الخامسة</div>
-      <div class="brand-title">نموذج التحقق من استيفاء متطلبات الانتقال إلى مرحلة التحكيم</div>
-      <div class="brand-sub" id="subProjectName">جاري تحميل بيانات المشروع…</div>
+      <div class="brand-title">دخول المشاركين</div>
     </div>
-    <div class="project-pill"><span class="dot"></span><span class="mono" id="pillProjectId">—</span></div>
   </div>
-  <div class="progress-shell"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
-  <div class="progress-label"><span id="progressText">0% مكتمل</span><span id="draftStatus">لم يتم الحفظ بعد</span></div>
-</div>
-<svg class="eq-divider" viewBox="0 0 1180 22" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="20" y="7" width="3" height="10" rx="1.5" fill="#6B4FA0"/><rect x="55" y="3" width="3" height="16" rx="1.5" fill="#2FA36B"/>
-  <rect x="90" y="8" width="3" height="9" rx="1.5" fill="#C9A24B"/><rect x="125" y="5" width="3" height="13" rx="1.5" fill="#0E7C7B"/>
-  <rect x="160" y="7" width="3" height="10" rx="1.5" fill="#6B4FA0"/><rect x="195" y="2" width="3" height="17" rx="1.5" fill="#C9A24B"/>
-  <rect x="230" y="6" width="3" height="11" rx="1.5" fill="#2FA36B"/><rect x="265" y="4" width="3" height="14" rx="1.5" fill="#0E7C7B"/>
-  <rect x="300" y="7" width="3" height="10" rx="1.5" fill="#C9A24B"/><rect x="335" y="1" width="3" height="18" rx="1.5" fill="#6B4FA0"/>
-  <rect x="370" y="6" width="3" height="11" rx="1.5" fill="#2FA36B"/><rect x="405" y="5" width="3" height="13" rx="1.5" fill="#0E7C7B"/>
-  <rect x="440" y="8" width="3" height="9" rx="1.5" fill="#C9A24B"/><rect x="475" y="3" width="3" height="16" rx="1.5" fill="#6B4FA0"/>
-  <rect x="510" y="7" width="3" height="10" rx="1.5" fill="#2FA36B"/><rect x="545" y="4" width="3" height="14" rx="1.5" fill="#0E7C7B"/>
-  <rect x="580" y="6" width="3" height="11" rx="1.5" fill="#C9A24B"/><rect x="615" y="2" width="3" height="17" rx="1.5" fill="#6B4FA0"/>
-  <rect x="650" y="7" width="3" height="10" rx="1.5" fill="#2FA36B"/><rect x="685" y="5" width="3" height="13" rx="1.5" fill="#0E7C7B"/>
-  <rect x="720" y="8" width="3" height="9" rx="1.5" fill="#C9A24B"/><rect x="755" y="3" width="3" height="16" rx="1.5" fill="#6B4FA0"/>
-  <rect x="790" y="6" width="3" height="11" rx="1.5" fill="#2FA36B"/><rect x="825" y="4" width="3" height="14" rx="1.5" fill="#0E7C7B"/>
-  <rect x="860" y="7" width="3" height="10" rx="1.5" fill="#C9A24B"/><rect x="895" y="2" width="3" height="17" rx="1.5" fill="#6B4FA0"/>
-  <rect x="930" y="6" width="3" height="11" rx="1.5" fill="#2FA36B"/><rect x="965" y="5" width="3" height="13" rx="1.5" fill="#0E7C7B"/>
-  <rect x="1000" y="8" width="3" height="9" rx="1.5" fill="#C9A24B"/><rect x="1035" y="3" width="3" height="16" rx="1.5" fill="#6B4FA0"/>
-  <rect x="1070" y="6" width="3" height="11" rx="1.5" fill="#2FA36B"/><rect x="1105" y="4" width="3" height="14" rx="1.5" fill="#0E7C7B"/>
-  <rect x="1140" y="7" width="3" height="10" rx="1.5" fill="#C9A24B"/>
-</svg>
 
-<div class="layout">
-  <nav class="stepper" id="stepper"></nav>
-  <main class="panel">
-    <div class="section-card" id="sectionCard"></div>
-  </main>
-</div>
+  <svg class="eq-ticks" viewBox="0 0 440 26" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="8"   y="8"  width="3.5" height="14" rx="1.75" fill="#6B4FA0"/>
+    <rect x="28"  y="3"  width="3.5" height="20" rx="1.75" fill="#2FA36B"/>
+    <rect x="48"  y="11" width="3.5" height="10" rx="1.75" fill="#C9A24B"/>
+    <rect x="68"  y="6"  width="3.5" height="17" rx="1.75" fill="#0E7C7B"/>
+    <rect x="88"  y="10" width="3.5" height="12" rx="1.75" fill="#6B4FA0"/>
+    <rect x="108" y="2"  width="3.5" height="21" rx="1.75" fill="#C9A24B"/>
+    <rect x="128" y="9"  width="3.5" height="13" rx="1.75" fill="#2FA36B"/>
+    <rect x="148" y="5"  width="3.5" height="18" rx="1.75" fill="#0E7C7B"/>
+    <rect x="168" y="8"  width="3.5" height="14" rx="1.75" fill="#C9A24B"/>
+    <rect x="188" y="1"  width="3.5" height="22" rx="1.75" fill="#6B4FA0"/>
+    <rect x="208" y="10" width="3.5" height="12" rx="1.75" fill="#2FA36B"/>
+    <rect x="228" y="6"  width="3.5" height="17" rx="1.75" fill="#0E7C7B"/>
+    <rect x="248" y="9"  width="3.5" height="13" rx="1.75" fill="#C9A24B"/>
+    <rect x="268" y="3"  width="3.5" height="20" rx="1.75" fill="#6B4FA0"/>
+    <rect x="288" y="11" width="3.5" height="10" rx="1.75" fill="#2FA36B"/>
+    <rect x="308" y="5"  width="3.5" height="18" rx="1.75" fill="#0E7C7B"/>
+    <rect x="328" y="8"  width="3.5" height="14" rx="1.75" fill="#C9A24B"/>
+    <rect x="348" y="2"  width="3.5" height="21" rx="1.75" fill="#6B4FA0"/>
+    <rect x="368" y="10" width="3.5" height="12" rx="1.75" fill="#2FA36B"/>
+    <rect x="388" y="6"  width="3.5" height="17" rx="1.75" fill="#0E7C7B"/>
+    <rect x="408" y="9"  width="3.5" height="13" rx="1.75" fill="#C9A24B"/>
+    <rect x="428" y="4"  width="3.5" height="19" rx="1.75" fill="#6B4FA0"/>
+  </svg>
 
-<div class="footer-note">تعبئة هذا النموذج وإرساله لا تعني التأهل التلقائي إلى مرحلة التحكيم — تخضع جميع الطلبات للمراجعة من فريق البرنامج.</div>
-<div class="toast" id="toast"><span class="tdot"></span><span id="toastText"></span></div>
+  <div class="card">
+    <span class="bk tl"></span><span class="bk br"></span>
+
+    <div id="stepIdentity">
+      <h1>الدخول إلى نموذج التحقق</h1>
+      <p class="sub">أدخل رقم مشروعك في المنصة وبريد قائد الفريق المسجَّل لدينا للدخول مباشرة.</p>
+
+      <div class="restricted-note">🔒 الدخول مقتصر على الفرق المسجَّلة رسميًا في حاضنة ابتكار 5.</div>
+
+      <div class="err-box" id="errBox1"></div>
+
+      <div class="field">
+        <label for="projectId">رقم المشروع في المنصة</label>
+        <input type="text" id="projectId" placeholder="مثال: INV5-2026-00842">
+        <div class="field-hint">تجده في رسالة تأكيد التسجيل أو في لوحتك على منصة حاضنة ابتكار.</div>
+      </div>
+      <div class="field">
+        <label for="leaderEmail">البريد الإلكتروني لقائد الفريق</label>
+        <input type="email" id="leaderEmail" placeholder="name@example.com">
+      </div>
+
+      <button class="btn btn-primary" id="continueBtn">دخول</button>
+      <div class="footer-note">إدخال البيانات الصحيحة يأخذك مباشرة إلى النموذج دون أي خطوة إضافية.</div>
+    </div>
+
+    <div class="success-stage" id="successStage">
+      <div class="success-icon">✓</div>
+      <h1>تم التحقق بنجاح</h1>
+      <p class="sub">جارٍ تحويلك إلى نموذج التحقق…</p>
+    </div>
+  </div>
+
+
+  <div class="footer-note">لأي استفسار حول الدخول، تواصل مع فريق البرنامج على <span class="mono">icip@qu.edu.sa</span></div>
+</div>
 
 <script>
-/* ============================================================
-   نموذج التحقق — حاضنة ابتكار 5
-   مرتبط بـ Supabase: الجلسة تأتي من login.html عبر sessionStorage
-   (project_id + token)، ويُرسَل التوكن كرأس x-form-token مع كل طلب
-   — بدونه ترفض كل سياسات RLS الوصول (راجع schema.sql).
-   ============================================================ */
+/* ==========================================================================
+   دخول المشاركين — حاضنة ابتكار 5
+   ==========================================================================
+   الدخول مباشر: رقم المشروع + البريد فقط → check_project_login() يتحقق من
+   المطابقة مع eligible_projects، وعند النجاح تحويل فوري لنموذج التحقق —
+   بدون كلمة مرور أو جلسات معقّدة (نفس نمط "إنفاذ" و"Innovation Marketplace").
+   ========================================================================== */
 
-// ⚠️ عدّل القيمتين التاليتين ببيانات مشروعك الفعلية في Supabase قبل النشر:
 const SUPABASE_URL = "https://zxruviveljkywxbdqjxc.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_URvlZnzYTl0CwwVxCikLvA_OeGSzhJh";
 
-let PROJECT_ID = null;
-let FORM_ID = null;
-let SB = null;       // عميل عام (بدون توكن) — لقراءة eligible_projects فقط
-let SB_AUTH = null;  // عميل مخوَّل بتوكن الجلسة — لكل عمليات النموذج
+const sb = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
-/* ---------------- حارس الجلسة: يشترط دخولًا صحيحًا سابقًا عبر login.html ---------------- */
-function getSession(){
-  try{
-    const raw = sessionStorage.getItem('ib5_session');
-    if(!raw) return null;
-    const s = JSON.parse(raw);
-    if(!s || !s.project_id || !s.token) return null;
-    return s;
-  }catch(e){ return null; }
-}
-function requireSessionOrRedirect(){
-  const params = new URLSearchParams(window.location.search);
-  const urlProject = params.get('project');
-  const session = getSession();
-  if(!session || (urlProject && urlProject !== session.project_id)){
-    window.location.href = 'login.html' + (urlProject ? ('?project='+encodeURIComponent(urlProject)) : '');
-    return null;
-  }
-  return session;
-}
-
-const CITIES = ["الرياض","جدة","مكة المكرمة","المدينة المنورة","الدمام","الخبر","الظهران","بريدة","عنيزة","تبوك","أبها","خميس مشيط","حائل","جازان","نجران","الطائف","ينبع","الجبيل","سكاكا","عرعر","القريات","بيشة","الباحة","مدينة أخرى"];
-
-const STAGES = [
-  {v:"idea", n:"5.1", t:"مرحلة الفكرة", d:"الفكرة مصاغة دون تصميم أو نموذج مادي"},
-  {v:"design", n:"5.2", t:"مرحلة التصور والتصميم", d:"رسومات أولية أو تصور للحل دون نموذج قابل للتجربة"},
-  {v:"poc", n:"5.3", t:"نموذج إثبات مفهوم (PoC)", d:"إثبات تقني مبسّط دون تجربة مستخدم كاملة"},
-  {v:"proto_early", n:"5.4", t:"نموذج أولي أولي", d:"نموذج مبدئي بوظائف محدودة"},
-  {v:"proto_func", n:"5.5", t:"نموذج أولي وظيفي", d:"تعمل وظائفه الأساسية ويمكن تجربته"},
-  {v:"mvp", n:"5.6", t:"منتج أولي قابل للاستخدام (MVP)", d:"منتج فعلي يحقق الحاجة الأساسية للمستخدم — وليس نموذجًا تصميميًا"},
-  {v:"pilot", n:"5.7", t:"منتج/خدمة قيد التجربة الميدانية", d:"مستخدم من عملاء حقيقيين في بيئة فعلية"},
-  {v:"market", n:"5.8", t:"منتج/خدمة مطروحة في السوق", d:"متاح تجاريًا"},
-];
-const STAGE_QUALIFIES_IDX = 2; // فهرس 5.3 فأعلى يستوفي
-
-const PITCH_SECTIONS = ["المشكلة","الحل","القيمة المقترحة","السوق","الفئة المستهدفة","المنافسون","نموذج العمل","التسويق","الإنجازات","النموذج الأولي","الفريق","الاحتياج التمويلي","خطة التطوير"];
-const VALIDATION_METHODS = ["مقابلات شخصية","استبيانات إلكترونية","اختبار قابلية الاستخدام","تحليل بيانات السوق","مجموعات تركيز (Focus Groups)","اختبار A/B","تجربة ميدانية مصغرة","تحليل المنافسين","حملة تجريبية (اختبار MVP)","تحليل الطلب المسبق (Pre-orders)","أسلوب آخر"];
-const PRIOR_ACHIEVEMENTS = ["ملكية فكرية","براءة اختراع","نموذج صناعي","علامة تجارية","احتضان أو تسريع","تمويل","جائزة","شراكة","عميل فعلي","مبيعات أو إيرادات"];
-
-/* ---------------- الحالة ---------------- */
-const state = {
-  current: 1,
-  values: {},
-  members: [ {name:"",id:"",phone:"",email:"",role:"",spec:"",camp:"",title:""}, {name:"",id:"",phone:"",email:"",role:"",spec:"",camp:"",title:""} ],
-  files: {}, // fieldId -> [{name,size,id,storage_path}]
-  videoMode: {}, // fieldId -> 'upload' | 'link'
+const steps = {
+  identity: document.getElementById('stepIdentity'),
+  success: document.getElementById('successStage'),
+};
+const els = {
+  projectId: document.getElementById('projectId'),
+  leaderEmail: document.getElementById('leaderEmail'),
+  continueBtn: document.getElementById('continueBtn'),
+  errBox1: document.getElementById('errBox1'),
 };
 
-function setVal(id,v){ state.values[id]=v; }
-function getVal(id){ return state.values[id] ?? ""; }
-
-/* ---------------- تعريف الأقسام والحقول ---------------- */
-const SECTIONS = [
-{id:1,key:"project",title:"بيانات المشروع وقائد الفريق",desc:"تُعبأ البيانات المتوفرة في المنصة تلقائيًا، مع إتاحة مراجعتها وتعديلها.",
- fields:[
-  {id:"f1_1",label:"رقم المشروع في المنصة",type:"text",required:true,readOnly:true},
-  {id:"f1_2",label:"اسم المشروع",type:"text",required:true},
-  {id:"f1_3",label:"مسار المشاركة",type:"select",required:true,options:["مسار الابتكار","مسار التحديات"]},
-  {id:"f1_4",label:"المجال الرئيس للمشروع",type:"select",required:true,options:["صحة الإنسان","الريادة في الطاقة والصناعة","اقتصاديات المستقبل","استدامة البيئة والاحتياجات الأساسية"]},
-  {id:"f1_5",label:"اسم قائد الفريق",type:"text",required:true},
-  {id:"f1_6",label:"رقم الهوية الوطنية أو الإقامة",type:"text",required:true,numeric:true},
-  {id:"f1_7",label:"رقم الجوال",type:"text",required:true},
-  {id:"f1_8",label:"البريد الإلكتروني",type:"email",required:true},
-  {id:"f1_9",label:"المدينة الحالية",type:"select",required:true,options:CITIES},
-  {id:"f1_9b",label:"اسم المدينة",type:"text",required:true,condition:s=>getVal("f1_9")==="مدينة أخرى"},
- ]},
-{id:2,key:"cr",title:"السجل التجاري والوضع النظامي",desc:"وجود سجل تجاري قائم يُعد أحد متطلبات الانتقال إلى مرحلة التحكيم.",
- banner:"وجود سجل تجاري قائم أحد متطلبات الانتقال إلى مرحلة التحكيم.",
- fields:[
-  {id:"f2_1",label:"هل يوجد سجل تجاري قائم للمشروع أو للشركة الناشئة؟",type:"radio",required:true,options:["نعم","لا"]},
-  {id:"f2_2",label:"اسم المنشأة المسجل",type:"text",required:true,condition:s=>getVal("f2_1")==="نعم"},
-  {id:"f2_3",label:"رقم السجل التجاري",type:"text",required:true,condition:s=>getVal("f2_1")==="نعم"},
-  {id:"f2_4",label:"تاريخ الإصدار",type:"date",required:true,condition:s=>getVal("f2_1")==="نعم"},
-  {id:"f2_5",label:"تاريخ الانتهاء",type:"date",required:true,condition:s=>getVal("f2_1")==="نعم"},
-  {id:"f2_6",label:"حالة السجل التجاري",type:"select",required:true,options:["قائم وساري","منتهي","موقوف","تحت التحديث"],condition:s=>getVal("f2_1")==="نعم"},
-  {id:"f2_7",label:"صفة قائد الفريق في المنشأة",type:"select",required:true,options:["مالك","شريك","مدير","مفوض","عضو في فريق المشروع"],condition:s=>getVal("f2_1")==="نعم"},
-  {id:"f2_8",label:"رفع نسخة السجل التجاري",type:"file",required:true,accept:".pdf",condition:s=>getVal("f2_1")==="نعم"},
-  {id:"f2_9",label:"الحالة الحالية لإصدار السجل التجاري",type:"select",required:true,options:["تم التقديم وقيد المعالجة","لم يبدأ التقديم بعد","تم رفض الطلب","متوقف مؤقتًا"],condition:s=>getVal("f2_1")==="لا"},
-  {id:"f2_10",label:"العائق الرئيس أمام الإصدار",type:"select",required:true,options:["تكلفة الإصدار","تعقيد الإجراءات","عدم اكتمال المستندات المطلوبة","خلاف بين الشركاء","أخرى"],condition:s=>getVal("f2_1")==="لا"},
-  {id:"f2_11",label:"توضيح العائق",type:"textarea",required:true,condition:s=>getVal("f2_1")==="لا"&&getVal("f2_10")==="أخرى"},
-  {id:"f2_12",label:"رفع ما يثبت البدء في إجراءات الإصدار",type:"file",required:false,multiple:true,accept:".pdf",condition:s=>getVal("f2_1")==="لا"},
- ]},
-{id:3,key:"camp",title:"استكمال المشاركة في المعسكر التدريبي",desc:"التحقق من الحضور سيتم من خلال سجلات البرنامج، وليس اعتمادًا على إفادة المشارك وحدها.",
- fields:[
-  {id:"f3_1",label:"المعسكر الذي شارك فيه الفريق",type:"select",required:true,options:["كاوست","مدينة الملك عبدالله للطاقة الذرية والمتجددة – الرياض","جامعة القصيم"]},
-  {id:"f3_2",label:"هل أكمل الفريق المشاركة في جميع أيام وبرامج المعسكر؟",type:"radio",required:true,options:["نعم","لا"]},
-  {id:"f3_3",label:"سبب عدم اكتمال المشاركة",type:"select",required:true,options:["ظروف صحية","ظروف عمل أو دراسة","ظروف سفر","انسحاب عضو رئيس من الفريق","أخرى"],condition:s=>getVal("f3_2")==="لا"},
-  {id:"f3_4",label:"توضيح السبب",type:"textarea",required:true,condition:s=>getVal("f3_2")==="لا"&&getVal("f3_3")==="أخرى"},
-  {id:"f3_5",label:"رفع ما يؤيد السبب",type:"file",required:false,multiple:true,accept:".pdf",condition:s=>getVal("f3_2")==="لا"},
- ]},
-{id:4,key:"team",title:"بيانات فريق العمل",desc:"الحد الأدنى عضوان، بمن فيهم قائد الفريق.",
- isTeamSection:true,
- fields:[
-  {id:"f4_10",label:"رفع مستند تعريف بفريق العمل وتوزيع الأدوار",type:"file",required:true,accept:".pdf"},
-  {id:"f4_11",label:"هل من المتوقع استمرار جميع أعضاء الفريق حتى مرحلة التحكيم؟",type:"radio",required:true,options:["نعم","لا"]},
-  {id:"f4_12",label:"توضيح التغييرات المتوقعة وأثرها",type:"textarea",required:true,condition:s=>getVal("f4_11")==="لا"},
- ]},
-{id:5,key:"proto",title:"مستوى تطوير المشروع والنموذج الأولي",desc:"اختر المرحلة التي تصف الوضع الحالي للمشروع بدقة.",
- isStageSection:true,
- fields:[
-  {id:"f5_9",label:"نوع النموذج المتوفر",type:"select",required:true,options:["نموذج رقمي (تطبيق/موقع)","نموذج مادي (منتج ملموس)","نموذج مختلط (رقمي ومادي)","نموذج خدمي (تجربة/عملية)"],condition:s=>stageQualifies()},
-  {id:"f5_10",label:"نسبة اكتمال النموذج",type:"select",required:true,options:["أقل من 25%","25% – 50%","50% – 75%","أكثر من 75%"],condition:s=>stageQualifies()},
-  {id:"f5_11",label:"حالة اختبار النموذج",type:"select",required:true,options:["لم يُختبر بعد","اختبار داخلي فقط","اختبار مع مستخدمين حقيقيين"],condition:s=>stageQualifies()},
-  {id:"f5_12",label:"عدد المستفيدين الذين جرّبوه",type:"number",required:true,condition:s=>stageQualifies()},
-  {id:"f5_13",label:"الوظائف التي يحققها النموذج",type:"textarea",required:true,condition:s=>stageQualifies()},
-  {id:"f5_14",label:"نتيجة الاختبار",type:"textarea",required:true,condition:s=>stageQualifies()},
-  {id:"f5_15",label:"أبرز العوائق المتعلقة بالنموذج",type:"textarea",required:false,condition:s=>stageQualifies()},
-  {id:"f5_16",label:"رفع ملف توثيق النموذج",type:"file",required:true,multiple:true,accept:".pdf",condition:s=>stageQualifies()},
-  {id:"f5_17",label:"فيديو توضيحي للنموذج",type:"video",required:true,condition:s=>stageQualifies()},
-  {id:"f5_18",label:"رابط النموذج أو النسخة التجريبية",type:"url",required:false,condition:s=>stageQualifies()},
-  {id:"f5_19",label:"بيانات دخول حساب تجريبي مخصص للمراجعة",type:"text",required:false,hint:"يُرجى عدم استخدام بيانات الحسابات الشخصية.",condition:s=>stageQualifies()},
-  {id:"f5_20",label:"السبب الرئيس لعدم توفر نموذج",type:"select",required:true,options:["نقص في التمويل","نقص في الخبرات التقنية","المشروع في مرحلة بحث مبكرة","تغيير في فكرة المشروع","أخرى"],condition:s=>!stageQualifies()&&getVal("f5_1")},
-  {id:"f5_21",label:"المرحلة المتوقعة قبل التحكيم",type:"select",required:true,options:STAGES.map(x=>x.t),condition:s=>!stageQualifies()&&getVal("f5_1")},
-  {id:"f5_22",label:"خطة استكمال النموذج",type:"textarea",required:true,condition:s=>!stageQualifies()&&getVal("f5_1")},
-  {id:"f5_23",label:"العوائق التي تمنع تطويره",type:"textarea",required:false,condition:s=>!stageQualifies()&&getVal("f5_1")},
- ]},
-{id:6,key:"pitch",title:"العرض الاستثماري",desc:"يجب أن يغطي العرض: المشكلة، الحل، القيمة المقترحة، السوق، الفئة المستهدفة، المنافسون، نموذج العمل، التسويق، الإنجازات، النموذج الأولي، الفريق، الاحتياج التمويلي، وخطة التطوير.",
- fields:[
-  {id:"f6_1",label:"حالة إعداد العرض الاستثماري",type:"select",required:true,options:["مكتمل وفق النموذج المعتمد","مكتمل مع تعديلات محدودة","مكتمل بصيغة مختلفة","غير مكتمل","لم يبدأ"]},
-  {id:"f6_2",label:"رفع العرض الاستثماري",type:"file",required:true,accept:".pdf",condition:s=>getVal("f6_1")&&getVal("f6_1")!=="لم يبدأ"},
-  {id:"f6_3",label:"الأقسام الناقصة في العرض",type:"multiselect",required:true,options:PITCH_SECTIONS,condition:s=>["غير مكتمل","لم يبدأ"].includes(getVal("f6_1"))},
-  {id:"f6_4",label:"العائق الرئيس أمام استكمال العرض",type:"textarea",required:true,condition:s=>["غير مكتمل","لم يبدأ"].includes(getVal("f6_1"))},
-  {id:"f6_5",label:"فيديو تعريفي عام بالمشروع",type:"video",required:false,condition:s=>["غير مكتمل","لم يبدأ"].includes(getVal("f6_1"))},
- ]},
-{id:7,key:"market",title:"التحقق الأولي من احتياج السوق",desc:"وثّق الأسلوب الذي تحققت به من وجود حاجة حقيقية في السوق لمشروعك.",
- fields:[
-  {id:"f7_1",label:"حالة التحقق من احتياج السوق",type:"select",required:true,options:["تحقق مكتمل","تحقق جزئي","تحقق جارٍ","لم يبدأ التحقق"]},
-  {id:"f7_2",label:"الأساليب المستخدمة في التحقق",type:"multiselect",required:true,options:VALIDATION_METHODS,condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))},
-  {id:"f7_3",label:"توضيح الأسلوب",type:"text",required:true,condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))&&(getVal("f7_2")||[]).includes("أسلوب آخر")},
-  {id:"f7_4",label:"الفئة التي تم التحقق معها",type:"text",required:true,condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))},
-  {id:"f7_5",label:"عدد الأشخاص أو الجهات التي تم التواصل معها",type:"number",required:true,condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))},
-  {id:"f7_6",label:"أبرز نتائج التحقق",type:"textarea",required:true,condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))},
-  {id:"f7_7",label:"هل تم تعديل المشروع بناءً على النتائج؟",type:"radio",required:true,options:["نعم","لا"],condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))},
-  {id:"f7_8",label:"الجوانب التي تم تعديلها",type:"textarea",required:true,condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))&&getVal("f7_7")==="نعم"},
-  {id:"f7_9",label:"رفع ما يثبت التحقق",type:"file",required:true,multiple:true,accept:".pdf",condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))},
-  {id:"f7_10",label:"العوائق أمام إكمال التحقق",type:"textarea",required:true,condition:s=>["تحقق جارٍ","لم يبدأ التحقق"].includes(getVal("f7_1"))},
- ]},
-{id:8,key:"progress",title:"حالة المشروع والتقدم المحقق",desc:"شارك أبرز ما تحقق منذ انتهاء المعسكر.",
- fields:[
-  {id:"f8_1",label:"أبرز ما تم إنجازه منذ المعسكر",type:"textarea",required:true},
-  {id:"f8_2",label:"أبرز التغييرات بعد التدريب والإرشاد",type:"textarea",required:false},
-  {id:"f8_3",label:"التحديات الحالية",type:"textarea",required:false},
-  {id:"f8_4",label:"الإنجازات السابقة",type:"multiselect",required:false,options:PRIOR_ACHIEVEMENTS},
-  {id:"f8_5",label:"رفع المستندات المؤيدة",type:"file",required:false,multiple:true,accept:".pdf"},
- ]},
-{id:9,key:"attendance",title:"جاهزية الفريق لحضور مرحلة التحكيم",desc:"مرحلة التحكيم تُعقد حضوريًا في مدينة الرياض.",
- fields:[
-  {id:"f9_1",label:"الالتزام بالحضور الشخصي في الرياض",type:"radio",required:true,options:["نعم","حضور جزئي","لا يمكن الالتزام"]},
-  {id:"f9_2",label:"عدد الأعضاء المتوقع حضورهم",type:"number",required:true},
-  {id:"f9_3",label:"اختيار أسماء الأعضاء الحاضرين",type:"multiselect",required:true,optionsFn:()=>state.members.map(m=>m.name).filter(Boolean)},
-  {id:"f9_4",label:"هل توجد ظروف قد تؤثر في الحضور؟",type:"radio",required:true,options:["نعم","لا"]},
-  {id:"f9_5",label:"توضيح الظروف",type:"textarea",required:true,condition:s=>getVal("f9_4")==="نعم"},
- ]},
-{id:10,key:"checklist",title:"قائمة التحقق النهائية",desc:"تُحسب حالة كل متطلب تلقائيًا من إجاباتك أعلاه، وتخضع لمراجعة فريق البرنامج.",
- isChecklistSection:true,
- fields:[
-  {id:"f10_1",label:"تقييم عام لحالة استيفاء المشروع",type:"select",required:true,options:["مستوفٍ لجميع المتطلبات","مستوفٍ لمعظمها ويجري استكمال بعضها","غير مستوفٍ لعدد منها"]},
-  {id:"f10_2",label:"ملاحظات إضافية",type:"textarea",required:false},
- ]},
-{id:11,key:"declare",title:"الإقرار والتعهد",desc:"يُرجى قراءة الإقرار بعناية قبل التوقيع.",
- isDeclareSection:true,
- fields:[
-  {id:"f11_2",label:"اسم قائد الفريق",type:"text",required:true},
-  {id:"f11_3",label:"التاريخ",type:"date",required:true},
-  {id:"f11_4",label:"التوقيع الإلكتروني المبسّط (كتابة الاسم الكامل)",type:"text",required:true},
- ]},
-];
-
-function stageQualifies(){
-  const v = getVal("f5_1");
-  const idx = STAGES.findIndex(s=>s.v===v);
-  return idx >= STAGE_QUALIFIES_IDX;
+function showStep(name){
+  Object.values(steps).forEach(s=>s.style.display='none');
+  steps[name].style.display='block';
+}
+function showErr(box, msg){ box.textContent = msg; box.classList.add('show'); }
+function clearErr(box){ box.classList.remove('show'); }
+function setBtnLoading(btn, loading, label){
+  btn.disabled = loading;
+  btn.innerHTML = loading ? '<span class="spinner"></span>جارٍ التحقق…' : label;
 }
 
-/* ---------------- أدوات مساعدة ---------------- */
-function fmtSize(bytes){
-  if(bytes<1024) return bytes+" B";
-  if(bytes<1024*1024) return (bytes/1024).toFixed(0)+" KB";
-  return (bytes/1024/1024).toFixed(1)+" MB";
-}
-function showToast(msg){
-  const t=document.getElementById('toast');
-  document.getElementById('toastText').textContent=msg;
-  t.classList.add('show');
-  clearTimeout(window._toastTimer);
-  window._toastTimer=setTimeout(()=>t.classList.remove('show'),2600);
-}
-function visibleFields(section){
-  return section.fields.filter(f=>!f.condition||f.condition(state));
-}
+/* ---------------- مطابقة رقم المشروع + البريد ثم تحويل مباشر ---------------- */
+async function handleContinue(){
+  clearErr(els.errBox1);
+  const projectId = els.projectId.value.trim();
+  const email = els.leaderEmail.value.trim().toLowerCase();
 
-/* ---------------- التقدم العام ---------------- */
-function computeSectionCompletion(section){
-  let total=0, done=0;
-  if(section.isTeamSection){
-    state.members.forEach(m=>{
-      ["name","id","phone","email","role","spec","camp"].forEach(k=>{ total++; if(m[k]) done++; });
-    });
-  }
-  visibleFields(section).forEach(f=>{
-    if(!f.required) return;
-    total++;
-    const val = state.values[f.id];
-    if(f.type==="file"){
-      if((state.files[f.id]||[]).length>0) done++;
-    } else if(f.type==="video"){
-      const mode=state.videoMode[f.id]||"upload";
-      if(mode==="upload"){ if((state.files[f.id]||[]).length>0) done++; }
-      else { if(val) done++; }
-    } else if(f.type==="multiselect"){
-      if(val && val.length>0) done++;
-    } else {
-      if(val!==undefined && val!==null && String(val).trim()!=="") done++;
-    }
-  });
-  if(section.isDeclareSection){ total++; if(state.values.f11_1) done++; }
-  return {total,done};
-}
-function overallProgress(){
-  let total=0,done=0;
-  SECTIONS.forEach(s=>{ const c=computeSectionCompletion(s); total+=c.total; done+=c.done; });
-  return total===0?0:Math.round(done/total*100);
-}
-function sectionStatus(section){
-  const c=computeSectionCompletion(section);
-  if(c.total===0) return "empty";
-  if(c.done===0) return "empty";
-  if(c.done===c.total) return "done";
-  return "warn";
-}
+  if(!projectId || !email){ showErr(els.errBox1, 'يرجى تعبئة رقم المشروع والبريد الإلكتروني.'); return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ showErr(els.errBox1, 'صيغة البريد الإلكتروني غير صحيحة.'); return; }
+  if(!sb){ showErr(els.errBox1, 'تعذّر تحميل مكتبة الاتصال بقاعدة البيانات. يرجى المحاولة لاحقًا.'); return; }
 
-/* ---------------- الشريط الجانبي ---------------- */
-function renderStepper(){
-  const el=document.getElementById('stepper');
-  el.innerHTML = SECTIONS.map(s=>{
-    const st=sectionStatus(s);
-    const cls = ["step-item"];
-    if(s.id===state.current) cls.push("active");
-    if(st==="done") cls.push("done");
-    if(st==="warn") cls.push("warn");
-    return `<div class="${cls.join(' ')}" data-goto="${s.id}">
-      <div class="step-num">${st==='done'?'✓':s.id}</div>
-      <div class="step-title">${s.title}</div>
-    </div>`;
-  }).join('');
-  el.querySelectorAll('[data-goto]').forEach(n=>{
-    n.addEventListener('click',()=>{ state.current=parseInt(n.dataset.goto); renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
-  });
-}
-
-/* ---------------- عرض حقل عام ---------------- */
-function labelHTML(f){
-  return `<div class="field-label">${f.label}${f.required?'<span class="req-star">*</span>':''}</div>`;
-}
-function renderField(f){
-  const val = getVal(f.id);
-  let body = "";
-  switch(f.type){
-    case "text": case "email": case "url": case "number": case "date":
-      body = `<input type="${f.type}" id="in_${f.id}" data-id="${f.id}" value="${val?String(val).replace(/"/g,'&quot;'):''}" ${f.readOnly?'disabled':''} placeholder="${f.readOnly?'':''}">`;
-      break;
-    case "textarea":
-      body = `<textarea id="in_${f.id}" data-id="${f.id}">${val?String(val):''}</textarea>`;
-      break;
-    case "select":
-      body = `<select id="in_${f.id}" data-id="${f.id}">
-        <option value="" ${!val?'selected':''}>اختر…</option>
-        ${f.options.map(o=>`<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join('')}
-      </select>`;
-      break;
-    case "radio":
-      body = `<div class="choice-row" data-radio="${f.id}">${f.options.map(o=>`
-        <label class="choice-pill radio ${val===o?'selected':''}" data-opt="${o}">
-          <span class="ck"></span>${o}
-        </label>`).join('')}</div>`;
-      break;
-    case "multiselect": {
-      const opts = f.optionsFn ? f.optionsFn() : f.options;
-      const arr = Array.isArray(val)?val:[];
-      if(opts.length===0){
-        body = `<div class="field-hint">لا توجد خيارات متاحة بعد — أكمل قسم فريق العمل أولًا.</div>`;
-      } else {
-        body = `<div class="choice-row" data-multi="${f.id}">${opts.map(o=>`
-          <label class="choice-pill ${arr.includes(o)?'selected':''}" data-opt="${o}">
-            <span class="ck"></span>${o}
-          </label>`).join('')}</div>`;
-      }
-      break;
-    }
-    case "file": {
-      const files = state.files[f.id]||[];
-      body = `<div class="file-drop" data-filetrigger="${f.id}">
-        <div class="fi-title">اضغط لإرفاق ${f.multiple?'ملف أو أكثر':'ملف'} (PDF)</div>
-        <div class="fi-sub">الحد الأقصى 10 م.ب لكل ملف${f.multiple?' — حتى 5 ملفات':''}</div>
-      </div>
-      <input type="file" id="file_${f.id}" data-fileinput="${f.id}" accept="${f.accept||'.pdf'}" ${f.multiple?'multiple':''} style="display:none">
-      <div class="file-list">${files.map((fl,i)=>`
-        <div class="file-chip"><span class="fc-name">📄 ${fl.name}</span><span class="fc-size">${fmtSize(fl.size)}</span><button type="button" class="fc-remove" data-removefile="${f.id}" data-idx="${i}">إزالة</button></div>
-      `).join('')}</div>`;
-      break;
-    }
-    case "video": {
-      const mode = state.videoMode[f.id]||"upload";
-      const files = state.files[f.id]||[];
-      body = `<div class="video-toggle">
-        <button type="button" class="vt-btn ${mode==='upload'?'active':''}" data-vmode="${f.id}" data-mode="upload">رفع فيديو</button>
-        <button type="button" class="vt-btn ${mode==='link'?'active':''}" data-vmode="${f.id}" data-mode="link">رابط فيديو خاص</button>
-      </div>`;
-      if(mode==="upload"){
-        body += `<div class="file-drop" data-filetrigger="${f.id}">
-          <div class="fi-title">اضغط لرفع الفيديو</div>
-          <div class="fi-sub">الحد الأقصى 200 م.ب ومدة 5 دقائق</div>
-        </div>
-        <input type="file" id="file_${f.id}" data-fileinput="${f.id}" accept="video/*" style="display:none">
-        <div class="file-list">${files.map((fl,i)=>`
-          <div class="file-chip"><span class="fc-name">🎬 ${fl.name}</span><span class="fc-size">${fmtSize(fl.size)}</span><button type="button" class="fc-remove" data-removefile="${f.id}" data-idx="${i}">إزالة</button></div>
-        `).join('')}</div>`;
-      } else {
-        body += `<input type="url" id="in_${f.id}" data-id="${f.id}" value="${val?String(val).replace(/"/g,'&quot;'):''}" placeholder="https://‎…">`;
-      }
-      break;
-    }
-  }
-  return `<div class="field" id="fld_${f.id}">${labelHTML(f)}${body}${f.hint?`<div class="field-hint">${f.hint}</div>`:''}<div class="error-text">هذا الحقل مطلوب</div></div>`;
-}
-
-/* ---------------- عرض قسم الفريق ---------------- */
-function renderTeamSection(section){
-  let html = state.members.map((m,i)=>`
-    <div class="member-card">
-      <div class="member-head">
-        <span class="member-tag">${i===0?'قائد الفريق':'عضو '+(i+1)}</span>
-        ${state.members.length>2 && i>0 ? `<button type="button" class="member-remove" data-removemember="${i}">إزالة العضو</button>`:''}
-      </div>
-      <div class="two-col">
-        <div class="field"><div class="field-label">الاسم الرباعي<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="name" value="${m.name.replace(/"/g,'&quot;')}"></div>
-        <div class="field"><div class="field-label">رقم الهوية أو الإقامة<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="id" value="${m.id.replace(/"/g,'&quot;')}"></div>
-      </div>
-      <div class="two-col">
-        <div class="field"><div class="field-label">رقم الجوال<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="phone" value="${m.phone.replace(/"/g,'&quot;')}"></div>
-        <div class="field"><div class="field-label">البريد الإلكتروني<span class="req-star">*</span></div><input type="email" data-member="${i}" data-mkey="email" value="${m.email.replace(/"/g,'&quot;')}"></div>
-      </div>
-      <div class="two-col">
-        <div class="field"><div class="field-label">الدور الرئيس في المشروع<span class="req-star">*</span></div>
-          <select data-member="${i}" data-mkey="role">
-            <option value="">اختر…</option>
-            ${["قائد الفريق","التطوير التقني","تطوير المنتج أو الخدمة","نموذج العمل التجاري","التسويق والمبيعات","الإدارة المالية","العمليات","التصميم وتجربة المستخدم","البحث والتطوير","دور آخر"].map(o=>`<option value="${o}" ${m.role===o?'selected':''}>${o}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field"><div class="field-label">التخصص أو مجال الخبرة<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="spec" value="${m.spec.replace(/"/g,'&quot;')}"></div>
-      </div>
-      <div class="two-col">
-        <div class="field"><div class="field-label">هل شارك في المعسكر؟<span class="req-star">*</span></div>
-          <select data-member="${i}" data-mkey="camp"><option value="">اختر…</option><option value="نعم" ${m.camp==='نعم'?'selected':''}>نعم</option><option value="لا" ${m.camp==='لا'?'selected':''}>لا</option></select>
-        </div>
-        <div class="field"><div class="field-label">صفته في المنشأة</div>
-          <select data-member="${i}" data-mkey="title"><option value="">اختياري…</option>${["مالك","شريك","مدير","مفوض","عضو في فريق المشروع"].map(o=>`<option value="${o}" ${m.title===o?'selected':''}>${o}</option>`).join('')}</select>
-        </div>
-      </div>
-    </div>
-  `).join('');
-  html += `<div class="add-member-btn" id="addMemberBtn">+ إضافة عضو جديد</div>`;
-  html += `<div style="height:22px"></div>`;
-  html += visibleFields(section).map(renderField).join('');
-  return html;
-}
-
-/* ---------------- عرض قسم مرحلة التطوير ---------------- */
-function renderStageSection(section){
-  const cur = getVal("f5_1");
-  let html = `<div class="stage-list">${STAGES.map(s=>`
-    <div class="stage-opt ${cur===s.v?'selected':''}" data-stage="${s.v}">
-      <span class="ck"></span>
-      <div class="stage-txt"><span class="stage-num">${s.n}</span> <b>${s.t}</b><span>${s.d}</span></div>
-    </div>
-  `).join('')}</div>`;
-  if(cur){
-    const qualifies = stageQualifies();
-    html += `<div class="req-banner" style="margin-top:18px">
-      ${qualifies?'<b>✓ مستوفى:</b> هذه المرحلة تُعد مستوفية لمتطلب توفر نموذج أولي.':'<b>تنبيه:</b> عدم توفر نموذج (المرحلتان 5.1 و5.2) يُصنَّف تلقائيًا «غير مستوفى» لهذا المتطلب حتى إشعار آخر.'}
-    </div>`;
-    html += `<div style="margin-top:10px">${visibleFields(section).map(renderField).join('')}</div>`;
-  }
-  return html;
-}
-
-/* ---------------- قسم قائمة التحقق ---------------- */
-function deriveChecklist(){
-  const cr1=getVal("f2_1");
-  const crStatus = cr1==="نعم" ? "ok" : (cr1==="لا"?"no":"pending");
-  const campStatus = getVal("f3_2")==="نعم"?"ok":(getVal("f3_2")==="لا"?"mid":"pending");
-  const membersFilled = state.members.filter(m=>m.name && m.id).length;
-  const teamStatus = membersFilled>=2 ? "ok":"no";
-  const stageSet = !!getVal("f5_1");
-  const protoStatus = stageSet ? (stageQualifies()?"ok":"no") : "pending";
-  const pitchVal = getVal("f6_1");
-  let pitchStatus="pending";
-  if(pitchVal==="مكتمل وفق النموذج المعتمد") pitchStatus="ok";
-  else if(["مكتمل مع تعديلات محدودة","مكتمل بصيغة مختلفة"].includes(pitchVal)) pitchStatus="mid";
-  else if(["غير مكتمل","لم يبدأ"].includes(pitchVal)) pitchStatus="no";
-  const mktVal = getVal("f7_1");
-  let mktStatus="pending";
-  if(mktVal==="تحقق مكتمل") mktStatus="ok";
-  else if(mktVal==="تحقق جزئي") mktStatus="mid";
-  else if(["تحقق جارٍ","لم يبدأ التحقق"].includes(mktVal)) mktStatus="no";
-  return [
-    {label:"السجل التجاري",status:crStatus},
-    {label:"حضور المعسكر",status:campStatus},
-    {label:"عدد أعضاء الفريق",status:teamStatus},
-    {label:"النموذج الأولي",status:protoStatus},
-    {label:"العرض الاستثماري",status:pitchStatus},
-    {label:"التحقق من احتياج السوق",status:mktStatus},
-  ];
-}
-function badgeHTML(status){
-  const map={ok:["مستوفى","ok"],no:["غير مستوفى","no"],mid:["يحتاج تحقق","mid"],pending:["لم يُستكمل بعد","mid"]};
-  const [txt,cls]=map[status];
-  return `<span class="badge ${cls}">${txt}</span>`;
-}
-function renderChecklistSection(section){
-  const items = deriveChecklist();
-  let html = `<div class="checklist-grid">${items.map(it=>`
-    <div class="checklist-row"><span class="cr-label">${it.label}</span>${badgeHTML(it.status)}</div>
-  `).join('')}</div>`;
-  html += visibleFields(section).map(renderField).join('');
-  return html;
-}
-
-/* ---------------- قسم الإقرار ---------------- */
-function renderDeclareSection(section){
-  let html = `<div class="declaration-box">
-    أُقر أنا الموقّع أدناه، بصفتي <b>قائد الفريق</b>، بما يلي:<br>
-    (١) صحة ودقة جميع البيانات الواردة في هذا النموذج.<br>
-    (٢) صحة جميع المستندات والمرفقات المقدَّمة وخلوّها من أي تزوير أو تحريف.<br>
-    (٣) أحقية الفريق في تقديم هذا المشروع وجميع المرفقات المرتبطة به.<br>
-    (٤) عِلمي بأن تعبئة هذا النموذج وإرساله لا يعني التأهل التلقائي إلى مرحلة التحكيم.<br>
-    (٥) خضوع هذا الطلب لإجراءات المراجعة والتحقق من قِبل فريق البرنامج.<br>
-    (٦) التزامي بإبلاغ إدارة البرنامج فورًا بأي تغييرات جوهرية تطرأ على البيانات الواردة أعلاه.<br>
-    (٧) السماح لإدارة البرنامج باستخدام البيانات والمرفقات المقدَّمة لأغراض مراجعة وتقييم المشاركة في البرنامج.
-  </div>`;
-  html += `<label class="choice-pill ${state.values.f11_1?'selected':''}" id="declareCheck" style="width:100%;justify-content:flex-start;margin-bottom:20px"><span class="ck"></span>أوافق على الإقرار أعلاه وأتعهد بصحة ما ورد فيه<span class="req-star">*</span></label>`;
-  html += visibleFields(section).map(renderField).join('');
-  return html;
-}
-
-/* ---------------- عرض القسم الحالي ---------------- */
-const ACCENT_CYCLE = ['#0E7C7B','#6B4FA0','#C9A24B','#2FA36B'];
-function renderSection(){
-  const section = SECTIONS.find(s=>s.id===state.current);
-  const card = document.getElementById('sectionCard');
-  const accent = ACCENT_CYCLE[(section.id-1) % ACCENT_CYCLE.length];
-  let inner = `<div class="section-head">
-    <div class="section-eyebrow">القسم ${toArabicOrdinalIdx(section.id)} / 11</div>
-    <div class="section-title"><span class="section-num-badge" style="background:${accent}">${section.id}</span>${section.title}</div>
-    <div class="section-desc">${section.desc}</div>
-  </div>`;
-  if(section.banner) inner += `<div class="req-banner"><b>تنبيه:</b>&nbsp;${section.banner}</div>`;
-
-  if(section.isTeamSection) inner += renderTeamSection(section);
-  else if(section.isStageSection) inner += renderStageSection(section);
-  else if(section.isChecklistSection) inner += renderChecklistSection(section);
-  else if(section.isDeclareSection) inner += renderDeclareSection(section);
-  else inner += visibleFields(section).map(renderField).join('');
-
-  inner += `<div class="nav-row">
-    <button class="btn btn-ghost" id="btnPrev" ${section.id===1?'disabled':''}>القسم السابق</button>
-    <div class="side-actions">
-      <button class="btn btn-ghost" id="btnSaveDraft">حفظ كمسودة</button>
-      ${section.id===11
-        ? `<button class="btn btn-gold" id="btnSubmit">إرسال النموذج</button>`
-        : `<button class="btn btn-primary" id="btnNext">القسم التالي</button>`}
-    </div>
-  </div>`;
-  card.innerHTML = inner;
-  bindSectionEvents(section);
-}
-function toArabicOrdinalIdx(n){
-  const words=["","الأول","الثاني","الثالث","الرابع","الخامس","السادس","السابع","الثامن","التاسع","العاشر","الحادي عشر"];
-  return words[n]||n;
-}
-
-/* ---------------- ربط الأحداث ---------------- */
-function bindSectionEvents(section){
-  document.querySelectorAll('[data-id]').forEach(el=>{
-    el.addEventListener('input',e=>{ setVal(el.dataset.id, el.value); refreshLight(); });
-    el.addEventListener('change',e=>{ setVal(el.dataset.id, el.value); renderAll(); });
-  });
-  document.querySelectorAll('[data-radio]').forEach(group=>{
-    group.querySelectorAll('.choice-pill').forEach(p=>{
-      p.addEventListener('click',()=>{ setVal(group.dataset.radio, p.dataset.opt); renderAll(); });
-    });
-  });
-  document.querySelectorAll('[data-multi]').forEach(group=>{
-    group.querySelectorAll('.choice-pill').forEach(p=>{
-      p.addEventListener('click',()=>{
-        const id=group.dataset.multi;
-        const arr = Array.isArray(state.values[id])?state.values[id].slice():[];
-        const opt=p.dataset.opt;
-        const idx=arr.indexOf(opt);
-        if(idx>-1) arr.splice(idx,1); else arr.push(opt);
-        state.values[id]=arr;
-        renderAll();
-      });
-    });
-  });
-  document.querySelectorAll('[data-filetrigger]').forEach(drop=>{
-    drop.addEventListener('click',()=>{ document.getElementById('file_'+drop.dataset.filetrigger).click(); });
-  });
-  document.querySelectorAll('[data-fileinput]').forEach(inp=>{
-    inp.addEventListener('change', async e=>{
-      const id=inp.dataset.fileinput;
-      const list = state.files[id]||[];
-      const fdef = findFieldDef(id);
-      const maxSize = fdef && fdef.type==='video' ? 200*1024*1024 : 10*1024*1024;
-      const filesToUpload = [];
-      Array.from(inp.files).forEach(file=>{
-        if(fdef && fdef.type!=='video' && !file.name.toLowerCase().endsWith('.pdf')){
-          showToast('تعذّر رفع الملف — يُقبل PDF فقط'); return;
-        }
-        if(file.size>maxSize){ showToast('تجاوز الحجم المسموح به'); return; }
-        if(list.length>=5 && fdef.multiple){ showToast('الحد الأقصى 5 ملفات لهذا الحقل'); return; }
-        filesToUpload.push(file);
-      });
-      if(filesToUpload.length===0) return;
-
-      showToast('جارٍ رفع الملف…');
-      for(const file of filesToUpload){
-        try{
-          const storagePath = `${PROJECT_ID}/${id}/${Date.now()}_${file.name}`;
-          const { error: upErr } = await SB_AUTH.storage.from('form-attachments').upload(storagePath, file, { upsert: false });
-          if(upErr) throw upErr;
-
-          // إذا كان الحقل يستبدل ملفًا سابقًا (غير متعدد)، احذف القديم من التخزين وقاعدة البيانات أولًا
-          if(!fdef.multiple && list.length>=1){
-            const old = list.pop();
-            if(old.storage_path) await SB_AUTH.storage.from('form-attachments').remove([old.storage_path]);
-            if(old.id) await SB_AUTH.from('form_files').delete().eq('id', old.id);
-          }
-
-          const { data: fileRow, error: insErr } = await SB_AUTH.from('form_files').insert({
-            form_id: FORM_ID, field_key: id, storage_path: storagePath,
-            file_name: file.name, mime_type: file.type, size_bytes: file.size,
-          }).select().single();
-          if(insErr) throw insErr;
-
-          list.push({ name: file.name, size: file.size, id: fileRow.id, storage_path: storagePath });
-        } catch(err){
-          showToast('تعذّر رفع "' + file.name + '": ' + (err.message || 'خطأ غير معروف'));
-        }
-      }
-      state.files[id]=list;
-      renderAll();
-    });
-  });
-  document.querySelectorAll('[data-removefile]').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      const id=btn.dataset.removefile, idx=parseInt(btn.dataset.idx);
-      const fileEntry = state.files[id][idx];
-      state.files[id].splice(idx,1);
-      renderAll();
-      try{
-        if(fileEntry.storage_path) await SB_AUTH.storage.from('form-attachments').remove([fileEntry.storage_path]);
-        if(fileEntry.id) await SB_AUTH.from('form_files').delete().eq('id', fileEntry.id);
-      } catch(err){
-        showToast('تعذّر حذف الملف من الخادم — قد يظهر مجددًا عند إعادة التحميل');
-      }
-    });
-  });
-  document.querySelectorAll('[data-vmode]').forEach(btn=>{
-    btn.addEventListener('click',()=>{ state.videoMode[btn.dataset.vmode]=btn.dataset.mode; renderAll(); });
-  });
-  document.querySelectorAll('[data-member]').forEach(el=>{
-    const evt = el.tagName==='SELECT' ? 'change' : 'input';
-    el.addEventListener(evt,()=>{
-      state.members[parseInt(el.dataset.member)][el.dataset.mkey]=el.value;
-      if(el.tagName==='SELECT') renderAll(); else refreshLight();
-    });
-  });
-  const addBtn = document.getElementById('addMemberBtn');
-  if(addBtn) addBtn.addEventListener('click',()=>{
-    state.members.push({name:"",id:"",phone:"",email:"",role:"",spec:"",camp:"",title:""});
-    renderAll();
-  });
-  document.querySelectorAll('[data-removemember]').forEach(btn=>{
-    btn.addEventListener('click',()=>{ state.members.splice(parseInt(btn.dataset.removemember),1); renderAll(); });
-  });
-  document.querySelectorAll('[data-stage]').forEach(opt=>{
-    opt.addEventListener('click',()=>{ setVal('f5_1', opt.dataset.stage); renderAll(); });
-  });
-  const dc = document.getElementById('declareCheck');
-  if(dc) dc.addEventListener('click',()=>{ state.values.f11_1 = !state.values.f11_1; renderAll(); });
-
-  const prev=document.getElementById('btnPrev');
-  if(prev) prev.addEventListener('click',()=>{ if(state.current>1){ state.current--; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); }});
-  const next=document.getElementById('btnNext');
-  if(next) next.addEventListener('click',()=>{
-    if(validateSection(section)){ state.current=Math.min(11,state.current+1); renderAll(); window.scrollTo({top:0,behavior:'smooth'}); }
-  });
-  const save=document.getElementById('btnSaveDraft');
-  if(save) save.addEventListener('click',()=>{ saveDraft(); });
-  const submit=document.getElementById('btnSubmit');
-  if(submit) submit.addEventListener('click',()=>{ trySubmit(); });
-}
-function findFieldDef(id){
-  for(const s of SECTIONS){ const f=s.fields.find(x=>x.id===id); if(f) return f; }
-  return null;
-}
-
-/* ---------------- التحقق ---------------- */
-function validateSection(section){
-  let ok=true;
-  visibleFields(section).forEach(f=>{
-    if(!f.required) return;
-    const wrap=document.getElementById('fld_'+f.id);
-    let filled=true;
-    if(f.type==='file') filled=(state.files[f.id]||[]).length>0;
-    else if(f.type==='video'){
-      const mode=state.videoMode[f.id]||'upload';
-      filled = mode==='upload' ? (state.files[f.id]||[]).length>0 : !!getVal(f.id);
-    }
-    else if(f.type==='multiselect') filled = (getVal(f.id)||[]).length>0;
-    else filled = getVal(f.id) && String(getVal(f.id)).trim()!=="";
-    if(!filled){ ok=false; if(wrap) wrap.classList.add('has-error'); }
-    else if(wrap) wrap.classList.remove('has-error');
-  });
-  if(section.isTeamSection){
-    if(state.members.length<2) ok=false;
-    state.members.forEach(m=>{ if(!m.name||!m.id||!m.phone||!m.email||!m.role||!m.spec||!m.camp) ok=false; });
-  }
-  if(section.isDeclareSection && !state.values.f11_1) ok=false;
-  if(!ok) showToast('يرجى استكمال الحقول الإلزامية المظللة قبل المتابعة');
-  return ok;
-}
-
-/* ---------------- الحفظ والإرسال ---------------- */
-async function saveDraft(showToastOnSuccess = true){
-  if(!FORM_ID){ showToast('تعذّر الحفظ: لم يتم تحميل النموذج بعد'); return false; }
-  document.getElementById('draftStatus').textContent = 'جارٍ الحفظ…';
+  setBtnLoading(els.continueBtn, true, 'دخول');
   try{
-    // 1) تحديث نسبة الاكتمال وطابع التحديث على verification_forms
-    const { error: vfErr } = await SB_AUTH
-      .from('verification_forms')
-      .update({ completion_pct: overallProgress() })
-      .eq('id', FORM_ID);
-    if(vfErr) throw vfErr;
+    const { data: ok, error } = await sb.rpc('check_project_login', { p_project_id: projectId, p_email: email });
+    setBtnLoading(els.continueBtn, false, 'دخول');
+    if(error){ showErr(els.errBox1, 'حدث خطأ تقني: ' + error.message); return; }
+    if(!ok){ showErr(els.errBox1, 'رقم المشروع أو البريد الإلكتروني غير مطابق لسجلات البرنامج. تواصل مع فريق البرنامج إذا كنت متأكدًا من صحة بياناتك.'); return; }
 
-    // 2) مزامنة كل الإجابات دفعة واحدة (upsert على form_id + field_key)
-    const answerRows = Object.keys(state.values)
-      .filter(k => state.values[k] !== undefined && state.values[k] !== null && state.values[k] !== "")
-      .map(k => {
-        const v = state.values[k];
-        const isArray = Array.isArray(v);
-        return {
-          form_id: FORM_ID,
-          field_key: k,
-          value_text: isArray ? null : String(v),
-          value_json: isArray ? v : null,
-        };
-      });
-    if(answerRows.length){
-      const { error: ansErr } = await SB_AUTH.from('form_answers').upsert(answerRows, { onConflict: 'form_id,field_key' });
-      if(ansErr) throw ansErr;
-    }
+    sessionStorage.setItem('ib5_session', JSON.stringify({
+      project_id: projectId,
+      team_leader_email: email,
+      entered_at: new Date().toISOString(),
+    }));
 
-    // 3) مزامنة أعضاء الفريق (حذف كامل ثم إعادة إدراج — أبسط استراتيجية مزامنة لعدد صغير من الصفوف)
-    const membersToSave = state.members.filter(m => m.name && m.name.trim());
-    const { error: delErr } = await SB_AUTH.from('team_members').delete().eq('form_id', FORM_ID);
-    if(delErr) throw delErr;
-    if(membersToSave.length){
-      const memberRows = membersToSave.map((m,i) => ({
-        form_id: FORM_ID, full_name: m.name, national_id: m.id, phone: m.phone, email: m.email,
-        role_in_project: m.role, specialization: m.spec,
-        attended_camp: m.camp === "نعم" ? true : (m.camp === "لا" ? false : null),
-        title_in_entity: m.title || null, is_leader: i === 0, order_index: i,
-      }));
-      const { error: memErr } = await SB_AUTH.from('team_members').insert(memberRows);
-      if(memErr) throw memErr;
-    }
-
-    document.getElementById('draftStatus').textContent = 'تم حفظ المسودة — ' + new Date().toLocaleTimeString('ar-SA');
-    if(showToastOnSuccess) showToast('تم حفظ المسودة بنجاح');
-    return true;
+    showStep('success');
+    setTimeout(()=>{
+      window.location.href = 'verify-form.html?project=' + encodeURIComponent(projectId);
+    }, 600);
   } catch(e){
-    document.getElementById('draftStatus').textContent = 'تعذّر الحفظ — سيُعاد المحاولة عند تعديلك التالي';
-    showToast('حدث خطأ أثناء الحفظ: ' + (e.message || 'خطأ غير معروف'));
-    return false;
+    setBtnLoading(els.continueBtn, false, 'دخول');
+    showErr(els.errBox1, 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
   }
 }
 
-async function trySubmit(){
-  const declareSection = SECTIONS.find(s=>s.id===11);
-  if(!validateSection(declareSection)){ return; }
+els.continueBtn.addEventListener('click', handleContinue);
+[els.projectId, els.leaderEmail].forEach(inp=>inp.addEventListener('keydown', e=>{ if(e.key==='Enter') handleContinue(); }));
 
-  const saved = await saveDraft(false);
-  if(!saved){ showToast('تعذّر حفظ آخر التعديلات — حاول مرة أخرى قبل الإرسال'); return; }
-
+/* ---------------- تعبئة مسبقة إن وُجدت جلسة سابقة في هذا المتصفح ---------------- */
+(function prefillFromSession(){
   try{
-    const { error } = await SB_AUTH
-      .from('verification_forms')
-      .update({ status: 'submitted', submitted_at: new Date().toISOString() })
-      .eq('id', FORM_ID);
-    if(error) throw error;
-    showToast('تم إرسال النموذج بنجاح — سيقوم فريق البرنامج بالمراجعة');
-  } catch(e){
-    showToast('تعذّر إرسال النموذج: ' + (e.message || 'خطأ غير معروف'));
-  }
-}
-
-/* ---------------- تحديثات خفيفة بدون إعادة رسم كاملة ---------------- */
-let autosaveTimer = null;
-function scheduleAutosave(){
-  if(!FORM_ID) return;
-  clearTimeout(autosaveTimer);
-  document.getElementById('draftStatus').textContent = 'تعديلات غير محفوظة…';
-  autosaveTimer = setTimeout(()=>{ saveDraft(false); }, 2500);
-}
-function refreshLight(){
-  updateTopbar();
-  renderStepper();
-  scheduleAutosave();
-}
-function updateTopbar(){
-  const pct = overallProgress();
-  document.getElementById('progressFill').style.width = pct+'%';
-  document.getElementById('progressText').textContent = pct+'% مكتمل';
-  document.getElementById('pillProjectId').textContent = getVal('f1_1') || '—';
-  document.getElementById('subProjectName').textContent = getVal('f1_2') ? ('مشروع: '+getVal('f1_2')) : 'مسار المشاركة والمجال يُحددان تلقائيًا من بيانات المنصة';
-}
-
-function renderAll(){
-  renderStepper();
-  renderSection();
-  updateTopbar();
-  scheduleAutosave();
-}
-
-/* ---------------- تحميل النموذج من Supabase عند بدء التشغيل ---------------- */
-async function initApp(){
-  const session = requireSessionOrRedirect();
-  if(!session) return; // requireSessionOrRedirect يحوّل المستخدم لصفحة الدخول
-
-  PROJECT_ID = session.project_id;
-  SB = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  SB_AUTH = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { 'x-form-token': session.token } },
-  });
-
-  try{
-    // 1) بيانات المشروع الأساسية (متاحة بمفتاح anon دون توكن جلسة)
-    const { data: proj } = await SB.from('eligible_projects')
-      .select('project_id, project_name, team_leader_name, track, domain')
-      .eq('project_id', PROJECT_ID).maybeSingle();
-
-    // 2) جلب سجل النموذج أو إنشاؤه لأول مرة
-    let { data: form, error: formErr } = await SB_AUTH.from('verification_forms')
-      .select('id, status, completion_pct').eq('project_id', PROJECT_ID).maybeSingle();
-    if(formErr) throw formErr;
-    if(!form){
-      const { data: created, error: createErr } = await SB_AUTH.from('verification_forms')
-        .insert({ project_id: PROJECT_ID, status: 'draft' }).select().single();
-      if(createErr) throw createErr;
-      form = created;
-    }
-    FORM_ID = form.id;
-
-    // 3) الإجابات المحفوظة سابقًا
-    const { data: answers } = await SB_AUTH.from('form_answers').select('field_key, value_text, value_json').eq('form_id', FORM_ID);
-    (answers||[]).forEach(a=>{ state.values[a.field_key] = a.value_json !== null ? a.value_json : a.value_text; });
-
-    // 4) أعضاء الفريق
-    const { data: members } = await SB_AUTH.from('team_members').select('*').eq('form_id', FORM_ID).order('order_index');
-    if(members && members.length){
-      state.members = members.map(m=>({
-        name:m.full_name||"", id:m.national_id||"", phone:m.phone||"", email:m.email||"",
-        role:m.role_in_project||"", spec:m.specialization||"",
-        camp: m.attended_camp===true?"نعم":(m.attended_camp===false?"لا":""),
-        title: m.title_in_entity||"",
-      }));
-    }
-
-    // 5) الملفات المرفوعة سابقًا (غير المحذوفة)
-    const { data: files } = await SB_AUTH.from('form_files').select('*').eq('form_id', FORM_ID).is('deleted_at', null);
-    (files||[]).forEach(f=>{
-      if(!state.files[f.field_key]) state.files[f.field_key] = [];
-      state.files[f.field_key].push({ name:f.file_name, size:f.size_bytes, id:f.id, storage_path:f.storage_path });
-    });
-
-    // 6) تعبئة بيانات المشروع الأساسية
-    setVal('f1_1', PROJECT_ID);
-    if(proj){
-      if(!getVal('f1_5')) setVal('f1_5', proj.team_leader_name);
-      if(!getVal('f1_3') && proj.track) setVal('f1_3', proj.track);
-      if(!getVal('f1_4') && proj.domain) setVal('f1_4', proj.domain);
-    }
-
-    if(form.status === 'submitted'){
-      showToast('تم إرسال هذا النموذج مسبقًا — يمكنك مراجعة إجاباتك، وأي تعديل سيُحفظ كمسودة جديدة');
-    }
-  } catch(e){
-    showToast('تعذّر تحميل بيانات النموذج: ' + (e.message || 'خطأ غير معروف'));
-  }
-
-  renderAll();
-}
-initApp();
+    const raw = sessionStorage.getItem('ib5_session');
+    if(!raw) return;
+    const s = JSON.parse(raw);
+    if(s && s.project_id){ els.projectId.value = s.project_id; els.leaderEmail.value = s.team_leader_email || ''; }
+  }catch(e){}
+})();
 </script>
 </body>
 </html>

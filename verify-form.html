@@ -289,18 +289,17 @@ input:disabled,select:disabled{background:#F0F1F4;color:var(--ink-400);}
 /* ============================================================
    نموذج التحقق — حاضنة ابتكار 5
    مرتبط بـ Supabase: الجلسة تأتي من login.html عبر sessionStorage
-   (project_id + token)، ويُرسَل التوكن كرأس x-form-token مع كل طلب
-   — بدونه ترفض كل سياسات RLS الوصول (راجع schema.sql).
+   (project_id + team_leader_email فقط). الدخول مباشر بدون كلمة مرور
+   أو توكن — نفس نمط "إنفاذ" و"Innovation Marketplace" (بساطة وموثوقية أولًا).
    ============================================================ */
 
-// ⚠️ عدّل القيمتين التاليتين ببيانات مشروعك الفعلية في Supabase قبل النشر:
-const SUPABASE_URL = "https://YOUR-PROJECT-REF.supabase.co";
-const SUPABASE_ANON_KEY = "YOUR-ANON-PUBLIC-KEY";
+const SUPABASE_URL = "https://zxruviveljkywxbdqjxc.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_URvlZnzYTl0CwwVxCikLvA_OeGSzhJh";
 
 let PROJECT_ID = null;
 let FORM_ID = null;
-let SB = null;       // عميل عام (بدون توكن) — لقراءة eligible_projects فقط
-let SB_AUTH = null;  // عميل مخوَّل بتوكن الجلسة — لكل عمليات النموذج
+let SB = null;       // عميل عام — يُستخدم لكل عمليات النموذج (لا حاجة لتوكن خاص)
+let SB_AUTH = null;  // نفس العميل — أُبقي على الاسمين لتوافق باقي الكود دون تعديل كل استدعاء
 
 /* ---------------- حارس الجلسة: يشترط دخولًا صحيحًا سابقًا عبر login.html ---------------- */
 function getSession(){
@@ -308,7 +307,7 @@ function getSession(){
     const raw = sessionStorage.getItem('ib5_session');
     if(!raw) return null;
     const s = JSON.parse(raw);
-    if(!s || !s.project_id || !s.token) return null;
+    if(!s || !s.project_id) return null;
     return s;
   }catch(e){ return null; }
 }
@@ -1045,12 +1044,10 @@ async function initApp(){
 
   PROJECT_ID = session.project_id;
   SB = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  SB_AUTH = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { 'x-form-token': session.token } },
-  });
+  SB_AUTH = SB; // عميل واحد يكفي الآن — الوصول محكوم بـ RLS على "مشروع نشط" فقط
 
   try{
-    // 1) بيانات المشروع الأساسية (متاحة بمفتاح anon دون توكن جلسة)
+    // 1) بيانات المشروع الأساسية
     const { data: proj } = await SB.from('eligible_projects')
       .select('project_id, project_name, team_leader_name, track, domain')
       .eq('project_id', PROJECT_ID).maybeSingle();

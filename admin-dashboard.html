@@ -201,15 +201,11 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
       <div><div style="font-size:11px;color:var(--teal-600);font-weight:700;font-family:'Cairo',sans-serif">حاضنة الابتكار — النسخة الخامسة</div><div style="font-size:15px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif">دخول فريق البرنامج</div></div>
     </div>
     <div id="authStageRequest">
-      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 16px">أدخل بريدك الرسمي المسجَّل ضمن فريق البرنامج — سنرسل لك رابط دخول آمن.</p>
+      <p style="font-size:12.5px;color:var(--ink-600);margin:0 0 16px">أدخل بريدك وكلمة مرورك اللذين أضافهما لك مدير النظام في فريق البرنامج.</p>
       <div id="authErrBox" style="display:none;background:var(--danger-100);color:var(--danger);border-radius:9px;padding:10px 13px;font-size:12.5px;margin-bottom:14px"></div>
       <div class="field-inline"><label class="flabel">البريد الإلكتروني</label><input type="email" id="authEmail" placeholder="name@qu.edu.sa"></div>
-      <button class="btn btn-primary" id="authSendBtn" style="width:100%">إرسال رابط الدخول</button>
-    </div>
-    <div id="authStageSent" style="display:none;text-align:center">
-      <div style="width:48px;height:48px;border-radius:50%;background:var(--success-100);color:var(--success);display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto 14px">✓</div>
-      <p style="font-size:13px;color:var(--ink-900);margin:0 0 4px;font-weight:600">تحقّق من بريدك</p>
-      <p style="font-size:12px;color:var(--ink-600);margin:0">أرسلنا رابط دخول إلى <span class="mono" id="authSentEmail"></span></p>
+      <div class="field-inline"><label class="flabel">كلمة المرور</label><input type="password" id="authPassword" placeholder="••••••••"></div>
+      <button class="btn btn-primary" id="authSendBtn" style="width:100%">دخول</button>
     </div>
     <div id="authStageDenied" style="display:none;text-align:center">
       <div style="width:48px;height:48px;border-radius:50%;background:var(--danger-100);color:var(--danger);display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto 14px">⛔</div>
@@ -299,50 +295,38 @@ const sb = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE
 let currentAdmin = null; // {name, role, email}
 
 function showAuthStage(stage){
-  ['authStageRequest','authStageSent','authStageDenied'].forEach(id=>{
+  ['authStageRequest','authStageDenied'].forEach(id=>{
     document.getElementById(id).style.display = (id === stage) ? 'block' : 'none';
   });
 }
 
-async function sendAdminMagicLink(){
+async function signInAdmin(){
   const email = document.getElementById('authEmail').value.trim().toLowerCase();
+  const password = document.getElementById('authPassword').value;
   const errBox = document.getElementById('authErrBox');
   errBox.style.display = 'none';
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
     errBox.textContent = 'صيغة البريد الإلكتروني غير صحيحة.'; errBox.style.display = 'block'; return;
   }
+  if(!password){
+    errBox.textContent = 'يرجى إدخال كلمة المرور.'; errBox.style.display = 'block'; return;
+  }
   const btn = document.getElementById('authSendBtn');
-  btn.disabled = true; btn.textContent = 'جارٍ الإرسال…';
+  btn.disabled = true; btn.textContent = 'جارٍ الدخول…';
   try{
-    const { error } = await sb.auth.signInWithOtp({
-      email, options: { emailRedirectTo: window.location.origin + window.location.pathname }
-    });
-    if(error){ errBox.textContent = 'تعذّر إرسال رابط الدخول: ' + error.message; errBox.style.display = 'block'; btn.disabled=false; btn.textContent='إرسال رابط الدخول'; return; }
-    document.getElementById('authSentEmail').textContent = email;
-    showAuthStage('authStageSent');
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if(error){
+      errBox.textContent = 'تعذّر الدخول: بريد أو كلمة مرور غير صحيحة.';
+      errBox.style.display = 'block'; btn.disabled=false; btn.textContent='دخول'; return;
+    }
+    await completeAdminLogin();
   } catch(e){
     errBox.textContent = 'حدث خطأ غير متوقع. حاول مرة أخرى.'; errBox.style.display = 'block';
-    btn.disabled=false; btn.textContent='إرسال رابط الدخول';
+    btn.disabled=false; btn.textContent='دخول';
   }
 }
 
-async function initAdminApp(){
-  if(!sb){
-    document.getElementById('loadingScreen').textContent = 'تعذّر تحميل مكتبة الاتصال بقاعدة البيانات.';
-    return;
-  }
-  const { data: { session } } = await sb.auth.getSession();
-  document.getElementById('loadingScreen').style.display = 'none';
-
-  if(!session){
-    document.getElementById('authScreen').style.display = 'flex';
-    showAuthStage('authStageRequest');
-    document.getElementById('authSendBtn').addEventListener('click', sendAdminMagicLink);
-    document.getElementById('authEmail').addEventListener('keydown', e=>{ if(e.key==='Enter') sendAdminMagicLink(); });
-    document.getElementById('authSignOutBtn').addEventListener('click', ()=>{ showAuthStage('authStageRequest'); });
-    return;
-  }
-
+async function completeAdminLogin(){
   // جلسة Supabase Auth موجودة — اربط الحساب بسجل admin_users إن كان معتمَدًا
   await sb.rpc('link_admin_account');
   const { data: profile, error: profErr } = await sb.rpc('current_admin_profile');
@@ -351,24 +335,46 @@ async function initAdminApp(){
   if(profErr || !me){
     document.getElementById('authScreen').style.display = 'flex';
     showAuthStage('authStageDenied');
-    document.getElementById('authSignOutBtn').addEventListener('click', async ()=>{
-      await sb.auth.signOut();
-      window.location.reload();
-    });
     return;
   }
 
   currentAdmin = me;
   document.getElementById('meName').textContent = me.name;
   document.getElementById('meAvatar').textContent = initials(me.name);
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'block';
+  await loadAllAdminData();
+  renderAll();
+}
+
+async function initAdminApp(){
+  if(!sb){
+    document.getElementById('loadingScreen').textContent = 'تعذّر تحميل مكتبة الاتصال بقاعدة البيانات.';
+    return;
+  }
+  document.getElementById('authSendBtn').addEventListener('click', signInAdmin);
+  document.getElementById('authPassword').addEventListener('keydown', e=>{ if(e.key==='Enter') signInAdmin(); });
+  document.getElementById('authEmail').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('authPassword').focus(); });
+  document.getElementById('authSignOutBtn').addEventListener('click', async ()=>{
+    await sb.auth.signOut();
+    showAuthStage('authStageRequest');
+  });
   document.getElementById('signOutBtn').addEventListener('click', async ()=>{
     await sb.auth.signOut();
     window.location.reload();
   });
 
-  document.getElementById('appShell').style.display = 'block';
-  await loadAllAdminData();
-  renderAll();
+  const { data: { session } } = await sb.auth.getSession();
+  document.getElementById('loadingScreen').style.display = 'none';
+
+  if(!session){
+    document.getElementById('authScreen').style.display = 'flex';
+    showAuthStage('authStageRequest');
+    return;
+  }
+
+  document.getElementById('authScreen').style.display = 'flex';
+  await completeAdminLogin();
 }
 
 /* ---------------- إحصاءات لوحة القيادة (تُعبَّى من Supabase عند الدخول) ---------------- */
@@ -504,8 +510,7 @@ async function loadEligibleProjects(){
   eligibleProjects = (data||[]).map(p=>({
     project_id: p.project_id, project_name: p.project_name, track: p.track, domain: p.domain,
     team_leader_name: p.team_leader_name, team_leader_email: p.team_leader_email,
-    team_leader_phone: p.team_leader_phone, is_active: p.is_active,
-    has_password: !!p.password_set_at, source: "—",
+    team_leader_phone: p.team_leader_phone, is_active: p.is_active, source: "—",
   }));
 }
 async function loadUsers(){
@@ -932,7 +937,7 @@ function renderEligibility(){
   const withEmail = eligibleProjects.filter(p=>isValidEmail(p.team_leader_email)).length;
   el.innerHTML = `
     <div class="section-title-row">
-      <div><h2>الفرق المؤهّلة للدخول</h2><p>القائمة التي تتحقق منها صفحة الدخول (رقم المشروع + البريد)، ثم ينشئ كل فريق كلمة مروره بنفسه — لا يدخل أي بريد غير موجود هنا.</p></div>
+      <div><h2>الفرق المؤهّلة للدخول</h2><p>القائمة التي تتحقق منها صفحة الدخول (رقم المشروع + البريد) — دخول مباشر لا يدخل أي بريد غير موجود هنا.</p></div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-ghost" id="exportEligBtn">تصدير CSV</button>
         <button class="btn btn-primary" id="openImportBtn">استيراد من ملف CSV</button>
@@ -944,8 +949,6 @@ function renderEligibility(){
         <div class="kval mono">${total}</div><div class="klabel">فريق مسجَّل في قائمة الأهلية</div></div>
       <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">✓</div>
         <div class="kval mono">${withEmail}</div><div class="klabel">بريد إلكتروني صالح ومحفوظ</div></div>
-      <div class="card kpi-card"><div class="kicon" style="background:var(--amber-100);color:var(--amber)">🔑</div>
-        <div class="kval mono">${eligibleProjects.filter(p=>!p.has_password).length}</div><div class="klabel">فريق لم يُنشئ كلمة مرور بعد</div></div>
       <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">⛔</div>
         <div class="kval mono">${eligibleProjects.filter(p=>!p.is_active).length}</div><div class="klabel">معطَّل عن الدخول حاليًا</div></div>
     </div>
@@ -964,7 +967,7 @@ function renderEligibility(){
         <button class="btn btn-ghost" id="addOneBtn">+ إضافة فريق واحد يدويًا</button>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th><th>قائد الفريق</th><th>البريد الإلكتروني</th><th>كلمة المرور</th><th>الحالة</th><th>المصدر</th><th></th></tr></thead>
+        <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th><th>قائد الفريق</th><th>البريد الإلكتروني</th><th>الحالة</th><th>المصدر</th><th></th></tr></thead>
         <tbody id="eligTbody"></tbody>
       </table></div>
     </div>
@@ -990,11 +993,6 @@ function renderEligTbody(){
       <td>${p.track||'—'}</td>
       <td>${p.team_leader_name}</td>
       <td class="mono" style="${isValidEmail(p.team_leader_email)?'':'color:var(--danger)'}">${p.team_leader_email||'—'}</td>
-      <td>
-        ${p.has_password
-          ? `<span class="badge ok">مُنشَأة</span> <button class="icon-btn danger" data-resetpw="${p.project_id}" title="إعادة تعيين (نسيان كلمة المرور)">↻</button>`
-          : `<span class="badge mid">لم تُنشأ بعد</span>`}
-      </td>
       <td><span class="badge ${p.is_active?'ok':'no'}">${p.is_active?'مفعَّل':'معطَّل'}</span></td>
       <td style="color:var(--ink-400);font-size:12px">${p.source||'يدوي'}</td>
       <td style="text-align:left"><div style="display:flex;gap:4px;justify-content:flex-end">
@@ -1004,7 +1002,6 @@ function renderEligTbody(){
       </div></td>
     </tr>
   `).join('');
-  tb.querySelectorAll('[data-resetpw]').forEach(b=>b.addEventListener('click',()=>resetPassword(b.dataset.resetpw)));
   tb.querySelectorAll('[data-editelig]').forEach(b=>b.addEventListener('click',()=>openEligEditor(b.dataset.editelig)));
   tb.querySelectorAll('[data-toggleelig]').forEach(b=>b.addEventListener('click', async ()=>{
     const p = eligibleProjects.find(x=>x.project_id===b.dataset.toggleelig);
@@ -1022,18 +1019,6 @@ function renderEligTbody(){
       renderEligTbody(); showToast('تم حذف الفريق من قائمة الأهلية');
     });
   }));
-}
-
-/* ---------------- إعادة تعيين كلمة مرور فريق (عند نسيانها) ---------------- */
-function resetPassword(projectId){
-  const p = eligibleProjects.find(x=>x.project_id===projectId);
-  openConfirm(`سيتم مسح كلمة مرور فريق "${p.project_name}" الحالية. سيحتاج قائد الفريق لإنشاء كلمة مرور جديدة في دخوله التالي. هل تريد الاستمرار؟`, async ()=>{
-    const { error } = await sb.rpc('admin_reset_password', { p_project_id: projectId });
-    if(error){ showToast('تعذّر إعادة التعيين: '+error.message); return; }
-    p.has_password = false;
-    renderEligTbody();
-    showToast(`تم مسح كلمة مرور "${p.project_name}" — سيُنشئ الفريق كلمة مرور جديدة عند دخوله القادم`);
-  });
 }
 
 /* ---------------- إضافة / تعديل فريق واحد ---------------- */
@@ -1090,7 +1075,7 @@ function openEligEditor(projectId){
     } else {
       const { error } = await sb.from('eligible_projects').insert(record);
       if(error){ showToast('تعذّر الإضافة: '+error.message); saveBtn.disabled=false; saveBtn.textContent='إضافة'; return; }
-      eligibleProjects.push({ ...record, source:"يدوي", has_password:false });
+      eligibleProjects.push({ ...record, source:"يدوي" });
       showToast('تمت إضافة الفريق إلى قائمة الأهلية');
     }
     modal.classList.remove('show');
@@ -1224,7 +1209,7 @@ async function confirmImport(){
     const idx = eligibleProjects.findIndex(p=>p.project_id===r.project_id);
     const record = {project_id:r.project_id, project_name:r.project_name, track:r.track, domain:r.domain,
       team_leader_name:r.team_leader_name, team_leader_email:r.team_leader_email, team_leader_phone:r.team_leader_phone,
-      is_active:true, source:"استيراد CSV", has_password: idx>-1 ? eligibleProjects[idx].has_password : false};
+      is_active:true, source:"استيراد CSV"};
     if(idx>-1) eligibleProjects[idx] = {...eligibleProjects[idx], ...record};
     else eligibleProjects.push(record);
   });
