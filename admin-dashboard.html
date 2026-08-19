@@ -495,11 +495,12 @@ async function loadSectionsAndQuestions(){
   const { data: qRows, error: qErr } = await sb.from('form_questions').select('*').order('order_index');
   if(qErr){ showToast('تعذّر تحميل الأسئلة: '+qErr.message); return; }
   sections = (secRows||[]).map(s => ({
-    id: s.id, title: s.title, desc: s.description || '',
+    id: s.id, key: s.section_key || null, title: s.title, desc: s.description || '', banner: s.banner || '',
     questions: (qRows||[]).filter(q=>q.section_id===s.id).map(q=>({
       id: q.field_key, dbId: q.id, label: q.label, type: q.type, required: q.required,
       options: (q.options && q.options.length) ? q.options : undefined,
-      cond: (q.condition_expr && q.condition_expr.note) ? q.condition_expr.note : undefined,
+      multiple: !!q.multiple, hint: q.hint || undefined,
+      condition: q.condition_expr || null,
     })),
   }));
   if(sections.length && !sections.find(s=>s.id===activeSectionId)) activeSectionId = sections[0].id;
@@ -695,15 +696,7 @@ function renderBuilder(){
   `;
   if(sections.length === 0){
     document.getElementById('sectionNav').innerHTML = `<div class="add-section-btn" id="addSectionBtn">+ إضافة أول قسم</div>`;
-    document.getElementById('addSectionBtn').addEventListener('click', async ()=>{
-      const title = prompt("عنوان القسم الجديد:");
-      if(!title) return;
-      const { data, error } = await sb.from('form_sections').insert({ title, order_index: 1 }).select().single();
-      if(error){ showToast('تعذّر إضافة القسم: '+error.message); return; }
-      sections.push({id:data.id, title:data.title, desc:data.description||"", questions:[]});
-      activeSectionId = data.id;
-      renderBuilder(); showToast('تمت إضافة القسم');
-    });
+    document.getElementById('addSectionBtn').addEventListener('click', ()=>{ openSectionEditor(null); });
     document.getElementById('questionsPane').innerHTML = `<div class="empty-hint">لا توجد أقسام بعد — أضف قسمًا من القائمة الجانبية للبدء.</div>`;
     return;
   }
@@ -717,9 +710,10 @@ function renderSectionNav(){
     <div class="section-nav-item ${s.id===activeSectionId?'active':''}" data-sec="${s.id}">
       <div style="display:flex;align-items:center;gap:10px;overflow:hidden">
         <span class="snum">${s.id}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.title}</span>
+        ${s.key?`<span class="mono" style="font-size:9.5px;color:var(--purple);background:var(--purple-100);border-radius:5px;padding:1px 5px;flex:none">خاص</span>`:''}
       </div>
       <div class="section-nav-actions">
-        <button class="icon-btn" data-editsection="${s.id}" title="تعديل عنوان القسم">✎</button>
+        <button class="icon-btn" data-editsection="${s.id}" title="تعديل القسم">✎</button>
         <button class="icon-btn danger" data-delsection="${s.id}" title="حذف القسم">🗑</button>
       </div>
     </div>
@@ -729,16 +723,7 @@ function renderSectionNav(){
     n.addEventListener('click',(e)=>{ if(e.target.closest('button')) return; activeSectionId=parseInt(n.dataset.sec); renderBuilder(); });
   });
   nav.querySelectorAll('[data-editsection]').forEach(b=>{
-    b.addEventListener('click', async ()=>{
-      const sec = sections.find(x=>x.id===parseInt(b.dataset.editsection));
-      const nt = prompt("عنوان القسم:", sec.title);
-      if(!nt) return;
-      const prev = sec.title;
-      sec.title = nt; renderBuilder();
-      const { error } = await sb.from('form_sections').update({ title: nt }).eq('id', sec.id);
-      if(error){ sec.title = prev; renderBuilder(); showToast('تعذّر التحديث: '+error.message); return; }
-      showToast('تم تحديث عنوان القسم');
-    });
+    b.addEventListener('click', ()=>{ openSectionEditor(parseInt(b.dataset.editsection)); });
   });
   nav.querySelectorAll('[data-delsection]').forEach(b=>{
     b.addEventListener('click',()=>{
@@ -752,15 +737,51 @@ function renderSectionNav(){
       });
     });
   });
-  document.getElementById('addSectionBtn').addEventListener('click', async ()=>{
-    const title = prompt("عنوان القسم الجديد:");
-    if(!title) return;
-    const orderIndex = Math.max(0, ...sections.map(s=>s.id)) + 1;
-    const { data, error } = await sb.from('form_sections').insert({ title, order_index: orderIndex }).select().single();
-    if(error){ showToast('تعذّر إضافة القسم: '+error.message); return; }
-    sections.push({id:data.id, title:data.title, desc:data.description||"", questions:[]});
-    activeSectionId = data.id;
-    renderBuilder(); showToast('تمت إضافة القسم');
+  document.getElementById('addSectionBtn').addEventListener('click', ()=>{ openSectionEditor(null); });
+}
+
+/* ---------------- محرر القسم (إضافة / تعديل) — عنوان، وصف، وتنبيه اختياري ---------------- */
+function openSectionEditor(sectionId){
+  const existing = sectionId ? sections.find(s=>s.id===sectionId) : null;
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.innerHTML = `
+    <h3>${existing?'تعديل القسم':'إضافة قسم جديد'}</h3>
+    ${existing && existing.key ? `<p>⚠️ هذا قسم ذو واجهة خاصة (${existing.key}) — تقدر تعدّل العنوان والوصف والتنبيه بأمان، لكن حقوله الأساسية الهيكلية (مثل بطاقات الأعضاء أو منتقي المراحل) لا تتغيّر من هنا.</p>`:`<p>عنوان ووصف القسم كما سيظهران للمشارك.</p>`}
+    <div class="field-inline"><label class="flabel">عنوان القسم</label><input type="text" id="sm_title" value="${existing?existing.title.replace(/"/g,'&quot;'):''}"></div>
+    <div class="field-inline"><label class="flabel">وصف مختصر (يظهر تحت العنوان)</label><input type="text" id="sm_desc" value="${existing?(existing.desc||'').replace(/"/g,'&quot;'):''}"></div>
+    <div class="field-inline"><label class="flabel">تنبيه بارز (اختياري)</label><input type="text" id="sm_banner" value="${existing?(existing.banner||'').replace(/"/g,'&quot;'):''}" placeholder="مثال: هذا متطلب انتقال أساسي"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="sm_cancel">إلغاء</button>
+      <button class="btn btn-primary" id="sm_save">${existing?'حفظ':'إضافة'}</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('sm_cancel').addEventListener('click',()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('sm_save').addEventListener('click', async ()=>{
+    const title = document.getElementById('sm_title').value.trim();
+    const desc = document.getElementById('sm_desc').value.trim();
+    const banner = document.getElementById('sm_banner').value.trim();
+    if(!title){ showToast('يرجى كتابة عنوان القسم'); return; }
+    const saveBtn = document.getElementById('sm_save');
+    saveBtn.disabled = true; saveBtn.textContent = 'جارٍ الحفظ…';
+
+    if(existing){
+      const { error } = await sb.from('form_sections').update({ title, description: desc || null, banner: banner || null }).eq('id', existing.id);
+      if(error){ showToast('تعذّر الحفظ: '+error.message); saveBtn.disabled=false; saveBtn.textContent='حفظ'; return; }
+      existing.title = title; existing.desc = desc; existing.banner = banner;
+      showToast('تم حفظ القسم');
+    } else {
+      const orderIndex = Math.max(0, ...sections.map(s=>s.id)) + 1;
+      const { data, error } = await sb.from('form_sections').insert({ title, description: desc || null, banner: banner || null, order_index: orderIndex }).select().single();
+      if(error){ showToast('تعذّر إضافة القسم: '+error.message); saveBtn.disabled=false; saveBtn.textContent='إضافة'; return; }
+      sections.push({id:data.id, key:null, title:data.title, desc:data.description||"", banner:data.banner||"", questions:[]});
+      activeSectionId = data.id;
+      showToast('تمت إضافة القسم');
+    }
+    modal.classList.remove('show');
+    restoreConfirmModal();
+    renderBuilder();
   });
 }
 function renderQuestionsPane(section){
@@ -768,12 +789,13 @@ function renderQuestionsPane(section){
   let html = `<div class="section-title-row">
       <div><h2 class="mono" style="font-family:'IBM Plex Sans Arabic'">${section.title}</h2><p>${section.desc||'—'} · ${section.questions.length} سؤال</p></div>
     </div>`;
+  if(section.banner) html += `<div class="req-banner" style="margin-bottom:16px"><b>تنبيه:</b>&nbsp;${section.banner}</div>`;
   html += section.questions.map(q=>questionCardHTML(section.id,q)).join('');
   html += `<div class="add-q-btn" id="addQBtn">+ إضافة سؤال جديد لهذا القسم</div>`;
   pane.innerHTML = html;
 
   pane.querySelectorAll('[data-editq]').forEach(b=>{
-    b.addEventListener('click',()=>{ editingQuestion={sectionId:section.id, questionId:b.dataset.editq}; renderBuilder(); openEditorFor(section.id, b.dataset.editq); });
+    b.addEventListener('click',()=>{ openEditorFor(section.id, b.dataset.editq); });
   });
   pane.querySelectorAll('[data-delq]').forEach(b=>{
     b.addEventListener('click',()=>{
@@ -790,17 +812,35 @@ function renderQuestionsPane(section){
     openEditorFor(section.id, null);
   });
 }
+function findFieldLabel(fieldKey){
+  for(const s of sections){
+    const f = s.questions.find(q=>q.id===fieldKey);
+    if(f) return f.label;
+  }
+  return fieldKey;
+}
+function describeCondition(cond){
+  if(!cond) return '';
+  if(cond.all) return cond.all.map(describeCondition).join('  و  ');
+  const label = findFieldLabel(cond.field);
+  if(cond.op === 'not_empty') return `يظهر إذا: «${label}» غير فارغ`;
+  const opText = {eq:'=', neq:'≠', in:'ضمن', not_in:'ليست ضمن', includes:'تتضمن'}[cond.op] || cond.op;
+  const valText = Array.isArray(cond.value) ? cond.value.join('، ') : cond.value;
+  return `يظهر إذا: «${label}» ${opText} ${valText}`;
+}
 function questionCardHTML(sectionId, q){
   return `<div class="q-card">
     <div class="q-head">
       <div style="flex:1;min-width:0">
         <span class="q-type-tag">${typeLabel(q.type)}</span>
+        ${q.multiple?`<span class="q-type-tag" style="margin-inline-start:4px">تعدد ملفات</span>`:''}
         <div class="q-label">${q.label}${q.required?' <span class="req-tag">*</span>':''}</div>
         <div class="q-meta">
           <span class="mono">${q.id}</span>
           ${q.options?`<span>${q.options.length} خيار</span>`:''}
         </div>
-        ${q.cond?`<div class="q-cond">${q.cond}</div>`:''}
+        ${q.hint?`<div style="font-size:11.5px;color:var(--ink-400);margin-top:4px">${q.hint}</div>`:''}
+        ${q.condition?`<div class="q-cond">${describeCondition(q.condition)}</div>`:''}
       </div>
       <div class="q-actions">
         <button class="icon-btn" data-editq="${q.id}" title="تعديل">✎</button>
@@ -811,10 +851,37 @@ function questionCardHTML(sectionId, q){
 }
 
 /* ---------------- محرر السؤال (إضافة / تعديل) ---------------- */
+const COND_OPS = [
+  {v:"eq", l:"يساوي"}, {v:"neq", l:"لا يساوي"}, {v:"in", l:"ضمن قيم"},
+  {v:"not_in", l:"ليست ضمن قيم"}, {v:"includes", l:"تتضمن قيمة"}, {v:"not_empty", l:"غير فارغ"},
+];
+function condRowHTML(idx, cond, otherFields){
+  const c = cond || {field:otherFields[0]?.id||"", op:"eq", value:""};
+  const isMulti = ["in","not_in"].includes(c.op);
+  const valueStr = Array.isArray(c.value) ? c.value.join(", ") : (c.value||"");
+  return `<div class="cond-row" data-condrow="${idx}" style="border:1px solid var(--line);border-radius:9px;padding:10px;margin-bottom:8px">
+    <div class="grid2">
+      <div class="field-inline" style="margin-bottom:8px"><label class="flabel">الحقل</label>
+        <select data-cf="field">${otherFields.map(f=>`<option value="${f.id}" ${c.field===f.id?'selected':''}>${f.label} (${f.id})</option>`).join('')}</select>
+      </div>
+      <div class="field-inline" style="margin-bottom:8px"><label class="flabel">الشرط</label>
+        <select data-cf="op">${COND_OPS.map(o=>`<option value="${o.v}" ${c.op===o.v?'selected':''}>${o.l}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="field-inline cond-value-wrap" style="margin-bottom:0;display:${c.op==='not_empty'?'none':'block'}">
+      <label class="flabel">${isMulti?'القيم (افصل بفاصلة)':'القيمة'}</label>
+      <input type="text" data-cf="value" value="${valueStr.replace(/"/g,'&quot;')}" placeholder="${isMulti?'نعم, لا':'نعم'}">
+    </div>
+    <button type="button" class="icon-btn danger" data-rmcond="${idx}" style="margin-top:6px" title="إزالة هذا الشرط">🗑 إزالة الشرط</button>
+  </div>`;
+}
 function openEditorFor(sectionId, questionId){
   const section = sections.find(s=>s.id===sectionId);
   const existing = questionId ? section.questions.find(q=>q.id===questionId) : null;
-  const draft = existing ? JSON.parse(JSON.stringify(existing)) : {id:uid('f'), label:"", type:"text", required:true, options:[], cond:""};
+  const draft = existing ? JSON.parse(JSON.stringify(existing)) : {id:uid('f'), label:"", type:"text", required:true, options:[], multiple:false, hint:"", condition:null};
+  const otherFields = section.questions.filter(q=>q.id!==draft.id);
+  // شروط الحالة كمصفوفة داخلية (AND) — condition = null | {...} | {all:[...]}
+  let condRows = !draft.condition ? [] : (draft.condition.all ? draft.condition.all.slice() : [draft.condition]);
 
   const pane = document.getElementById('questionsPane');
   const box = document.createElement('div');
@@ -832,14 +899,27 @@ function openEditorFor(sectionId, questionId){
         </div>
       </div>
     </div>
+    <div class="field-inline" id="ed_multiple_wrap" style="display:${['file','video'].includes(draft.type)?'block':'none'}">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="toggle"><input type="checkbox" id="ed_multiple" ${draft.multiple?'checked':''}><label class="tk" for="ed_multiple"></label></div>
+        <span style="font-size:12.5px;color:var(--ink-600)">السماح برفع أكثر من ملف</span>
+      </div>
+    </div>
     <div class="field-inline" id="ed_options_wrap" style="display:${OPTION_TYPES.includes(draft.type)?'block':'none'}">
       <label class="flabel">خيارات القائمة</label>
       <div class="opt-chip-row" id="ed_opts_row">${(draft.options||[]).map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">✕</button></span>`).join('')}</div>
       <div class="opt-add-row"><input type="text" id="ed_new_opt" placeholder="أضف خيارًا واضغط Enter"><button type="button" class="btn btn-ghost btn-sm" id="ed_add_opt">إضافة</button></div>
     </div>
-    <div class="field-inline"><label class="flabel">شرط الظهور (اختياري)</label>
-      <input type="text" id="ed_cond" value="${(draft.cond||'').replace(/"/g,'&quot;')}" placeholder="مثال: يظهر إذا: هل يوجد سجل تجاري = نعم">
-      <div style="font-size:11.5px;color:var(--ink-400);margin-top:5px">وصف نصي حر يوضّح للمراجع منطق الإظهار — يُترجم لاحقًا إلى قاعدة شرطية فعلية عند الربط بقاعدة البيانات.</div>
+    <div class="field-inline"><label class="flabel">نص توضيحي صغير (اختياري)</label>
+      <input type="text" id="ed_hint" value="${(draft.hint||'').replace(/"/g,'&quot;')}" placeholder="يظهر تحت الحقل مباشرة">
+    </div>
+    <div class="field-inline">
+      <label class="flabel">شرط الظهور (اختياري)</label>
+      ${otherFields.length===0
+        ? `<div style="font-size:12px;color:var(--ink-400)">لا توجد حقول أخرى في هذا القسم بعد لربط شرط بها.</div>`
+        : `<div id="ed_cond_rows"></div>
+           <button type="button" class="btn btn-ghost btn-sm" id="ed_add_cond">+ إضافة شرط${condRows.length?' إضافي (و)':''}</button>
+           <div style="font-size:11px;color:var(--ink-400);margin-top:6px">إذا أضفت أكثر من شرط، يجب تحقق الكل معًا (AND) ليظهر الحقل.</div>`}
     </div>
     <div class="editor-actions">
       <button class="btn btn-ghost btn-sm" id="ed_cancel">إلغاء</button>
@@ -851,6 +931,7 @@ function openEditorFor(sectionId, questionId){
 
   document.getElementById('ed_type').addEventListener('change',(e)=>{
     document.getElementById('ed_options_wrap').style.display = OPTION_TYPES.includes(e.target.value) ? 'block':'none';
+    document.getElementById('ed_multiple_wrap').style.display = ['file','video'].includes(e.target.value) ? 'block':'none';
   });
   function addOpt(){
     const inp = document.getElementById('ed_new_opt');
@@ -859,19 +940,45 @@ function openEditorFor(sectionId, questionId){
     draft.options = draft.options||[];
     draft.options.push(v);
     inp.value='';
-    document.getElementById('ed_opts_row').innerHTML = draft.options.map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">✕</button></span>`).join('');
+    refreshOptsRow();
+  }
+  function refreshOptsRow(){
+    document.getElementById('ed_opts_row').innerHTML = (draft.options||[]).map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">✕</button></span>`).join('');
     document.getElementById('ed_opts_row').querySelectorAll('[data-rmopt]').forEach(b=>{
-      b.addEventListener('click',()=>{ draft.options.splice(parseInt(b.dataset.rmopt),1); addOpt.refresh&&addOpt.refresh(); document.getElementById('ed_opts_row').innerHTML = draft.options.map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">✕</button></span>`).join(''); attachRemoveHandlers(); });
+      b.addEventListener('click',()=>{ draft.options.splice(parseInt(b.dataset.rmopt),1); refreshOptsRow(); });
     });
   }
-  function attachRemoveHandlers(){
-    document.getElementById('ed_opts_row').querySelectorAll('[data-rmopt]').forEach(b=>{
-      b.addEventListener('click',()=>{ draft.options.splice(parseInt(b.dataset.rmopt),1); document.getElementById('ed_opts_row').innerHTML = draft.options.map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">✕</button></span>`).join(''); attachRemoveHandlers(); });
-    });
-  }
-  attachRemoveHandlers();
+  refreshOptsRow();
   document.getElementById('ed_add_opt').addEventListener('click',addOpt);
   document.getElementById('ed_new_opt').addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); addOpt(); }});
+
+  function refreshCondRows(){
+    const wrap = document.getElementById('ed_cond_rows');
+    if(!wrap) return;
+    wrap.innerHTML = condRows.map((c,i)=>condRowHTML(i,c,otherFields)).join('');
+    wrap.querySelectorAll('[data-condrow]').forEach(row=>{
+      const idx = parseInt(row.dataset.condrow);
+      row.querySelector('[data-cf="op"]').addEventListener('change',(e)=>{
+        condRows[idx].op = e.target.value;
+        row.querySelector('.cond-value-wrap').style.display = e.target.value==='not_empty' ? 'none':'block';
+      });
+      row.querySelector('[data-cf="field"]').addEventListener('change',(e)=>{ condRows[idx].field = e.target.value; });
+      const valInp = row.querySelector('[data-cf="value"]');
+      if(valInp) valInp.addEventListener('input',(e)=>{ condRows[idx].value = e.target.value; });
+    });
+    wrap.querySelectorAll('[data-rmcond]').forEach(b=>{
+      b.addEventListener('click',()=>{ condRows.splice(parseInt(b.dataset.rmcond),1); refreshCondRows(); });
+    });
+    const addBtn = document.getElementById('ed_add_cond');
+    if(addBtn) addBtn.textContent = condRows.length ? '+ إضافة شرط إضافي (و)' : '+ إضافة شرط';
+  }
+  if(otherFields.length){
+    refreshCondRows();
+    document.getElementById('ed_add_cond').addEventListener('click',()=>{
+      condRows.push({field:otherFields[0].id, op:"eq", value:""});
+      refreshCondRows();
+    });
+  }
 
   document.getElementById('ed_cancel').addEventListener('click',()=>{ box.remove(); });
   document.getElementById('ed_save').addEventListener('click', async ()=>{
@@ -880,8 +987,21 @@ function openEditorFor(sectionId, questionId){
     draft.label = label;
     draft.type = document.getElementById('ed_type').value;
     draft.required = document.getElementById('ed_required').checked;
-    draft.cond = document.getElementById('ed_cond').value.trim();
+    draft.multiple = ['file','video'].includes(draft.type) ? document.getElementById('ed_multiple').checked : false;
+    draft.hint = document.getElementById('ed_hint').value.trim();
     if(!OPTION_TYPES.includes(draft.type)) delete draft.options;
+
+    // بناء condition_expr من condRows
+    const finalRows = condRows
+      .filter(c => c.field && (c.op==='not_empty' || String(c.value||'').trim()!==''))
+      .map(c => {
+        const isMulti = ["in","not_in"].includes(c.op);
+        const value = c.op==='not_empty' ? undefined : (isMulti ? String(c.value).split(',').map(s=>s.trim()).filter(Boolean) : String(c.value).trim());
+        const out = { field: c.field, op: c.op };
+        if(value !== undefined) out.value = value;
+        return out;
+      });
+    draft.condition = finalRows.length===0 ? null : (finalRows.length===1 ? finalRows[0] : { all: finalRows });
 
     const saveBtn = document.getElementById('ed_save');
     saveBtn.disabled = true; saveBtn.textContent = 'جارٍ الحفظ…';
@@ -889,7 +1009,8 @@ function openEditorFor(sectionId, questionId){
     const dbPayload = {
       label: draft.label, type: draft.type, required: draft.required,
       options: draft.options && draft.options.length ? draft.options : null,
-      condition_expr: draft.cond ? { note: draft.cond } : null,
+      condition_expr: draft.condition,
+      multiple: draft.multiple, hint: draft.hint || null,
     };
 
     if(existing){
