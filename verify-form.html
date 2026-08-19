@@ -383,6 +383,9 @@ const state = {
 
 let SECTIONS = []; // تُعبَّى بواسطة loadFormDefinition() قبل أول عرض
 
+function setVal(id,v){ state.values[id]=v; }
+function getVal(id){ return state.values[id] ?? ""; }
+
 /* ---------------- مقيّم الشروط الشرطية (يقرأ condition_expr القادم من القاعدة) ---------------- */
 function evalCond(cond){
   if(!cond) return true;
