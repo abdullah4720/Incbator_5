@@ -84,6 +84,14 @@ a{color:inherit;}
   display:flex;align-items:center;gap:8px;flex:none;
 }
 .project-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--teal-500);box-shadow:0 0 0 3px rgba(20,148,147,.25);}
+.topbar-actions{display:flex;gap:8px;flex:none;}
+.btn-topbar{
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);color:#fff;
+  border-radius:9px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;
+  transition:background .15s;white-space:nowrap;font-family:inherit;
+}
+.btn-topbar:hover{background:rgba(255,255,255,.16);}
+.btn-topbar:disabled{opacity:.55;cursor:not-allowed;}
 .progress-shell{max-width:1180px;margin:12px auto 0;height:4px;background:rgba(255,255,255,.12);border-radius:4px;overflow:hidden;}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--teal-500),var(--gold-500));transition:width .35s ease;}
 .progress-label{max-width:1180px;margin:6px auto 0;font-size:11.5px;color:rgba(255,255,255,.55);display:flex;justify-content:space-between;}
@@ -251,6 +259,10 @@ input:disabled,select:disabled{background:#F0F1F4;color:var(--ink-400);}
       <div class="brand-sub" id="subProjectName">جاري تحميل بيانات المشروع…</div>
     </div>
     <div class="project-pill"><span class="dot"></span><span class="mono" id="pillProjectId">—</span></div>
+    <div class="topbar-actions">
+      <button class="btn-topbar" id="btnTopSave" title="حفظ البيانات الآن">💾 حفظ</button>
+      <button class="btn-topbar" id="btnLogout" title="تسجيل الخروج">⏻ خروج</button>
+    </div>
   </div>
   <div class="progress-shell"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
   <div class="progress-label"><span id="progressText">0% مكتمل</span><span id="draftStatus">لم يتم الحفظ بعد</span></div>
@@ -1101,8 +1113,54 @@ async function initApp(){
     showToast('تعذّر تحميل بيانات النموذج: ' + (e.message || 'خطأ غير معروف'));
   }
 
+  bindTopbarActions();
   renderAll();
 }
+
+/* ---------------- أزرار الحفظ وتسجيل الخروج في الشريط العلوي ---------------- */
+function bindTopbarActions(){
+  const saveBtn = document.getElementById('btnTopSave');
+  const logoutBtn = document.getElementById('btnLogout');
+
+  saveBtn.addEventListener('click', async ()=>{
+    saveBtn.disabled = true;
+    const original = saveBtn.textContent;
+    saveBtn.textContent = 'جارٍ الحفظ…';
+    await saveDraft(true);
+    saveBtn.disabled = false;
+    saveBtn.textContent = original;
+  });
+
+  logoutBtn.addEventListener('click', ()=>{
+    openLogoutConfirm();
+  });
+}
+
+/* تأكيد بسيط قبل تسجيل الخروج، مع خيار الحفظ أولًا لتفادي فقدان تعديلات غير محفوظة */
+function openLogoutConfirm(){
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(11,11,61,.45);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:26px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25);">
+      <h3 style="margin:0 0 6px;font-size:16px;color:var(--navy-800)">تسجيل الخروج</h3>
+      <p style="margin:0 0 18px;font-size:12.5px;color:var(--ink-600)">سيتم حفظ آخر تعديلاتك تلقائيًا قبل الخروج. هل تريد المتابعة؟</p>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-ghost" id="logoutCancelBtn">إلغاء</button>
+        <button class="btn btn-primary" id="logoutConfirmBtn">حفظ وخروج</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.getElementById('logoutCancelBtn').addEventListener('click', ()=> overlay.remove());
+  document.getElementById('logoutConfirmBtn').addEventListener('click', async ()=>{
+    const btn = document.getElementById('logoutConfirmBtn');
+    btn.disabled = true; btn.textContent = 'جارٍ الحفظ…';
+    await saveDraft(false);
+    sessionStorage.removeItem('ib5_session');
+    window.location.href = 'login.html';
+  });
+}
+
 initApp();
 </script>
 </body>
