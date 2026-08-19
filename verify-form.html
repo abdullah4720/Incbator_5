@@ -613,27 +613,43 @@ function renderField(f){
 }
 
 /* ---------------- عرض قسم الفريق ---------------- */
+/* مزامنة بيانات قائد الفريق (العضو الأول) من إجابات القسم الأول تلقائيًا —
+   لا داعي لإعادة إدخال اسم/هوية/جوال/بريد قائد الفريق بما إنها معروفة مسبقًا. */
+function syncLeaderFromProjectInfo(){
+  if(!state.members[0]) return;
+  state.members[0].name = getVal('f1_5') || '';
+  state.members[0].id = getVal('f1_6') || '';
+  state.members[0].phone = getVal('f1_7') || '';
+  state.members[0].email = getVal('f1_8') || '';
+  state.members[0].role = 'قائد الفريق';
+}
 function renderTeamSection(section){
-  let html = state.members.map((m,i)=>`
+  syncLeaderFromProjectInfo();
+  let html = state.members.map((m,i)=>{
+    const isLeader = i===0;
+    return `
     <div class="member-card">
       <div class="member-head">
-        <span class="member-tag">${i===0?'قائد الفريق':'عضو '+(i+1)}</span>
+        <span class="member-tag">${isLeader?'قائد الفريق':'عضو '+(i+1)}</span>
         ${state.members.length>2 && i>0 ? `<button type="button" class="member-remove" data-removemember="${i}">إزالة العضو</button>`:''}
       </div>
+      ${isLeader ? `<div class="field-hint" style="margin-bottom:14px">بيانات قائد الفريق (الاسم، الهوية، الجوال، البريد) مأخوذة تلقائيًا من القسم الأول — عدّلها من هناك إذا احتجت تصحيحها.</div>` : ''}
       <div class="two-col">
-        <div class="field"><div class="field-label">الاسم الرباعي<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="name" value="${m.name.replace(/"/g,'&quot;')}"></div>
-        <div class="field"><div class="field-label">رقم الهوية أو الإقامة<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="id" value="${m.id.replace(/"/g,'&quot;')}"></div>
+        <div class="field"><div class="field-label">الاسم الرباعي<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="name" value="${m.name.replace(/"/g,'&quot;')}" ${isLeader?'disabled':''}></div>
+        <div class="field"><div class="field-label">رقم الهوية أو الإقامة<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="id" value="${m.id.replace(/"/g,'&quot;')}" ${isLeader?'disabled':''}></div>
       </div>
       <div class="two-col">
-        <div class="field"><div class="field-label">رقم الجوال<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="phone" value="${m.phone.replace(/"/g,'&quot;')}"></div>
-        <div class="field"><div class="field-label">البريد الإلكتروني<span class="req-star">*</span></div><input type="email" data-member="${i}" data-mkey="email" value="${m.email.replace(/"/g,'&quot;')}"></div>
+        <div class="field"><div class="field-label">رقم الجوال<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="phone" value="${m.phone.replace(/"/g,'&quot;')}" ${isLeader?'disabled':''}></div>
+        <div class="field"><div class="field-label">البريد الإلكتروني<span class="req-star">*</span></div><input type="email" data-member="${i}" data-mkey="email" value="${m.email.replace(/"/g,'&quot;')}" ${isLeader?'disabled':''}></div>
       </div>
       <div class="two-col">
         <div class="field"><div class="field-label">الدور الرئيس في المشروع<span class="req-star">*</span></div>
-          <select data-member="${i}" data-mkey="role">
-            <option value="">اختر…</option>
-            ${["قائد الفريق","التطوير التقني","تطوير المنتج أو الخدمة","نموذج العمل التجاري","التسويق والمبيعات","الإدارة المالية","العمليات","التصميم وتجربة المستخدم","البحث والتطوير","دور آخر"].map(o=>`<option value="${o}" ${m.role===o?'selected':''}>${o}</option>`).join('')}
-          </select>
+          ${isLeader
+            ? `<input type="text" value="قائد الفريق" disabled>`
+            : `<select data-member="${i}" data-mkey="role">
+                <option value="">اختر…</option>
+                ${["التطوير التقني","تطوير المنتج أو الخدمة","نموذج العمل التجاري","التسويق والمبيعات","الإدارة المالية","العمليات","التصميم وتجربة المستخدم","البحث والتطوير","دور آخر"].map(o=>`<option value="${o}" ${m.role===o?'selected':''}>${o}</option>`).join('')}
+              </select>`}
         </div>
         <div class="field"><div class="field-label">التخصص أو مجال الخبرة<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="spec" value="${m.spec.replace(/"/g,'&quot;')}"></div>
       </div>
@@ -646,7 +662,7 @@ function renderTeamSection(section){
         </div>
       </div>
     </div>
-  `).join('');
+  `;}).join('');
   html += `<div class="add-member-btn" id="addMemberBtn">+ إضافة عضو جديد</div>`;
   html += `<div style="height:22px"></div>`;
   html += visibleFields(section).map(renderField).join('');
@@ -932,6 +948,7 @@ function validateSection(section){
 /* ---------------- الحفظ والإرسال ---------------- */
 async function saveDraft(showToastOnSuccess = true){
   if(!FORM_ID){ showToast('تعذّر الحفظ: لم يتم تحميل النموذج بعد'); return false; }
+  syncLeaderFromProjectInfo();
   document.getElementById('draftStatus').textContent = 'جارٍ الحفظ…';
   try{
     // 1) تحديث نسبة الاكتمال وطابع التحديث على verification_forms
