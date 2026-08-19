@@ -812,7 +812,12 @@ function bindSectionEvents(section){
       showToast('جارٍ رفع الملف…');
       for(const file of filesToUpload){
         try{
-          const storagePath = `${PROJECT_ID}/${id}/${Date.now()}_${file.name}`;
+          // Supabase Storage لا يقبل مفاتيح تحتوي أحرفًا عربية أو رموزًا خاصة —
+          // نستخدم اسمًا آمنًا (ASCII فقط) لمسار التخزين الفعلي، ونحتفظ بالاسم
+          // العربي الأصلي في عمود file_name للعرض فقط.
+          const ext = (file.name.split('.').pop() || 'dat').replace(/[^a-zA-Z0-9]/g,'').toLowerCase() || 'dat';
+          const safeName = `${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
+          const storagePath = `${PROJECT_ID}/${id}/${safeName}`;
           const { error: upErr } = await SB_AUTH.storage.from('form-attachments').upload(storagePath, file, { upsert: false });
           if(upErr) throw upErr;
 
