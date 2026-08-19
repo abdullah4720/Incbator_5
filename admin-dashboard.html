@@ -182,6 +182,93 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
 .toast .tdot{width:7px;height:7px;border-radius:50%;background:var(--teal-500);}
 
 .empty-hint{text-align:center;padding:30px;color:var(--ink-400);font-size:13px;}
+
+/* ===== مراجعة الطلبات: قائمة الانتظار ===== */
+.queue-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
+.queue-chip{
+  flex:1;min-width:150px;background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:14px 16px;cursor:pointer;
+  transition:border-color .15s, transform .1s;
+}
+.queue-chip:hover{transform:translateY(-1px);}
+.queue-chip.active{border-color:var(--teal-600);background:var(--teal-100);}
+.queue-chip .qc-num{font-family:'Cairo',sans-serif;font-weight:800;font-size:22px;color:var(--navy-800);}
+.queue-chip .qc-label{font-size:11.5px;color:var(--ink-600);margin-top:2px;}
+.queue-row{cursor:pointer;transition:background .12s;}
+.queue-row:hover{background:var(--paper);}
+.avatar-sm{width:30px;height:30px;border-radius:50%;background:var(--navy-800);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex:none;}
+
+/* ===== مراجعة الطلبات: صفحة التفاصيل ===== */
+.review-detail-header{
+  background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 20px;margin-bottom:16px;
+  display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  position:sticky;top:8px;z-index:20;box-shadow:var(--shadow);
+}
+.review-nav-arrows{display:flex;gap:6px;}
+.review-nav-arrows button{background:var(--paper);border:1px solid var(--line);border-radius:8px;width:32px;height:32px;cursor:pointer;font-size:14px;color:var(--ink-600);}
+.review-nav-arrows button:disabled{opacity:.35;cursor:not-allowed;}
+.review-nav-arrows button:not(:disabled):hover{border-color:var(--teal-500);color:var(--teal-600);}
+
+.review-layout{display:grid;grid-template-columns:300px 1fr;gap:18px;align-items:start;}
+@media(max-width:900px){.review-layout{grid-template-columns:1fr;}}
+
+.eval-panel{position:sticky;top:88px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:20px;}
+@media(max-width:900px){.eval-panel{position:static;}}
+.eval-ring-wrap{display:flex;flex-direction:column;align-items:center;padding-bottom:16px;margin-bottom:16px;border-bottom:1px solid var(--line);}
+.eval-ring{width:104px;height:104px;position:relative;}
+.eval-ring svg{transform:rotate(-90deg);}
+.eval-ring-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Cairo',sans-serif;font-weight:800;font-size:19px;color:var(--navy-800);}
+.eval-overall-text{margin-top:10px;font-size:13px;font-weight:700;text-align:center;}
+.req-row{border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;}
+.req-row-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.req-row-icon{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;flex:none;}
+.req-row-label{font-size:12px;font-weight:600;color:var(--ink-900);flex:1;}
+.eval-panel select{font-size:12px;padding:6px 8px;}
+
+/* تبويبات فرعية على خلفية بيضاء (بخلاف تبويبات الشريط العلوي الداكنة) */
+.subtabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px;overflow-x:auto;}
+.subtab-btn{background:none;border:none;padding:10px 16px;font-size:13px;font-weight:600;color:var(--ink-400);cursor:pointer;white-space:nowrap;border-bottom:2.5px solid transparent;margin-bottom:-1px;}
+.subtab-btn.active{color:var(--navy-800);border-bottom-color:var(--teal-600);}
+.subtab-btn:hover:not(.active){color:var(--ink-600);}
+
+.fact-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+@media(max-width:700px){.fact-grid{grid-template-columns:repeat(2,1fr);}}
+.fact-card{background:var(--paper);border-radius:10px;padding:12px 14px;}
+.fact-card .fc-label{font-size:11px;color:var(--ink-400);margin-bottom:3px;}
+.fact-card .fc-val{font-size:13.5px;font-weight:600;color:var(--ink-900);}
+
+.qa-accordion .qa-sec{border:1px solid var(--line);border-radius:10px;margin-bottom:10px;overflow:hidden;}
+.qa-sec-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;cursor:pointer;background:var(--paper);}
+.qa-sec-head:hover{background:#EEF1F5;}
+.qa-sec-title{font-size:13.5px;font-weight:700;color:var(--navy-800);}
+.qa-sec-count{font-size:11px;color:var(--ink-400);}
+.qa-sec-body{padding:4px 16px 12px;display:none;}
+.qa-sec.open .qa-sec-body{display:block;}
+.qa-sec.open .qa-chevron{transform:rotate(180deg);}
+.qa-chevron{transition:transform .15s;color:var(--ink-400);}
+.qa-item{padding:9px 0;border-bottom:1px solid var(--line);}
+.qa-item:last-child{border-bottom:none;}
+.qa-item .qa-q{font-size:11.5px;color:var(--ink-400);margin-bottom:3px;}
+.qa-item .qa-a{font-size:13px;color:var(--ink-900);}
+
+.member-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;}
+.member-mini-card{border:1px solid var(--line);border-radius:12px;padding:14px;}
+.member-mini-card .mmc-top{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.member-mini-card .mmc-name{font-size:13.5px;font-weight:700;color:var(--ink-900);}
+.member-mini-card .mmc-role{font-size:11px;color:var(--ink-400);}
+.member-mini-card .mmc-row{font-size:12px;color:var(--ink-600);margin-top:4px;display:flex;justify-content:space-between;}
+
+.file-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
+.file-card{border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;}
+.file-card .fic{font-size:26px;margin-bottom:8px;}
+.file-card .fname{font-size:12px;font-weight:600;color:var(--ink-900);word-break:break-word;margin-bottom:2px;}
+.file-card .ffield{font-size:10.5px;color:var(--ink-400);margin-bottom:10px;}
+
+.note-bubble{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;}
+.note-bubble-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.note-bubble .nb-name{font-size:12px;font-weight:700;color:var(--navy-800);}
+.note-bubble .nb-time{font-size:10.5px;color:var(--ink-400);margin-inline-start:auto;}
+.note-bubble .nb-text{font-size:13px;color:var(--ink-900);}
+
 .eq-divider{width:100%;height:20px;display:block;background:var(--paper);}
 .avatar{width:32px;height:32px;border-radius:50%;background:var(--navy-800);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none;}
 .user-cell{display:flex;align-items:center;gap:10px;}
@@ -1634,56 +1721,101 @@ function renderSettings(){
 }
 
 /* ==========================================================================
-   مراجعة الطلبات — قائمة الطلبات، عرض تفصيلي، وتقييم المتطلبات الستة
+   مراجعة الطلبات — قائمة انتظار قابلة للفرز + صفحة تفاصيل بلوحة تقييم ثابتة
    ========================================================================== */
-let reviewFormsRaw = [];         // verification_forms خام (بدون ربط)
-let reviewFilter = { q:"", track:"", status:"" };
+// يطابق رموز v: في STAGES بملف verify-form.html — تُستخدم لعرض اسم مرحلة
+// النموذج الأولي بصيغة مقروءة بدل الرمز الداخلي المخزَّن في f5_1.
+const STAGE_CODE_LABELS = {
+  idea:"مرحلة الفكرة", design:"مرحلة التصور والتصميم", poc:"نموذج إثبات مفهوم (PoC)",
+  proto_early:"نموذج أولي أولي", proto_func:"نموذج أولي وظيفي",
+  mvp:"منتج أولي قابل للاستخدام (MVP)", pilot:"منتج/خدمة قيد التجربة الميدانية",
+  market:"منتج/خدمة مطروحة في السوق",
+};
+let reviewFormsRaw = [];
+let reviewReqStatusAll = [];      // كل صفوف requirement_status لكل النماذج (تُحمَّل مرة واحدة)
+let reviewFilter = { q:"", track:"", status:"", queue:"" }; // queue: '' | 'needs_review' | 'ready' | 'blocked'
 let currentReviewProjectId = null;
-let reviewDetail = null;         // {form, answers, members, files, reqStatus, notes} للمشروع المفتوح حاليًا
+let reviewDetail = null;
 let reviewDetailLoading = false;
+let reviewActiveSubtab = "overview";
+let reviewOpenAccordions = new Set();
 
 const REQUIREMENTS = [
-  {key:"commercial_registration", label:"السجل التجاري"},
-  {key:"camp_attendance", label:"حضور المعسكر"},
-  {key:"team_size", label:"عدد أعضاء الفريق"},
-  {key:"prototype", label:"النموذج الأولي"},
-  {key:"pitch_deck", label:"العرض الاستثماري"},
-  {key:"market_validation", label:"التحقق من احتياج السوق"},
+  {key:"commercial_registration", label:"السجل التجاري", icon:"📋", color:"var(--teal-600)"},
+  {key:"camp_attendance", label:"حضور المعسكر", icon:"🏕️", color:"var(--purple)"},
+  {key:"team_size", label:"عدد أعضاء الفريق", icon:"👥", color:"var(--gold-500)"},
+  {key:"prototype", label:"النموذج الأولي", icon:"🚀", color:"var(--eq-green)"},
+  {key:"pitch_deck", label:"العرض الاستثماري", icon:"💼", color:"var(--teal-600)"},
+  {key:"market_validation", label:"التحقق من احتياج السوق", icon:"🔍", color:"var(--purple)"},
 ];
 const REQ_STATUS_OPTIONS = [
-  {v:"pending", l:"لم تتم المراجعة", cls:"mid"},
+  {v:"pending", l:"لم تُراجَع", cls:"mid"},
   {v:"ok", l:"مستوفٍ", cls:"ok"},
   {v:"mid", l:"يحتاج استكمال", cls:"mid"},
   {v:"no", l:"غير مستوفٍ", cls:"no"},
-  {v:"manual_review", l:"يحتاج مراجعة يدوية", cls:"mid"},
+  {v:"manual_review", l:"مراجعة يدوية", cls:"mid"},
 ];
 function reqBadge(status){
   const opt = REQ_STATUS_OPTIONS.find(o=>o.v===status) || REQ_STATUS_OPTIONS[0];
   return `<span class="badge ${opt.cls}">${opt.l}</span>`;
 }
-const STATUS_LABELS = {
-  draft:["مسودة","mid"], submitted:["مُرسَل","ok"], needs_completion:["يحتاج استكمال","no"],
+const STATUS_LABELS = { draft:["مسودة","mid"], submitted:["مُرسَل","ok"], needs_completion:["يحتاج استكمال","no"] };
+const OVERALL_LABELS = {
+  ready_to_advance:["جاهز للانتقال","ok"], needs_completion:["يحتاج استكمال","mid"],
+  not_ready:["غير مستوفٍ","no"], needs_manual_review:["مراجعة يدوية","mid"], pending:["لم تبدأ المراجعة","mid"],
 };
 
+/* يطابق منطق compute_overall_readiness في قاعدة البيانات تمامًا — يُستخدم
+   لعرض فوري في قائمة الانتظار دون استدعاء RPC لكل صف على حدة. */
+function computeReadinessClient(reqRowsForForm){
+  if(!reqRowsForForm || reqRowsForForm.length===0) return 'pending';
+  const statuses = reqRowsForForm.map(r=>r.status);
+  if(statuses.includes('no')) return 'not_ready';
+  if(statuses.includes('manual_review')) return 'needs_manual_review';
+  if(statuses.includes('mid')) return 'needs_completion';
+  if(statuses.length < REQUIREMENTS.length) return 'needs_completion';
+  return 'ready_to_advance';
+}
+
 async function loadReviewList(){
-  const { data, error } = await sb.from('verification_forms').select('*').order('updated_at', {ascending:false});
-  if(error){ showToast('تعذّر تحميل قائمة الطلبات: '+error.message); reviewFormsRaw=[]; return; }
-  reviewFormsRaw = data || [];
+  const [{data: forms, error: fErr}, {data: reqs, error: rErr}] = await Promise.all([
+    sb.from('verification_forms').select('*').order('updated_at', {ascending:false}),
+    sb.from('requirement_status').select('form_id, requirement, status'),
+  ]);
+  if(fErr){ showToast('تعذّر تحميل قائمة الطلبات: '+fErr.message); reviewFormsRaw=[]; return; }
+  reviewFormsRaw = forms || [];
+  reviewReqStatusAll = reqs || [];
 }
 
 function joinedReviewRows(){
   return reviewFormsRaw.map(vf=>{
     const proj = eligibleProjects.find(p=>p.project_id===vf.project_id) || {};
+    const reqRows = reviewReqStatusAll.filter(r=>r.form_id===vf.id);
+    const overall = computeReadinessClient(reqRows);
     return {
       form_id: vf.id, project_id: vf.project_id, status: vf.status,
       completion_pct: vf.completion_pct||0, submitted_at: vf.submitted_at, updated_at: vf.updated_at,
       project_name: proj.project_name || vf.project_id, track: proj.track || '—',
       team_leader_name: proj.team_leader_name || '—', team_leader_email: proj.team_leader_email || '—',
+      overall, reqEvaluatedCount: reqRows.length,
     };
   });
 }
+function queueBuckets(rows){
+  return {
+    needs_review: rows.filter(r=>r.status==='submitted' && r.reqEvaluatedCount < REQUIREMENTS.length),
+    ready: rows.filter(r=>r.overall==='ready_to_advance'),
+    blocked: rows.filter(r=>r.overall==='not_ready' || r.overall==='needs_manual_review'),
+  };
+}
 function filteredReviewRows(){
-  return joinedReviewRows().filter(r=>{
+  let rows = joinedReviewRows();
+  const buckets = queueBuckets(rows);
+  if(reviewFilter.queue==='needs_review') rows = buckets.needs_review;
+  else if(reviewFilter.queue==='ready') rows = buckets.ready;
+  else if(reviewFilter.queue==='blocked') rows = buckets.blocked;
+
+  rows = rows.filter(r=>{
     if(reviewFilter.track && r.track!==reviewFilter.track) return false;
     if(reviewFilter.status && r.status!==reviewFilter.status) return false;
     if(reviewFilter.q){
@@ -1693,6 +1825,14 @@ function filteredReviewRows(){
     }
     return true;
   });
+  // الأولوية: مُرسَل وغير مُقيَّم بالكامل أولًا، ثم الأحدث تحديثًا
+  rows.sort((a,b)=>{
+    const aPending = a.status==='submitted' && a.reqEvaluatedCount < REQUIREMENTS.length;
+    const bPending = b.status==='submitted' && b.reqEvaluatedCount < REQUIREMENTS.length;
+    if(aPending !== bPending) return aPending ? -1 : 1;
+    return new Date(b.updated_at) - new Date(a.updated_at);
+  });
+  return rows;
 }
 
 function renderReview(){
@@ -1702,44 +1842,62 @@ function renderReview(){
 
 function renderReviewList(){
   const el = document.getElementById('view-review');
+  const allRows = joinedReviewRows();
+  const buckets = queueBuckets(allRows);
   const rows = filteredReviewRows();
-  const canEdit = currentAdmin && ['admin','reviewer'].includes(currentAdmin.role);
+
   el.innerHTML = `
     <div class="section-title-row">
-      <div><h2>مراجعة الطلبات</h2><p>${reviewFormsRaw.length} طلب مسجَّل — افتح أي مشروع لمراجعة إجاباته وملفاته وتقييم المتطلبات.</p></div>
-      <button class="btn btn-ghost" id="refreshReviewBtn">تحديث القائمة</button>
+      <div><h2>مراجعة الطلبات</h2><p>${allRows.length} طلب مسجَّل — رتّبناها بالأولوية: المُرسَل وغير المُقيَّم بالكامل أولًا.</p></div>
+      <button class="btn btn-ghost" id="refreshReviewBtn">تحديث</button>
     </div>
+
+    <div class="queue-stats">
+      <div class="queue-chip ${reviewFilter.queue===''?'active':''}" data-queue="">
+        <div class="qc-num mono">${allRows.length}</div><div class="qc-label">كل الطلبات</div>
+      </div>
+      <div class="queue-chip ${reviewFilter.queue==='needs_review'?'active':''}" data-queue="needs_review" style="border-color:${reviewFilter.queue==='needs_review'?'':'var(--amber)'}">
+        <div class="qc-num mono" style="color:var(--amber)">${buckets.needs_review.length}</div><div class="qc-label">بانتظار المراجعة</div>
+      </div>
+      <div class="queue-chip ${reviewFilter.queue==='ready'?'active':''}" data-queue="ready">
+        <div class="qc-num mono" style="color:var(--success)">${buckets.ready.length}</div><div class="qc-label">جاهز للانتقال</div>
+      </div>
+      <div class="queue-chip ${reviewFilter.queue==='blocked'?'active':''}" data-queue="blocked">
+        <div class="qc-num mono" style="color:var(--danger)">${buckets.blocked.length}</div><div class="qc-label">غير مستوفٍ / يحتاج قرار</div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="filter-row">
         <input type="text" class="search-box" id="reviewSearch" placeholder="ابحث برقم المشروع، اسم الفريق، أو البريد…" value="${reviewFilter.q}">
         <select id="reviewTrackFilter"><option value="">كل المسارات</option>${TRACKS.map(t=>`<option ${reviewFilter.track===t?'selected':''}>${t}</option>`).join('')}</select>
         <select id="reviewStatusFilter">
-          <option value="">كل الحالات</option>
+          <option value="">كل حالات الإرسال</option>
           <option value="draft" ${reviewFilter.status==='draft'?'selected':''}>مسودة</option>
           <option value="submitted" ${reviewFilter.status==='submitted'?'selected':''}>مُرسَل</option>
           <option value="needs_completion" ${reviewFilter.status==='needs_completion'?'selected':''}>يحتاج استكمال</option>
         </select>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th><th>قائد الفريق</th><th>الاكتمال</th><th>الحالة</th><th>آخر تحديث</th><th></th></tr></thead>
+        <thead><tr><th>الفريق</th><th>المسار</th><th>حالة الإرسال</th><th>الجاهزية</th><th>الاكتمال</th><th>آخر تحديث</th></tr></thead>
         <tbody id="reviewTbody"></tbody>
       </table></div>
     </div>
   `;
   const tb = document.getElementById('reviewTbody');
-  if(rows.length===0){ tb.innerHTML = `<tr><td colspan="8"><div class="empty-hint">لا توجد طلبات مطابقة</div></td></tr>`; }
+  if(rows.length===0){ tb.innerHTML = `<tr><td colspan="6"><div class="empty-hint">لا توجد طلبات مطابقة</div></td></tr>`; }
   else{
     tb.innerHTML = rows.map(r=>{
       const st = STATUS_LABELS[r.status] || [r.status,'mid'];
-      return `<tr>
-        <td class="mono">${r.project_id}</td>
-        <td>${r.project_name}</td>
+      const ov = OVERALL_LABELS[r.overall] || OVERALL_LABELS.pending;
+      return `<tr class="queue-row" data-openreview="${r.project_id}">
+        <td><div class="user-cell"><div class="avatar-sm">${initials(r.team_leader_name||r.project_name)}</div>
+          <div><div class="un">${r.project_name}</div><div class="ue mono">${r.project_id}</div></div></div></td>
         <td>${r.track}</td>
-        <td>${r.team_leader_name}</td>
-        <td class="mono">${r.completion_pct}%</td>
         <td><span class="badge ${st[1]}">${st[0]}</span></td>
+        <td><span class="badge ${ov[1]}">${ov[0]}</span> <span style="font-size:10.5px;color:var(--ink-400)">(${r.reqEvaluatedCount}/${REQUIREMENTS.length})</span></td>
+        <td class="mono">${r.completion_pct}%</td>
         <td style="color:var(--ink-400);font-size:12px">${relativeTime(r.updated_at)}</td>
-        <td style="text-align:left"><button class="btn btn-ghost btn-sm" data-openreview="${r.project_id}">${canEdit?'مراجعة':'عرض'}</button></td>
       </tr>`;
     }).join('');
   }
@@ -1747,36 +1905,45 @@ function renderReviewList(){
   document.getElementById('reviewTrackFilter').addEventListener('change', e=>{ reviewFilter.track=e.target.value; renderReviewList(); });
   document.getElementById('reviewStatusFilter').addEventListener('change', e=>{ reviewFilter.status=e.target.value; renderReviewList(); });
   document.getElementById('refreshReviewBtn').addEventListener('click', async ()=>{ await loadReviewList(); renderReviewList(); showToast('تم تحديث القائمة'); });
-  document.querySelectorAll('[data-openreview]').forEach(b=>{
-    b.addEventListener('click', ()=>{ currentReviewProjectId = b.dataset.openreview; reviewDetail = null; renderReview(); });
+  document.querySelectorAll('.queue-chip').forEach(c=>{
+    c.addEventListener('click', ()=>{ reviewFilter.queue = c.dataset.queue; renderReviewList(); });
+  });
+  document.querySelectorAll('[data-openreview]').forEach(row=>{
+    row.addEventListener('click', ()=>{ openReviewDetail(row.dataset.openreview); });
   });
 }
 
-/* ---------------- تحميل وعرض تفاصيل طلب واحد ---------------- */
+function openReviewDetail(projectId){
+  currentReviewProjectId = projectId;
+  reviewDetail = null;
+  reviewActiveSubtab = "overview";
+  reviewOpenAccordions = new Set();
+  renderReview();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ---------------- تحميل تفاصيل طلب واحد ---------------- */
 async function loadReviewDetail(projectId){
   reviewDetailLoading = true;
   try{
     const { data: form, error: formErr } = await sb.from('verification_forms').select('*').eq('project_id', projectId).maybeSingle();
     if(formErr || !form){ reviewDetail = null; return; }
-    const [{data: answers}, {data: members}, {data: files}, {data: reqRows}, {data: notes}, {data: overall}] = await Promise.all([
+    const [{data: answers}, {data: members}, {data: files}, {data: reqRows}, {data: notes}] = await Promise.all([
       sb.from('form_answers').select('field_key, value_text, value_json').eq('form_id', form.id),
       sb.from('team_members').select('*').eq('form_id', form.id).order('order_index'),
       sb.from('form_files').select('*').eq('form_id', form.id).is('deleted_at', null),
       sb.from('requirement_status').select('*').eq('form_id', form.id),
       sb.from('review_notes').select('*').eq('form_id', form.id).order('created_at', {ascending:false}),
-      sb.rpc('compute_overall_readiness', { p_form_id: form.id }),
     ]);
-    reviewDetail = { form, answers: answers||[], members: members||[], files: files||[], reqRows: reqRows||[], notes: notes||[], overall: overall||'pending' };
+    reviewDetail = { form, answers: answers||[], members: members||[], files: files||[], reqRows: reqRows||[], notes: notes||[] };
   } catch(e){
     showToast('تعذّر تحميل تفاصيل الطلب: '+(e.message||'خطأ غير معروف'));
     reviewDetail = null;
   }
   reviewDetailLoading = false;
 }
-
 function renderReviewDetailShell(){
   const el = document.getElementById('view-review');
-  const proj = eligibleProjects.find(p=>p.project_id===currentReviewProjectId) || {};
   if(!reviewDetail && !reviewDetailLoading){
     el.innerHTML = `<div class="empty-hint">جارٍ تحميل تفاصيل الطلب…</div>`;
     loadReviewDetail(currentReviewProjectId).then(renderReview);
@@ -1784,179 +1951,280 @@ function renderReviewDetailShell(){
   }
   if(reviewDetailLoading){ el.innerHTML = `<div class="empty-hint">جارٍ تحميل تفاصيل الطلب…</div>`; return; }
   if(!reviewDetail){ el.innerHTML = `<div class="empty-hint">تعذّر تحميل هذا الطلب.</div>`; return; }
-  renderReviewDetail(proj);
+  renderReviewDetail();
 }
-
 function ansMap(){
   const m = {};
   reviewDetail.answers.forEach(a=>{ m[a.field_key] = a.value_json!==null ? a.value_json : a.value_text; });
   return m;
 }
 function fmtAnsValue(v){
-  if(v===null||v===undefined||v==='') return '<span style="color:var(--ink-400)">—</span>';
+  if(v===null||v===undefined||v==='') return '<span style="color:var(--ink-400)">لم تتم الإجابة</span>';
   if(Array.isArray(v)) return v.join('، ');
   return String(v);
 }
 
-function renderReviewDetail(proj){
+/* ---------------- الحاوية الرئيسة: رأس ثابت + شريط تقييم ثابت + تبويبات ---------------- */
+function renderReviewDetail(){
   const el = document.getElementById('view-review');
+  const proj = eligibleProjects.find(p=>p.project_id===currentReviewProjectId) || {};
   const canEdit = currentAdmin && ['admin','reviewer'].includes(currentAdmin.role);
-  const { form, members, files, reqRows, notes, overall } = reviewDetail;
-  const av = ansMap();
+  const { form } = reviewDetail;
   const st = STATUS_LABELS[form.status] || [form.status,'mid'];
-  const overallMap = {ready_to_advance:['مستوفٍ للانتقال','ok'], needs_completion:['يحتاج استكمال','mid'], not_ready:['غير مستوفٍ','no'], needs_manual_review:['يحتاج مراجعة يدوية','mid'], pending:['لم تكتمل المراجعة','mid']};
-  const ov = overallMap[overall] || overallMap.pending;
+
+  const queueIds = filteredReviewRows().map(r=>r.project_id);
+  const curIdx = queueIds.indexOf(currentReviewProjectId);
+  const hasPrev = curIdx > 0;
+  const hasNext = curIdx > -1 && curIdx < queueIds.length-1;
 
   el.innerHTML = `
-    <div class="section-title-row">
-      <div>
-        <button class="btn btn-ghost btn-sm" id="backToReviewList" style="margin-bottom:10px">→ رجوع للقائمة</button>
-        <h2>${proj.project_name || currentReviewProjectId} <span class="mono" style="font-size:12px;color:var(--ink-400)">(${currentReviewProjectId})</span></h2>
-        <p>قائد الفريق: ${proj.team_leader_name||'—'} · ${proj.team_leader_email||'—'} · المسار: ${proj.track||'—'}</p>
+    <div class="review-detail-header">
+      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+        <button class="btn btn-ghost btn-sm" id="backToReviewList">→ القائمة</button>
+        <div style="min-width:0">
+          <div style="font-size:15px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${proj.project_name||currentReviewProjectId}</div>
+          <div style="font-size:11.5px;color:var(--ink-400)" class="mono">${currentReviewProjectId} · ${proj.team_leader_name||'—'}</div>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;align-items:center;gap:10px">
         <span class="badge ${st[1]}">${st[0]}</span>
-        <span class="badge ${ov[1]}">الحالة العامة: ${ov[0]}</span>
+        <div class="review-nav-arrows">
+          <button id="prevReviewBtn" ${hasPrev?'':'disabled'} title="الطلب السابق في القائمة">›</button>
+          <button id="nextReviewBtn" ${hasNext?'':'disabled'} title="الطلب التالي في القائمة">‹</button>
+        </div>
       </div>
     </div>
 
-    <div class="card" style="margin-bottom:18px">
-      <div class="section-title-row"><div><h2>تقييم المتطلبات الستة</h2><p>${canEdit?'حدّد حالة كل متطلب — الحالة العامة أعلاه تُحسب تلقائيًا من هذه التقييمات.':'قراءة فقط — لا تملك صلاحية التعديل.'}</p></div></div>
-      <div class="checklist-grid" id="reqGrid"></div>
-    </div>
-
-    <div class="card" style="margin-bottom:18px">
-      <div class="section-title-row"><div><h2>أعضاء الفريق (${members.length})</h2></div></div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>الاسم</th><th>الدور</th><th>التخصص</th><th>الجوال</th><th>البريد</th><th>حضر المعسكر</th></tr></thead>
-        <tbody>${members.map(m=>`<tr>
-          <td>${m.full_name}${m.is_leader?' <span class="badge ok" style="margin-inline-start:4px">قائد</span>':''}</td>
-          <td>${m.role_in_project||'—'}</td><td>${m.specialization||'—'}</td>
-          <td class="mono">${m.phone||'—'}</td><td class="mono">${m.email||'—'}</td>
-          <td>${m.attended_camp===true?'نعم':m.attended_camp===false?'لا':'—'}</td>
-        </tr>`).join('') || `<tr><td colspan="6"><div class="empty-hint">لا يوجد أعضاء مسجَّلون بعد</div></td></tr>`}</tbody>
-      </table></div>
-    </div>
-
-    <div class="card" style="margin-bottom:18px">
-      <div class="section-title-row"><div><h2>الملفات المرفوعة (${files.length})</h2></div></div>
-      <div id="filesListWrap">${files.length===0?`<div class="empty-hint">لا توجد ملفات مرفوعة</div>`:''}</div>
-    </div>
-
-    <div class="card" style="margin-bottom:18px">
-      <div class="section-title-row"><div><h2>إجابات النموذج كاملة</h2></div></div>
-      <div id="answersWrap"></div>
-    </div>
-
-    <div class="card">
-      <div class="section-title-row"><div><h2>ملاحظات المراجعة</h2></div></div>
-      <div id="notesListWrap">${notes.map(n=>`
-        <div style="border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:8px">
-          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-400);margin-bottom:4px">
-            <span>${n.is_internal?'ملاحظة داخلية (لا يراها المشارك)':'ظاهرة للمشارك'}</span>
-            <span>${relativeTime(n.created_at)}</span>
-          </div>
-          <div style="font-size:13px">${n.note}</div>
-        </div>
-      `).join('') || `<div class="empty-hint">لا توجد ملاحظات بعد</div>`}</div>
-      ${canEdit ? `
-        <div class="field-inline" style="margin-top:14px">
-          <label class="flabel">إضافة ملاحظة جديدة</label>
-          <textarea id="newNoteText" placeholder="اكتب ملاحظتك هنا…"></textarea>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-          <div class="toggle"><input type="checkbox" id="newNoteVisible"><label class="tk" for="newNoteVisible"></label></div>
-          <span style="font-size:12.5px;color:var(--ink-600)">اجعلها ظاهرة للمشارك (بدل ملاحظة داخلية فقط)</span>
-        </div>
-        <button class="btn btn-primary btn-sm" id="addNoteBtn">إضافة الملاحظة</button>
-      ` : ''}
+    <div class="review-layout">
+      <div class="eval-panel" id="evalPanel"></div>
+      <div class="card">
+        <div class="subtabs" id="reviewSubtabs"></div>
+        <div id="subtabContent"></div>
+      </div>
     </div>
   `;
 
   document.getElementById('backToReviewList').addEventListener('click', ()=>{ currentReviewProjectId=null; reviewDetail=null; renderReview(); });
+  if(hasPrev) document.getElementById('prevReviewBtn').addEventListener('click', ()=>openReviewDetail(queueIds[curIdx-1]));
+  if(hasNext) document.getElementById('nextReviewBtn').addEventListener('click', ()=>openReviewDetail(queueIds[curIdx+1]));
 
-  // شبكة تقييم المتطلبات
-  const reqGrid = document.getElementById('reqGrid');
-  reqGrid.innerHTML = REQUIREMENTS.map(r=>{
-    const existing = reqRows.find(x=>x.requirement===r.key);
-    const currentStatus = existing ? existing.status : 'pending';
-    return `<div class="checklist-row" style="flex-direction:column;align-items:stretch;gap:8px">
-      <div style="display:flex;justify-content:space-between;align-items:center"><span class="cr-label">${r.label}</span>${reqBadge(currentStatus)}</div>
-      ${canEdit ? `<select data-reqkey="${r.key}" style="font-size:12.5px">${REQ_STATUS_OPTIONS.map(o=>`<option value="${o.v}" ${currentStatus===o.v?'selected':''}>${o.l}</option>`).join('')}</select>` : ''}
-    </div>`;
-  }).join('');
+  renderEvalPanel(canEdit);
+  renderSubtabs();
+}
+
+/* ---------------- لوحة التقييم الثابتة (حلقة الجاهزية + المتطلبات الستة) ---------------- */
+function renderEvalPanel(canEdit){
+  const panel = document.getElementById('evalPanel');
+  const { form, reqRows } = reviewDetail;
+  const overall = computeReadinessClient(reqRows);
+  const ov = OVERALL_LABELS[overall] || OVERALL_LABELS.pending;
+  const okCount = REQUIREMENTS.filter(r => (reqRows.find(x=>x.requirement===r.key)||{}).status === 'ok').length;
+
+  const colorMap = {ready_to_advance:'#1E8E5A', needs_completion:'#B4790F', not_ready:'#C0392B', needs_manual_review:'#6B4FA0', pending:'#8790A3'};
+  const ringColor = colorMap[overall];
+  const rad = 44, circ = 2*Math.PI*rad, dash = circ*(okCount/REQUIREMENTS.length);
+
+  panel.innerHTML = `
+    <div class="eval-ring-wrap">
+      <div class="eval-ring">
+        <svg width="104" height="104" viewBox="0 0 104 104">
+          <circle cx="52" cy="52" r="${rad}" fill="none" stroke="var(--line)" stroke-width="9"/>
+          <circle cx="52" cy="52" r="${rad}" fill="none" stroke="${ringColor}" stroke-width="9" stroke-linecap="round"
+            stroke-dasharray="${dash} ${circ}"/>
+        </svg>
+        <div class="eval-ring-label">${okCount}/${REQUIREMENTS.length}</div>
+      </div>
+      <div class="eval-overall-text"><span class="badge ${ov[1]}">${ov[0]}</span></div>
+    </div>
+    ${REQUIREMENTS.map(r=>{
+      const existing = reqRows.find(x=>x.requirement===r.key);
+      const currentStatus = existing ? existing.status : 'pending';
+      return `<div class="req-row">
+        <div class="req-row-head">
+          <div class="req-row-icon" style="background:${r.color}22;color:${r.color}">${r.icon}</div>
+          <div class="req-row-label">${r.label}</div>
+        </div>
+        ${canEdit
+          ? `<select data-reqkey="${r.key}">${REQ_STATUS_OPTIONS.map(o=>`<option value="${o.v}" ${currentStatus===o.v?'selected':''}>${o.l}</option>`).join('')}</select>`
+          : reqBadge(currentStatus)}
+      </div>`;
+    }).join('')}
+  `;
   if(canEdit){
-    reqGrid.querySelectorAll('[data-reqkey]').forEach(sel=>{
+    panel.querySelectorAll('[data-reqkey]').forEach(sel=>{
       sel.addEventListener('change', async ()=>{
-        const key = sel.dataset.reqkey;
-        const newStatus = sel.value;
+        const key = sel.dataset.reqkey, newStatus = sel.value;
         sel.disabled = true;
         const { error } = await sb.from('requirement_status').upsert(
           { form_id: form.id, requirement: key, status: newStatus, computed_at: new Date().toISOString() },
           { onConflict: 'form_id,requirement' }
         );
-        sel.disabled = false;
-        if(error){ showToast('تعذّر حفظ التقييم: '+error.message); return; }
+        if(error){ showToast('تعذّر حفظ التقييم: '+error.message); sel.disabled=false; return; }
         const idx = reviewDetail.reqRows.findIndex(x=>x.requirement===key);
-        if(idx>-1) reviewDetail.reqRows[idx].status = newStatus; else reviewDetail.reqRows.push({requirement:key, status:newStatus});
-        const { data: newOverall } = await sb.rpc('compute_overall_readiness', { p_form_id: form.id });
-        reviewDetail.overall = newOverall || 'pending';
+        if(idx>-1) reviewDetail.reqRows[idx].status = newStatus; else reviewDetail.reqRows.push({requirement:key, status:newStatus, form_id:form.id});
         showToast('تم حفظ التقييم');
-        renderReviewDetail(proj);
+        renderEvalPanel(canEdit); // إعادة رسم اللوحة فقط لتحديث الحلقة والشارة فورًا
       });
     });
   }
+}
 
-  // الملفات — روابط عرض/تنزيل موقّعة تُولَّد عند الطلب
-  const filesWrap = document.getElementById('filesListWrap');
-  if(files.length){
-    filesWrap.innerHTML = files.map((f,i)=>`
-      <div class="file-chip" style="margin-bottom:6px">
-        <span class="fc-name">📄 ${f.file_name} <span class="mono" style="color:var(--ink-400);font-size:11px">(${f.field_key})</span></span>
-        <button class="btn btn-ghost btn-sm" data-viewfile="${i}">فتح الملف</button>
+/* ---------------- التبويبات الفرعية ---------------- */
+const SUBTABS = [
+  {id:"overview", l:"نظرة عامة"},
+  {id:"answers", l:"الإجابات"},
+  {id:"team", l:"الفريق"},
+  {id:"files", l:"الملفات"},
+  {id:"notes", l:"الملاحظات"},
+];
+function renderSubtabs(){
+  const wrap = document.getElementById('reviewSubtabs');
+  wrap.innerHTML = SUBTABS.map(t=>`<button class="subtab-btn ${reviewActiveSubtab===t.id?'active':''}" data-subtab="${t.id}">${t.l}</button>`).join('');
+  wrap.querySelectorAll('[data-subtab]').forEach(b=>{
+    b.addEventListener('click', ()=>{ reviewActiveSubtab = b.dataset.subtab; renderSubtabs(); renderSubtabContent(); });
+  });
+  renderSubtabContent();
+}
+function renderSubtabContent(){
+  const content = document.getElementById('subtabContent');
+  if(reviewActiveSubtab==='overview') content.innerHTML = overviewTabHTML();
+  else if(reviewActiveSubtab==='answers'){ content.innerHTML = answersTabHTML(); bindAccordions(); }
+  else if(reviewActiveSubtab==='team') content.innerHTML = teamTabHTML();
+  else if(reviewActiveSubtab==='files'){ content.innerHTML = filesTabHTML(); bindFileButtons(); }
+  else if(reviewActiveSubtab==='notes'){ content.innerHTML = notesTabHTML(); bindNoteComposer(); }
+}
+
+function overviewTabHTML(){
+  const { form, members, files } = reviewDetail;
+  const av = ansMap();
+  const facts = [
+    {l:"المسار", v: av.f1_3 || '—'},
+    {l:"المجال", v: av.f1_4 || '—'},
+    {l:"المدينة", v: av.f1_9 || '—'},
+    {l:"مرحلة النموذج الأولي", v: av.f5_1 ? (STAGE_CODE_LABELS[av.f5_1] || av.f5_1) : '—'},
+    {l:"حالة العرض الاستثماري", v: av.f6_1 || '—'},
+    {l:"التحقق من احتياج السوق", v: av.f7_1 || '—'},
+    {l:"عدد أعضاء الفريق", v: members.length},
+    {l:"عدد الملفات المرفوعة", v: files.length},
+    {l:"نسبة الاكتمال", v: (form.completion_pct||0)+'%'},
+    {l:"تاريخ الإرسال", v: form.submitted_at ? new Date(form.submitted_at).toLocaleDateString('ar-SA') : 'لم يُرسَل بعد'},
+    {l:"آخر تحديث", v: relativeTime(form.updated_at)},
+    {l:"اسم المشروع", v: av.f1_2 || '—'},
+  ];
+  return `<div class="fact-grid">${facts.map(f=>`<div class="fact-card"><div class="fc-label">${f.l}</div><div class="fc-val">${f.v}</div></div>`).join('')}</div>`;
+}
+
+function answersTabHTML(){
+  const av = ansMap();
+  const html = sections.map(sec=>{
+    const rows = sec.questions.filter(q=>q.id in av);
+    if(!rows.length) return '';
+    const isOpen = reviewOpenAccordions.has(sec.id);
+    return `<div class="qa-sec ${isOpen?'open':''}" data-qasec="${sec.id}">
+      <div class="qa-sec-head">
+        <span class="qa-sec-title">${sec.title}</span>
+        <span style="display:flex;align-items:center;gap:8px"><span class="qa-sec-count">${rows.length} إجابة</span><span class="qa-chevron">▾</span></span>
       </div>
-    `).join('');
-    filesWrap.querySelectorAll('[data-viewfile]').forEach(b=>{
-      b.addEventListener('click', async ()=>{
-        const f = files[parseInt(b.dataset.viewfile)];
-        b.disabled = true; b.textContent = 'جارٍ التحضير…';
-        const { data, error } = await sb.storage.from('form-attachments').createSignedUrl(f.storage_path, 300);
-        b.disabled = false; b.textContent = 'فتح الملف';
-        if(error || !data){ showToast('تعذّر فتح الملف: '+(error?.message||'')); return; }
-        window.open(data.signedUrl, '_blank');
-      });
+      <div class="qa-sec-body">${rows.map(q=>`<div class="qa-item"><div class="qa-q">${q.label}</div><div class="qa-a">${fmtAnsValue(av[q.id])}</div></div>`).join('')}</div>
+    </div>`;
+  }).join('');
+  return `<div class="qa-accordion">${html || '<div class="empty-hint">لا توجد إجابات محفوظة بعد</div>'}</div>`;
+}
+function bindAccordions(){
+  document.querySelectorAll('[data-qasec]').forEach(secEl=>{
+    secEl.querySelector('.qa-sec-head').addEventListener('click', ()=>{
+      const id = parseInt(secEl.dataset.qasec);
+      if(reviewOpenAccordions.has(id)) reviewOpenAccordions.delete(id); else reviewOpenAccordions.add(id);
+      secEl.classList.toggle('open');
     });
-  }
+  });
+}
 
-  // كل الإجابات مصنَّفة حسب الأقسام (باستخدام sections المحمَّلة أصلًا لتبويب الأسئلة)
-  const answersWrap = document.getElementById('answersWrap');
-  answersWrap.innerHTML = sections.map(sec=>{
-    const rows = sec.questions.map(q=>{
-      if(!(q.id in av)) return '';
-      return `<div style="padding:8px 0;border-bottom:1px solid var(--line)"><div style="font-size:11.5px;color:var(--ink-400);margin-bottom:2px">${q.label}</div><div style="font-size:13px">${fmtAnsValue(av[q.id])}</div></div>`;
-    }).join('');
-    if(!rows) return '';
-    return `<div style="margin-bottom:16px"><div style="font-weight:700;color:var(--navy-800);font-size:13.5px;margin-bottom:6px">${sec.title}</div>${rows}</div>`;
-  }).join('') || `<div class="empty-hint">لا توجد إجابات محفوظة بعد</div>`;
+function teamTabHTML(){
+  const { members } = reviewDetail;
+  if(!members.length) return `<div class="empty-hint">لا يوجد أعضاء مسجَّلون بعد</div>`;
+  return `<div class="member-grid">${members.map(m=>`
+    <div class="member-mini-card">
+      <div class="mmc-top"><div class="avatar-sm">${initials(m.full_name||'?')}</div>
+        <div><div class="mmc-name">${m.full_name}${m.is_leader?' 👑':''}</div><div class="mmc-role">${m.role_in_project||'—'}</div></div>
+      </div>
+      <div class="mmc-row"><span>التخصص</span><span>${m.specialization||'—'}</span></div>
+      <div class="mmc-row"><span>الجوال</span><span class="mono">${m.phone||'—'}</span></div>
+      <div class="mmc-row"><span>البريد</span><span class="mono">${m.email||'—'}</span></div>
+      <div class="mmc-row"><span>حضر المعسكر</span><span>${m.attended_camp===true?'نعم':m.attended_camp===false?'لا':'—'}</span></div>
+    </div>
+  `).join('')}</div>`;
+}
 
-  // إضافة ملاحظة جديدة
+function filesTabHTML(){
+  const { files } = reviewDetail;
+  if(!files.length) return `<div class="empty-hint">لا توجد ملفات مرفوعة</div>`;
+  const iconFor = (mime)=> (mime||'').includes('video') ? '🎬' : '📄';
+  return `<div class="file-grid">${files.map((f,i)=>`
+    <div class="file-card">
+      <div class="fic">${iconFor(f.mime_type)}</div>
+      <div class="fname">${f.file_name}</div>
+      <div class="ffield mono">${f.field_key}</div>
+      <button class="btn btn-ghost btn-sm" data-viewfile="${i}">فتح الملف</button>
+    </div>
+  `).join('')}</div>`;
+}
+function bindFileButtons(){
+  const { files } = reviewDetail;
+  document.querySelectorAll('[data-viewfile]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const f = files[parseInt(b.dataset.viewfile)];
+      const original = b.textContent;
+      b.disabled = true; b.textContent = 'جارٍ التحضير…';
+      const { data, error } = await sb.storage.from('form-attachments').createSignedUrl(f.storage_path, 300);
+      b.disabled = false; b.textContent = original;
+      if(error || !data){ showToast('تعذّر فتح الملف: '+(error?.message||'')); return; }
+      window.open(data.signedUrl, '_blank');
+    });
+  });
+}
+
+function notesTabHTML(){
+  const { notes, form } = reviewDetail;
+  const canEdit = currentAdmin && ['admin','reviewer'].includes(currentAdmin.role);
+  const list = notes.map(n=>`
+    <div class="note-bubble">
+      <div class="note-bubble-head">
+        <div class="avatar-sm" style="width:24px;height:24px;font-size:10px">${initials(currentAdmin?.name||'ف')}</div>
+        <span class="nb-name">${n.is_internal?'ملاحظة داخلية':'ملاحظة ظاهرة للمشارك'}</span>
+        <span class="nb-time">${relativeTime(n.created_at)}</span>
+      </div>
+      <div class="nb-text">${n.note}</div>
+    </div>
+  `).join('') || `<div class="empty-hint">لا توجد ملاحظات بعد</div>`;
+  const composer = canEdit ? `
+    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:16px">
+      <div class="field-inline"><label class="flabel">إضافة ملاحظة جديدة</label><textarea id="newNoteText" placeholder="اكتب ملاحظتك هنا…"></textarea></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div class="toggle"><input type="checkbox" id="newNoteVisible"><label class="tk" for="newNoteVisible"></label></div>
+        <span style="font-size:12.5px;color:var(--ink-600)">اجعلها ظاهرة للمشارك (بدل ملاحظة داخلية فقط)</span>
+      </div>
+      <button class="btn btn-primary btn-sm" id="addNoteBtn">إضافة الملاحظة</button>
+    </div>` : '';
+  return list + composer;
+}
+function bindNoteComposer(){
   const addNoteBtn = document.getElementById('addNoteBtn');
-  if(addNoteBtn){
-    addNoteBtn.addEventListener('click', async ()=>{
-      const text = document.getElementById('newNoteText').value.trim();
-      if(!text){ showToast('اكتب نص الملاحظة أولًا'); return; }
-      const isVisible = document.getElementById('newNoteVisible').checked;
-      addNoteBtn.disabled = true; addNoteBtn.textContent = 'جارٍ الحفظ…';
-      const { data, error } = await sb.from('review_notes').insert({
-        form_id: form.id, note: text, is_internal: !isVisible, created_by: currentAdmin.id,
-      }).select().single();
-      addNoteBtn.disabled = false; addNoteBtn.textContent = 'إضافة الملاحظة';
-      if(error){ showToast('تعذّر إضافة الملاحظة: '+error.message); return; }
-      reviewDetail.notes.unshift(data);
-      showToast('تمت إضافة الملاحظة');
-      renderReviewDetail(proj);
-    });
-  }
+  if(!addNoteBtn) return;
+  addNoteBtn.addEventListener('click', async ()=>{
+    const text = document.getElementById('newNoteText').value.trim();
+    if(!text){ showToast('اكتب نص الملاحظة أولًا'); return; }
+    const isVisible = document.getElementById('newNoteVisible').checked;
+    addNoteBtn.disabled = true; addNoteBtn.textContent = 'جارٍ الحفظ…';
+    const { data, error } = await sb.from('review_notes').insert({
+      form_id: reviewDetail.form.id, note: text, is_internal: !isVisible, created_by: currentAdmin.id,
+    }).select().single();
+    addNoteBtn.disabled = false; addNoteBtn.textContent = 'إضافة الملاحظة';
+    if(error){ showToast('تعذّر إضافة الملاحظة: '+error.message); return; }
+    reviewDetail.notes.unshift(data);
+    showToast('تمت إضافة الملاحظة');
+    renderSubtabContent();
+  });
 }
 
 /* ---------------- عرض شامل ---------------- */
