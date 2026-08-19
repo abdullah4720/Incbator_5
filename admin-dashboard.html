@@ -254,6 +254,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
 .member-mini-card{border:1px solid var(--line);border-radius:12px;padding:14px;}
 .member-mini-card .mmc-top{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
 .member-mini-card .mmc-name{font-size:13.5px;font-weight:700;color:var(--ink-900);}
+.crown-icon{color:var(--gold-500);}
 .member-mini-card .mmc-role{font-size:11px;color:var(--ink-400);}
 .member-mini-card .mmc-row{font-size:12px;color:var(--ink-600);margin-top:4px;display:flex;justify-content:space-between;}
 
@@ -296,7 +297,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
       <button class="btn btn-primary" id="authSendBtn" style="width:100%">دخول</button>
     </div>
     <div id="authStageDenied" style="display:none;text-align:center">
-      <div style="width:48px;height:48px;border-radius:50%;background:var(--danger-100);color:var(--danger);display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto 14px">⛔</div>
+      <div style="width:48px;height:48px;border-radius:50%;background:var(--danger-100);color:var(--danger);display:flex;align-items:center;justify-content:center;margin:0 auto 14px">${icon('ban',{size:24})}</div>
       <p style="font-size:13px;color:var(--ink-900);margin:0 0 4px;font-weight:600">هذا البريد غير مصرَّح له بالدخول</p>
       <p style="font-size:12px;color:var(--ink-600);margin:0 0 16px">تواصل مع مدير النظام لإضافتك إلى فريق البرنامج.</p>
       <button class="btn btn-ghost" id="authSignOutBtn" style="width:100%">رجوع</button>
@@ -321,7 +322,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
       <div class="brand-eyebrow">حاضنة الابتكار — النسخة الخامسة</div>
       <div class="brand-title">لوحة تحكم فريق البرنامج — نموذج التحقق من استيفاء متطلبات التحكيم</div>
     </div>
-    <div class="admin-chip"><span class="av" id="meAvatar">ع</span><span id="meName">—</span><button class="icon-btn" id="signOutBtn" title="تسجيل الخروج" style="margin-inline-start:4px">⏻</button></div>
+    <div class="admin-chip"><span class="av" id="meAvatar">ع</span><span id="meName">—</span><button class="icon-btn" id="signOutBtn" title="تسجيل الخروج" style="margin-inline-start:4px"></button></div>
   </div>
   <div class="tabs" id="tabs"></div>
 </div>
@@ -369,6 +370,54 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
 <div class="toast" id="toast"><span class="tdot"></span><span id="toastText"></span></div>
 
 <script>
+/* ============================================================
+   مكتبة أيقونات Lucide مضمَّنة محليًا (بدون أي اعتماد على CDN خارجي)
+   ============================================================ */
+const LUCIDE_ICONS = {
+  "lock": `<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /> <path d="M7 11V7a5 5 0 0 1 10 0v4" />`,
+  "check": `<path d="M20 6 9 17l-5-5" />`,
+  "save": `<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /> <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" /> <path d="M7 3v4a1 1 0 0 0 1 1h7" />`,
+  "file-text": `<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" /> <path d="M14 2v5a1 1 0 0 0 1 1h5" /> <path d="M10 9H8" /> <path d="M16 13H8" /> <path d="M16 17H8" />`,
+  "video": `<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" /> <rect x="2" y="6" width="14" height="12" rx="2" />`,
+  "log-out": `<path d="m16 17 5-5-5-5" /> <path d="M21 12H9" /> <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />`,
+  "trash-2": `<path d="M10 11v6" /> <path d="M14 11v6" /> <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /> <path d="M3 6h18" /> <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />`,
+  "pencil": `<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /> <path d="m15 5 4 4" />`,
+  "triangle-alert": `<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" />`,
+  "arrow-right": `<path d="M5 12h14" /> <path d="m12 5 7 7-7 7" />`,
+  "ban": `<circle cx="12" cy="12" r="10" /> <path d="M4.929 4.929 19.07 19.071" />`,
+  "clipboard-list": `<rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" />`,
+  "users": `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <path d="M16 3.128a4 4 0 0 1 0 7.744" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <circle cx="9" cy="7" r="4" />`,
+  "x": `<path d="M18 6 6 18" /> <path d="m6 6 12 12" />`,
+  "paperclip": `<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551" />`,
+  "id-card": `<path d="M16 10h2" /> <path d="M16 14h2" /> <path d="M6.17 15a3 3 0 0 1 5.66 0" /> <circle cx="9" cy="11" r="2" /> <rect x="2" y="5" width="20" height="14" rx="2" />`,
+  "key": `<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4" /> <path d="m21 2-9.6 9.6" /> <circle cx="7.5" cy="15.5" r="5.5" />`,
+  "rotate-ccw": `<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /> <path d="M3 3v5h5" />`,
+  "tent": `<path d="M3.5 21 14 3" /> <path d="M20.5 21 10 3" /> <path d="M15.5 21 12 15l-3.5 6" /> <path d="M2 21h20" />`,
+  "rocket": `<path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" /> <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09" /> <path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z" /> <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05" />`,
+  "briefcase": `<path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /> <rect width="20" height="14" x="2" y="6" rx="2" />`,
+  "search": `<path d="m21 21-4.34-4.34" /> <circle cx="11" cy="11" r="8" />`,
+  "crown": `<path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z" /> <path d="M5 21h14" />`,
+  "hourglass": `<path d="M5 22h14" /> <path d="M5 2h14" /> <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" /> <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" />`,
+  "chevron-right": `<path d="m9 18 6-6-6-6" />`,
+  "chevron-left": `<path d="m15 18-6-6 6-6" />`,
+  "chevron-down": `<path d="m6 9 6 6 6-6" />`,
+  "download": `<path d="M12 15V3" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /> <path d="m7 10 5 5 5-5" />`,
+  "plus": `<path d="M5 12h14" /> <path d="M12 5v14" />`,
+  "upload": `<path d="M12 3v12" /> <path d="m17 8-5-5-5 5" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />`,
+  "building-2": `<path d="M10 12h4" /> <path d="M10 8h4" /> <path d="M14 21v-3a2 2 0 0 0-4 0v3" /> <path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2" /> <path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16" />`,
+  "calendar": `<path d="M8 2v3" /> <path d="M16 2v3" /> <rect x="3" y="3" width="18" height="18" rx="2" /> <path d="M3 9h18" />`,
+  "mail": `<path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" /> <rect x="2" y="4" width="20" height="16" rx="2" />`,
+  "phone": `<path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384" />`,
+};
+function icon(name, opts){
+  opts = opts || {};
+  const size = opts.size || 16;
+  const strokeWidth = opts.strokeWidth || 2;
+  const cls = opts.cls || '';
+  const body = LUCIDE_ICONS[name] || '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" class="lucide-icon ${cls}" style="vertical-align:-3px;flex:none">${body}</svg>`;
+}
+
 /* ==========================================================================
    لوحة تحكم فريق البرنامج — حاضنة ابتكار 5
    مرتبطة بـ Supabase Auth (Magic Link) لفريق البرنامج فقط. الدخول يتطلب
@@ -448,6 +497,7 @@ async function initAdminApp(){
     await sb.auth.signOut();
     showAuthStage('authStageRequest');
   });
+  document.getElementById('signOutBtn').innerHTML = icon('log-out',{size:14});
   document.getElementById('signOutBtn').addEventListener('click', async ()=>{
     await sb.auth.signOut();
     window.location.reload();
@@ -719,17 +769,17 @@ function renderDashboard(){
     </div>
 
     <div class="grid kpi-row">
-      <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">📋</div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('clipboard-list',{size:18})}</div>
         <div class="kval mono">${s.totalTeams}</div><div class="klabel">إجمالي الطلبات المستلمة</div></div>
-      <div class="card kpi-card"><div class="kicon" style="background:var(--gold-100);color:#7A5C1E">👥</div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--gold-100);color:#7A5C1E">${icon('users',{size:18})}</div>
         <div class="kval mono">${s.totalParticipants.toLocaleString('en-US')}</div><div class="klabel">إجمالي المشاركين</div>
         <div class="kdelta flat">عبر ${s.cities} مدينة</div></div>
-      <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">✓</div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">${icon('check',{size:18})}</div>
         <div class="kval mono">${s.totalTeams ? Math.round(s.readiness.ready/s.totalTeams*100) : 0}%</div><div class="klabel">مستوفٍ للانتقال بالكامل</div></div>
-      <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">⏳</div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">${icon('hourglass',{size:18})}</div>
         <div class="kval mono">${s.daysLeft}</div><div class="klabel">أيام متبقية على الموعد النهائي</div>
         <div class="kdelta down">${formSettings.deadline ? 'الموعد: '+new Date(formSettings.deadline).toLocaleDateString('ar-SA') : 'لم يُحدَّد موعد بعد'}</div></div>
-      <div class="card kpi-card"><div class="kicon" style="background:var(--purple-100);color:var(--purple)">📎</div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--purple-100);color:var(--purple)">${icon('paperclip',{size:18})}</div>
         <div class="kval mono">${s.totalFiles}</div><div class="klabel">ملف مرفوع</div>
         <div class="kdelta flat">${s.totalFilesSizeMb} م.ب إجمالًا</div></div>
     </div>
@@ -810,8 +860,8 @@ function renderSectionNav(){
         ${s.key?`<span class="mono" style="font-size:9.5px;color:var(--purple);background:var(--purple-100);border-radius:5px;padding:1px 5px;flex:none">خاص</span>`:''}
       </div>
       <div class="section-nav-actions">
-        <button class="icon-btn" data-editsection="${s.id}" title="تعديل القسم">✎</button>
-        <button class="icon-btn danger" data-delsection="${s.id}" title="حذف القسم">🗑</button>
+        <button class="icon-btn" data-editsection="${s.id}" title="تعديل القسم">${icon('pencil',{size:13})}</button>
+        <button class="icon-btn danger" data-delsection="${s.id}" title="حذف القسم">${icon('trash-2',{size:13})}</button>
       </div>
     </div>
   `).join('') + `<div class="add-section-btn" id="addSectionBtn">+ إضافة قسم جديد</div>`;
@@ -844,7 +894,7 @@ function openSectionEditor(sectionId){
   const box = modal.querySelector('.modal-box');
   box.innerHTML = `
     <h3>${existing?'تعديل القسم':'إضافة قسم جديد'}</h3>
-    ${existing && existing.key ? `<p>⚠️ هذا قسم ذو واجهة خاصة (${existing.key}) — تقدر تعدّل العنوان والوصف والتنبيه بأمان، لكن حقوله الأساسية الهيكلية (مثل بطاقات الأعضاء أو منتقي المراحل) لا تتغيّر من هنا.</p>`:`<p>عنوان ووصف القسم كما سيظهران للمشارك.</p>`}
+    ${existing && existing.key ? `<p>${icon('triangle-alert',{size:13})} هذا قسم ذو واجهة خاصة (${existing.key}) — تقدر تعدّل العنوان والوصف والتنبيه بأمان، لكن حقوله الأساسية الهيكلية (مثل بطاقات الأعضاء أو منتقي المراحل) لا تتغيّر من هنا.</p>`:`<p>عنوان ووصف القسم كما سيظهران للمشارك.</p>`}
     <div class="field-inline"><label class="flabel">عنوان القسم</label><input type="text" id="sm_title" value="${existing?existing.title.replace(/"/g,'&quot;'):''}"></div>
     <div class="field-inline"><label class="flabel">وصف مختصر (يظهر تحت العنوان)</label><input type="text" id="sm_desc" value="${existing?(existing.desc||'').replace(/"/g,'&quot;'):''}"></div>
     <div class="field-inline"><label class="flabel">تنبيه بارز (اختياري)</label><input type="text" id="sm_banner" value="${existing?(existing.banner||'').replace(/"/g,'&quot;'):''}" placeholder="مثال: هذا متطلب انتقال أساسي"></div>
@@ -940,8 +990,8 @@ function questionCardHTML(sectionId, q){
         ${q.condition?`<div class="q-cond">${describeCondition(q.condition)}</div>`:''}
       </div>
       <div class="q-actions">
-        <button class="icon-btn" data-editq="${q.id}" title="تعديل">✎</button>
-        <button class="icon-btn danger" data-delq="${q.id}" title="حذف">🗑</button>
+        <button class="icon-btn" data-editq="${q.id}" title="تعديل">${icon('pencil',{size:13})}</button>
+        <button class="icon-btn danger" data-delq="${q.id}" title="حذف">${icon('trash-2',{size:13})}</button>
       </div>
     </div>
   </div>`;
@@ -969,7 +1019,7 @@ function condRowHTML(idx, cond, otherFields){
       <label class="flabel">${isMulti?'القيم (افصل بفاصلة)':'القيمة'}</label>
       <input type="text" data-cf="value" value="${valueStr.replace(/"/g,'&quot;')}" placeholder="${isMulti?'نعم, لا':'نعم'}">
     </div>
-    <button type="button" class="icon-btn danger" data-rmcond="${idx}" style="margin-top:6px" title="إزالة هذا الشرط">🗑 إزالة الشرط</button>
+    <button type="button" class="icon-btn danger" data-rmcond="${idx}" style="margin-top:6px" title="إزالة هذا الشرط">${icon('trash-2',{size:12})} إزالة الشرط</button>
   </div>`;
 }
 function openEditorFor(sectionId, questionId){
@@ -1004,7 +1054,7 @@ function openEditorFor(sectionId, questionId){
     </div>
     <div class="field-inline" id="ed_options_wrap" style="display:${OPTION_TYPES.includes(draft.type)?'block':'none'}">
       <label class="flabel">خيارات القائمة</label>
-      <div class="opt-chip-row" id="ed_opts_row">${(draft.options||[]).map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">✕</button></span>`).join('')}</div>
+      <div class="opt-chip-row" id="ed_opts_row">${(draft.options||[]).map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">${icon('x',{size:10})}</button></span>`).join('')}</div>
       <div class="opt-add-row"><input type="text" id="ed_new_opt" placeholder="أضف خيارًا واضغط Enter"><button type="button" class="btn btn-ghost btn-sm" id="ed_add_opt">إضافة</button></div>
     </div>
     <div class="field-inline"><label class="flabel">نص توضيحي صغير (اختياري)</label>
@@ -1040,7 +1090,7 @@ function openEditorFor(sectionId, questionId){
     refreshOptsRow();
   }
   function refreshOptsRow(){
-    document.getElementById('ed_opts_row').innerHTML = (draft.options||[]).map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">✕</button></span>`).join('');
+    document.getElementById('ed_opts_row').innerHTML = (draft.options||[]).map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">${icon('x',{size:10})}</button></span>`).join('');
     document.getElementById('ed_opts_row').querySelectorAll('[data-rmopt]').forEach(b=>{
       b.addEventListener('click',()=>{ draft.options.splice(parseInt(b.dataset.rmopt),1); refreshOptsRow(); });
     });
@@ -1164,13 +1214,13 @@ function renderEligibility(){
     </div>
 
     <div class="grid kpi-row" style="margin-bottom:18px">
-      <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">📇</div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('id-card',{size:18})}</div>
         <div class="kval mono">${total}</div><div class="klabel">فريق مسجَّل في قائمة الأهلية</div></div>
-      <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">✓</div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">${icon('check',{size:18})}</div>
         <div class="kval mono">${withEmail}</div><div class="klabel">بريد إلكتروني صالح ومحفوظ</div></div>
-      <div class="card kpi-card"><div class="kicon" style="background:var(--amber-100);color:var(--amber)">🔑</div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--amber-100);color:var(--amber)">${icon('key',{size:18})}</div>
         <div class="kval mono">${eligibleProjects.filter(p=>!p.has_password).length}</div><div class="klabel">فريق بلا كلمة مرور بعد</div></div>
-      <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">⛔</div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">${icon('ban',{size:18})}</div>
         <div class="kval mono">${eligibleProjects.filter(p=>!p.is_active).length}</div><div class="klabel">معطَّل عن الدخول حاليًا</div></div>
     </div>
 
@@ -1216,15 +1266,15 @@ function renderEligTbody(){
       <td class="mono" style="${isValidEmail(p.team_leader_email)?'':'color:var(--danger)'}">${p.team_leader_email||'—'}</td>
       <td>
         ${p.has_password
-          ? `<span class="badge ok">أنشأها الفريق</span> <button class="icon-btn danger" data-resetpw="${p.project_id}" title="إعادة تعيين (نسيان كلمة المرور)">↻</button>`
+          ? `<span class="badge ok">أنشأها الفريق</span> <button class="icon-btn danger" data-resetpw="${p.project_id}" title="إعادة تعيين (نسيان كلمة المرور)">${icon('rotate-ccw',{size:13})}</button>`
           : `<span class="badge mid">لم تُنشأ بعد</span>`}
       </td>
       <td><span class="badge ${p.is_active?'ok':'no'}">${p.is_active?'مفعَّل':'معطَّل'}</span></td>
       <td style="color:var(--ink-400);font-size:12px">${p.source||'يدوي'}</td>
       <td style="text-align:left"><div style="display:flex;gap:4px;justify-content:flex-end">
-        <button class="icon-btn" data-editelig="${p.project_id}" title="تعديل">✎</button>
+        <button class="icon-btn" data-editelig="${p.project_id}" title="تعديل">${icon('pencil',{size:13})}</button>
         <button class="icon-btn" data-toggleelig="${p.project_id}" title="${p.is_active?'تعطيل':'تفعيل'}">${p.is_active?'⏸':'▶'}</button>
-        <button class="icon-btn danger" data-delelig="${p.project_id}" title="حذف">🗑</button>
+        <button class="icon-btn danger" data-delelig="${p.project_id}" title="حذف">${icon('trash-2',{size:13})}</button>
       </div></td>
     </tr>
   `).join('');
@@ -1331,7 +1381,7 @@ function openImportPanel(){
       <div class="section-title-row"><div>
         <h2>استيراد قائمة الفرق من ملف CSV</h2>
         <p>الأعمدة المطلوبة بالترتيب: <span class="mono">project_id, project_name, track, domain, team_leader_name, team_leader_email, team_leader_phone</span></p>
-        <p style="margin-top:6px">⚠️ يجب حفظ الملف بصيغة <b>CSV</b> فعليًا (مو Excel .xlsx) — من إكسل: File → Save As → اختر "CSV UTF-8 (Comma delimited)".</p>
+        <p style="margin-top:6px">${icon('triangle-alert',{size:13})} يجب حفظ الملف بصيغة <b>CSV</b> فعليًا (مو Excel .xlsx) — من إكسل: File → Save As → اختر "CSV UTF-8 (Comma delimited)".</p>
       </div></div>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
         <input type="file" id="csvInput" accept=".csv">
@@ -1553,9 +1603,9 @@ function renderUsersTbody(){
       <td><span class="badge status-${u.status}">${u.status==='active'?'نشط':'موقوف'}</span></td>
       <td style="color:var(--ink-400)">${u.lastLogin}</td>
       <td style="text-align:left"><div style="display:flex;gap:4px;justify-content:flex-end">
-        <button class="icon-btn" data-edituser="${u.id}" title="تعديل">✎</button>
+        <button class="icon-btn" data-edituser="${u.id}" title="تعديل">${icon('pencil',{size:13})}</button>
         <button class="icon-btn" data-toggleuser="${u.id}" title="${u.status==='active'?'إيقاف':'تفعيل'}">${u.status==='active'?'⏸':'▶'}</button>
-        <button class="icon-btn danger" data-deluser="${u.id}" title="حذف">🗑</button>
+        <button class="icon-btn danger" data-deluser="${u.id}" title="حذف">${icon('trash-2',{size:13})}</button>
       </div></td>
     </tr>
   `).join('');
@@ -1741,12 +1791,12 @@ let reviewActiveSubtab = "overview";
 let reviewOpenAccordions = new Set();
 
 const REQUIREMENTS = [
-  {key:"commercial_registration", label:"السجل التجاري", icon:"📋", color:"var(--teal-600)"},
-  {key:"camp_attendance", label:"حضور المعسكر", icon:"🏕️", color:"var(--purple)"},
-  {key:"team_size", label:"عدد أعضاء الفريق", icon:"👥", color:"var(--gold-500)"},
-  {key:"prototype", label:"النموذج الأولي", icon:"🚀", color:"var(--eq-green)"},
-  {key:"pitch_deck", label:"العرض الاستثماري", icon:"💼", color:"var(--teal-600)"},
-  {key:"market_validation", label:"التحقق من احتياج السوق", icon:"🔍", color:"var(--purple)"},
+  {key:"commercial_registration", label:"السجل التجاري", icon:"clipboard-list", color:"var(--teal-600)"},
+  {key:"camp_attendance", label:"حضور المعسكر", icon:"tent", color:"var(--purple)"},
+  {key:"team_size", label:"عدد أعضاء الفريق", icon:"users", color:"var(--gold-500)"},
+  {key:"prototype", label:"النموذج الأولي", icon:"rocket", color:"var(--eq-green)"},
+  {key:"pitch_deck", label:"العرض الاستثماري", icon:"briefcase", color:"var(--teal-600)"},
+  {key:"market_validation", label:"التحقق من احتياج السوق", icon:"search", color:"var(--purple)"},
 ];
 const REQ_STATUS_OPTIONS = [
   {v:"pending", l:"لم تُراجَع", cls:"mid"},
@@ -1989,8 +2039,8 @@ function renderReviewDetail(){
       <div style="display:flex;align-items:center;gap:10px">
         <span class="badge ${st[1]}">${st[0]}</span>
         <div class="review-nav-arrows">
-          <button id="prevReviewBtn" ${hasPrev?'':'disabled'} title="الطلب السابق في القائمة">›</button>
-          <button id="nextReviewBtn" ${hasNext?'':'disabled'} title="الطلب التالي في القائمة">‹</button>
+          <button id="prevReviewBtn" ${hasPrev?'':'disabled'} title="الطلب السابق في القائمة">${icon('chevron-right',{size:15})}</button>
+          <button id="nextReviewBtn" ${hasNext?'':'disabled'} title="الطلب التالي في القائمة">${icon('chevron-left',{size:15})}</button>
         </div>
       </div>
     </div>
@@ -2041,7 +2091,7 @@ function renderEvalPanel(canEdit){
       const currentStatus = existing ? existing.status : 'pending';
       return `<div class="req-row">
         <div class="req-row-head">
-          <div class="req-row-icon" style="background:${r.color}22;color:${r.color}">${r.icon}</div>
+          <div class="req-row-icon" style="background:${r.color}22;color:${r.color}">${icon(r.icon,{size:13})}</div>
           <div class="req-row-label">${r.label}</div>
         </div>
         ${canEdit
@@ -2123,7 +2173,7 @@ function answersTabHTML(){
     return `<div class="qa-sec ${isOpen?'open':''}" data-qasec="${sec.id}">
       <div class="qa-sec-head">
         <span class="qa-sec-title">${sec.title}</span>
-        <span style="display:flex;align-items:center;gap:8px"><span class="qa-sec-count">${rows.length} إجابة</span><span class="qa-chevron">▾</span></span>
+        <span style="display:flex;align-items:center;gap:8px"><span class="qa-sec-count">${rows.length} إجابة</span><span class="qa-chevron">${icon('chevron-down',{size:14})}</span></span>
       </div>
       <div class="qa-sec-body">${rows.map(q=>`<div class="qa-item"><div class="qa-q">${q.label}</div><div class="qa-a">${fmtAnsValue(av[q.id])}</div></div>`).join('')}</div>
     </div>`;
@@ -2146,7 +2196,7 @@ function teamTabHTML(){
   return `<div class="member-grid">${members.map(m=>`
     <div class="member-mini-card">
       <div class="mmc-top"><div class="avatar-sm">${initials(m.full_name||'?')}</div>
-        <div><div class="mmc-name">${m.full_name}${m.is_leader?' 👑':''}</div><div class="mmc-role">${m.role_in_project||'—'}</div></div>
+        <div><div class="mmc-name">${m.full_name}${m.is_leader?' '+icon('crown',{size:13,cls:'crown-icon'}):''}</div><div class="mmc-role">${m.role_in_project||'—'}</div></div>
       </div>
       <div class="mmc-row"><span>التخصص</span><span>${m.specialization||'—'}</span></div>
       <div class="mmc-row"><span>الجوال</span><span class="mono">${m.phone||'—'}</span></div>
@@ -2159,7 +2209,7 @@ function teamTabHTML(){
 function filesTabHTML(){
   const { files } = reviewDetail;
   if(!files.length) return `<div class="empty-hint">لا توجد ملفات مرفوعة</div>`;
-  const iconFor = (mime)=> (mime||'').includes('video') ? '🎬' : '📄';
+  const iconFor = (mime)=> (mime||'').includes('video') ? icon('video',{size:22}) : icon('file-text',{size:22});
   return `<div class="file-grid">${files.map((f,i)=>`
     <div class="file-card">
       <div class="fic">${iconFor(f.mime_type)}</div>
