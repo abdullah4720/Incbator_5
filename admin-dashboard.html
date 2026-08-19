@@ -50,7 +50,8 @@ button,select,input,textarea{font-family:inherit;}
 .view.active{display:block;}
 
 .grid{display:grid;gap:18px;}
-.kpi-row{grid-template-columns:repeat(4,1fr);}
+.kpi-row{grid-template-columns:repeat(5,1fr);}
+@media(max-width:1100px){.kpi-row{grid-template-columns:repeat(3,1fr);}}
 @media(max-width:900px){.kpi-row{grid-template-columns:repeat(2,1fr);}}
 @media(max-width:520px){.kpi-row{grid-template-columns:1fr;}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px 22px;}
@@ -259,6 +260,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
 
 <div class="wrap">
   <div class="view" id="view-dashboard"></div>
+  <div class="view" id="view-review"></div>
   <div class="view" id="view-builder"></div>
   <div class="view" id="view-eligibility"></div>
   <div class="view" id="view-users"></div>
@@ -380,6 +382,7 @@ async function initAdminApp(){
 /* ---------------- إحصاءات لوحة القيادة (تُعبَّى من Supabase عند الدخول) ---------------- */
 let DASH_STATS = {
   totalTeams: 0, totalParticipants: 0, cities: 0, daysLeft: 0,
+  totalFiles: 0, totalFilesSizeMb: 0,
   readiness: { ready:0, needsCompletion:0, notReady:0, needsManualReview:0 },
   requirements: [
     {key:"commercial_registration", label:"السجل التجاري", pct:0},
@@ -404,6 +407,8 @@ async function loadDashboardStats(){
     DASH_STATS.totalParticipants = s.total_participants || 0;
     DASH_STATS.cities = s.cities || 0;
     DASH_STATS.daysLeft = s.deadline_at ? Math.max(0, Math.ceil((new Date(s.deadline_at) - new Date()) / 86400000)) : 0;
+    DASH_STATS.totalFiles = s.total_files || 0;
+    DASH_STATS.totalFilesSizeMb = s.total_files_size_mb || 0;
     DASH_STATS.readiness = {
       ready: rb.ready_to_advance || 0,
       needsCompletion: (rb.needs_completion || 0) + (rb.pending || 0),
@@ -542,6 +547,7 @@ async function loadAllAdminData(){
     loadEligibleProjects(),
     loadUsers(),
     loadFormSettings(),
+    loadReviewList(),
   ]);
 }
 
@@ -574,6 +580,7 @@ function openConfirm(text, onOk){
 /* ---------------- التبويبات ---------------- */
 const TABS = [
   {id:"dashboard", l:"لوحة القيادة", adminOnly:false},
+  {id:"review", l:"مراجعة الطلبات", adminOnly:false},
   {id:"builder", l:"الأسئلة والنموذج", adminOnly:true},
   {id:"eligibility", l:"الفرق المؤهّلة للدخول", adminOnly:true},
   {id:"users", l:"المستخدمون والأدوار", adminOnly:true},
@@ -635,6 +642,9 @@ function renderDashboard(){
       <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">⏳</div>
         <div class="kval mono">${s.daysLeft}</div><div class="klabel">أيام متبقية على الموعد النهائي</div>
         <div class="kdelta down">${formSettings.deadline ? 'الموعد: '+new Date(formSettings.deadline).toLocaleDateString('ar-SA') : 'لم يُحدَّد موعد بعد'}</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--purple-100);color:var(--purple)">📎</div>
+        <div class="kval mono">${s.totalFiles}</div><div class="klabel">ملف مرفوع</div>
+        <div class="kdelta flat">${s.totalFilesSizeMb} م.ب إجمالًا</div></div>
     </div>
 
     <div class="two-col-layout">
@@ -1623,10 +1633,337 @@ function renderSettings(){
   });
 }
 
+/* ==========================================================================
+   مراجعة الطلبات — قائمة الطلبات، عرض تفصيلي، وتقييم المتطلبات الستة
+   ========================================================================== */
+let reviewFormsRaw = [];         // verification_forms خام (بدون ربط)
+let reviewFilter = { q:"", track:"", status:"" };
+let currentReviewProjectId = null;
+let reviewDetail = null;         // {form, answers, members, files, reqStatus, notes} للمشروع المفتوح حاليًا
+let reviewDetailLoading = false;
+
+const REQUIREMENTS = [
+  {key:"commercial_registration", label:"السجل التجاري"},
+  {key:"camp_attendance", label:"حضور المعسكر"},
+  {key:"team_size", label:"عدد أعضاء الفريق"},
+  {key:"prototype", label:"النموذج الأولي"},
+  {key:"pitch_deck", label:"العرض الاستثماري"},
+  {key:"market_validation", label:"التحقق من احتياج السوق"},
+];
+const REQ_STATUS_OPTIONS = [
+  {v:"pending", l:"لم تتم المراجعة", cls:"mid"},
+  {v:"ok", l:"مستوفٍ", cls:"ok"},
+  {v:"mid", l:"يحتاج استكمال", cls:"mid"},
+  {v:"no", l:"غير مستوفٍ", cls:"no"},
+  {v:"manual_review", l:"يحتاج مراجعة يدوية", cls:"mid"},
+];
+function reqBadge(status){
+  const opt = REQ_STATUS_OPTIONS.find(o=>o.v===status) || REQ_STATUS_OPTIONS[0];
+  return `<span class="badge ${opt.cls}">${opt.l}</span>`;
+}
+const STATUS_LABELS = {
+  draft:["مسودة","mid"], submitted:["مُرسَل","ok"], needs_completion:["يحتاج استكمال","no"],
+};
+
+async function loadReviewList(){
+  const { data, error } = await sb.from('verification_forms').select('*').order('updated_at', {ascending:false});
+  if(error){ showToast('تعذّر تحميل قائمة الطلبات: '+error.message); reviewFormsRaw=[]; return; }
+  reviewFormsRaw = data || [];
+}
+
+function joinedReviewRows(){
+  return reviewFormsRaw.map(vf=>{
+    const proj = eligibleProjects.find(p=>p.project_id===vf.project_id) || {};
+    return {
+      form_id: vf.id, project_id: vf.project_id, status: vf.status,
+      completion_pct: vf.completion_pct||0, submitted_at: vf.submitted_at, updated_at: vf.updated_at,
+      project_name: proj.project_name || vf.project_id, track: proj.track || '—',
+      team_leader_name: proj.team_leader_name || '—', team_leader_email: proj.team_leader_email || '—',
+    };
+  });
+}
+function filteredReviewRows(){
+  return joinedReviewRows().filter(r=>{
+    if(reviewFilter.track && r.track!==reviewFilter.track) return false;
+    if(reviewFilter.status && r.status!==reviewFilter.status) return false;
+    if(reviewFilter.q){
+      const q = reviewFilter.q.toLowerCase();
+      const hay = (r.project_id+" "+r.project_name+" "+r.team_leader_name+" "+r.team_leader_email).toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function renderReview(){
+  if(currentReviewProjectId){ renderReviewDetailShell(); return; }
+  renderReviewList();
+}
+
+function renderReviewList(){
+  const el = document.getElementById('view-review');
+  const rows = filteredReviewRows();
+  const canEdit = currentAdmin && ['admin','reviewer'].includes(currentAdmin.role);
+  el.innerHTML = `
+    <div class="section-title-row">
+      <div><h2>مراجعة الطلبات</h2><p>${reviewFormsRaw.length} طلب مسجَّل — افتح أي مشروع لمراجعة إجاباته وملفاته وتقييم المتطلبات.</p></div>
+      <button class="btn btn-ghost" id="refreshReviewBtn">تحديث القائمة</button>
+    </div>
+    <div class="card">
+      <div class="filter-row">
+        <input type="text" class="search-box" id="reviewSearch" placeholder="ابحث برقم المشروع، اسم الفريق، أو البريد…" value="${reviewFilter.q}">
+        <select id="reviewTrackFilter"><option value="">كل المسارات</option>${TRACKS.map(t=>`<option ${reviewFilter.track===t?'selected':''}>${t}</option>`).join('')}</select>
+        <select id="reviewStatusFilter">
+          <option value="">كل الحالات</option>
+          <option value="draft" ${reviewFilter.status==='draft'?'selected':''}>مسودة</option>
+          <option value="submitted" ${reviewFilter.status==='submitted'?'selected':''}>مُرسَل</option>
+          <option value="needs_completion" ${reviewFilter.status==='needs_completion'?'selected':''}>يحتاج استكمال</option>
+        </select>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th><th>قائد الفريق</th><th>الاكتمال</th><th>الحالة</th><th>آخر تحديث</th><th></th></tr></thead>
+        <tbody id="reviewTbody"></tbody>
+      </table></div>
+    </div>
+  `;
+  const tb = document.getElementById('reviewTbody');
+  if(rows.length===0){ tb.innerHTML = `<tr><td colspan="8"><div class="empty-hint">لا توجد طلبات مطابقة</div></td></tr>`; }
+  else{
+    tb.innerHTML = rows.map(r=>{
+      const st = STATUS_LABELS[r.status] || [r.status,'mid'];
+      return `<tr>
+        <td class="mono">${r.project_id}</td>
+        <td>${r.project_name}</td>
+        <td>${r.track}</td>
+        <td>${r.team_leader_name}</td>
+        <td class="mono">${r.completion_pct}%</td>
+        <td><span class="badge ${st[1]}">${st[0]}</span></td>
+        <td style="color:var(--ink-400);font-size:12px">${relativeTime(r.updated_at)}</td>
+        <td style="text-align:left"><button class="btn btn-ghost btn-sm" data-openreview="${r.project_id}">${canEdit?'مراجعة':'عرض'}</button></td>
+      </tr>`;
+    }).join('');
+  }
+  document.getElementById('reviewSearch').addEventListener('input', e=>{ reviewFilter.q=e.target.value; renderReviewList(); });
+  document.getElementById('reviewTrackFilter').addEventListener('change', e=>{ reviewFilter.track=e.target.value; renderReviewList(); });
+  document.getElementById('reviewStatusFilter').addEventListener('change', e=>{ reviewFilter.status=e.target.value; renderReviewList(); });
+  document.getElementById('refreshReviewBtn').addEventListener('click', async ()=>{ await loadReviewList(); renderReviewList(); showToast('تم تحديث القائمة'); });
+  document.querySelectorAll('[data-openreview]').forEach(b=>{
+    b.addEventListener('click', ()=>{ currentReviewProjectId = b.dataset.openreview; reviewDetail = null; renderReview(); });
+  });
+}
+
+/* ---------------- تحميل وعرض تفاصيل طلب واحد ---------------- */
+async function loadReviewDetail(projectId){
+  reviewDetailLoading = true;
+  try{
+    const { data: form, error: formErr } = await sb.from('verification_forms').select('*').eq('project_id', projectId).maybeSingle();
+    if(formErr || !form){ reviewDetail = null; return; }
+    const [{data: answers}, {data: members}, {data: files}, {data: reqRows}, {data: notes}, {data: overall}] = await Promise.all([
+      sb.from('form_answers').select('field_key, value_text, value_json').eq('form_id', form.id),
+      sb.from('team_members').select('*').eq('form_id', form.id).order('order_index'),
+      sb.from('form_files').select('*').eq('form_id', form.id).is('deleted_at', null),
+      sb.from('requirement_status').select('*').eq('form_id', form.id),
+      sb.from('review_notes').select('*').eq('form_id', form.id).order('created_at', {ascending:false}),
+      sb.rpc('compute_overall_readiness', { p_form_id: form.id }),
+    ]);
+    reviewDetail = { form, answers: answers||[], members: members||[], files: files||[], reqRows: reqRows||[], notes: notes||[], overall: overall||'pending' };
+  } catch(e){
+    showToast('تعذّر تحميل تفاصيل الطلب: '+(e.message||'خطأ غير معروف'));
+    reviewDetail = null;
+  }
+  reviewDetailLoading = false;
+}
+
+function renderReviewDetailShell(){
+  const el = document.getElementById('view-review');
+  const proj = eligibleProjects.find(p=>p.project_id===currentReviewProjectId) || {};
+  if(!reviewDetail && !reviewDetailLoading){
+    el.innerHTML = `<div class="empty-hint">جارٍ تحميل تفاصيل الطلب…</div>`;
+    loadReviewDetail(currentReviewProjectId).then(renderReview);
+    return;
+  }
+  if(reviewDetailLoading){ el.innerHTML = `<div class="empty-hint">جارٍ تحميل تفاصيل الطلب…</div>`; return; }
+  if(!reviewDetail){ el.innerHTML = `<div class="empty-hint">تعذّر تحميل هذا الطلب.</div>`; return; }
+  renderReviewDetail(proj);
+}
+
+function ansMap(){
+  const m = {};
+  reviewDetail.answers.forEach(a=>{ m[a.field_key] = a.value_json!==null ? a.value_json : a.value_text; });
+  return m;
+}
+function fmtAnsValue(v){
+  if(v===null||v===undefined||v==='') return '<span style="color:var(--ink-400)">—</span>';
+  if(Array.isArray(v)) return v.join('، ');
+  return String(v);
+}
+
+function renderReviewDetail(proj){
+  const el = document.getElementById('view-review');
+  const canEdit = currentAdmin && ['admin','reviewer'].includes(currentAdmin.role);
+  const { form, members, files, reqRows, notes, overall } = reviewDetail;
+  const av = ansMap();
+  const st = STATUS_LABELS[form.status] || [form.status,'mid'];
+  const overallMap = {ready_to_advance:['مستوفٍ للانتقال','ok'], needs_completion:['يحتاج استكمال','mid'], not_ready:['غير مستوفٍ','no'], needs_manual_review:['يحتاج مراجعة يدوية','mid'], pending:['لم تكتمل المراجعة','mid']};
+  const ov = overallMap[overall] || overallMap.pending;
+
+  el.innerHTML = `
+    <div class="section-title-row">
+      <div>
+        <button class="btn btn-ghost btn-sm" id="backToReviewList" style="margin-bottom:10px">→ رجوع للقائمة</button>
+        <h2>${proj.project_name || currentReviewProjectId} <span class="mono" style="font-size:12px;color:var(--ink-400)">(${currentReviewProjectId})</span></h2>
+        <p>قائد الفريق: ${proj.team_leader_name||'—'} · ${proj.team_leader_email||'—'} · المسار: ${proj.track||'—'}</p>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="badge ${st[1]}">${st[0]}</span>
+        <span class="badge ${ov[1]}">الحالة العامة: ${ov[0]}</span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:18px">
+      <div class="section-title-row"><div><h2>تقييم المتطلبات الستة</h2><p>${canEdit?'حدّد حالة كل متطلب — الحالة العامة أعلاه تُحسب تلقائيًا من هذه التقييمات.':'قراءة فقط — لا تملك صلاحية التعديل.'}</p></div></div>
+      <div class="checklist-grid" id="reqGrid"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:18px">
+      <div class="section-title-row"><div><h2>أعضاء الفريق (${members.length})</h2></div></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>الاسم</th><th>الدور</th><th>التخصص</th><th>الجوال</th><th>البريد</th><th>حضر المعسكر</th></tr></thead>
+        <tbody>${members.map(m=>`<tr>
+          <td>${m.full_name}${m.is_leader?' <span class="badge ok" style="margin-inline-start:4px">قائد</span>':''}</td>
+          <td>${m.role_in_project||'—'}</td><td>${m.specialization||'—'}</td>
+          <td class="mono">${m.phone||'—'}</td><td class="mono">${m.email||'—'}</td>
+          <td>${m.attended_camp===true?'نعم':m.attended_camp===false?'لا':'—'}</td>
+        </tr>`).join('') || `<tr><td colspan="6"><div class="empty-hint">لا يوجد أعضاء مسجَّلون بعد</div></td></tr>`}</tbody>
+      </table></div>
+    </div>
+
+    <div class="card" style="margin-bottom:18px">
+      <div class="section-title-row"><div><h2>الملفات المرفوعة (${files.length})</h2></div></div>
+      <div id="filesListWrap">${files.length===0?`<div class="empty-hint">لا توجد ملفات مرفوعة</div>`:''}</div>
+    </div>
+
+    <div class="card" style="margin-bottom:18px">
+      <div class="section-title-row"><div><h2>إجابات النموذج كاملة</h2></div></div>
+      <div id="answersWrap"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title-row"><div><h2>ملاحظات المراجعة</h2></div></div>
+      <div id="notesListWrap">${notes.map(n=>`
+        <div style="border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink-400);margin-bottom:4px">
+            <span>${n.is_internal?'ملاحظة داخلية (لا يراها المشارك)':'ظاهرة للمشارك'}</span>
+            <span>${relativeTime(n.created_at)}</span>
+          </div>
+          <div style="font-size:13px">${n.note}</div>
+        </div>
+      `).join('') || `<div class="empty-hint">لا توجد ملاحظات بعد</div>`}</div>
+      ${canEdit ? `
+        <div class="field-inline" style="margin-top:14px">
+          <label class="flabel">إضافة ملاحظة جديدة</label>
+          <textarea id="newNoteText" placeholder="اكتب ملاحظتك هنا…"></textarea>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div class="toggle"><input type="checkbox" id="newNoteVisible"><label class="tk" for="newNoteVisible"></label></div>
+          <span style="font-size:12.5px;color:var(--ink-600)">اجعلها ظاهرة للمشارك (بدل ملاحظة داخلية فقط)</span>
+        </div>
+        <button class="btn btn-primary btn-sm" id="addNoteBtn">إضافة الملاحظة</button>
+      ` : ''}
+    </div>
+  `;
+
+  document.getElementById('backToReviewList').addEventListener('click', ()=>{ currentReviewProjectId=null; reviewDetail=null; renderReview(); });
+
+  // شبكة تقييم المتطلبات
+  const reqGrid = document.getElementById('reqGrid');
+  reqGrid.innerHTML = REQUIREMENTS.map(r=>{
+    const existing = reqRows.find(x=>x.requirement===r.key);
+    const currentStatus = existing ? existing.status : 'pending';
+    return `<div class="checklist-row" style="flex-direction:column;align-items:stretch;gap:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center"><span class="cr-label">${r.label}</span>${reqBadge(currentStatus)}</div>
+      ${canEdit ? `<select data-reqkey="${r.key}" style="font-size:12.5px">${REQ_STATUS_OPTIONS.map(o=>`<option value="${o.v}" ${currentStatus===o.v?'selected':''}>${o.l}</option>`).join('')}</select>` : ''}
+    </div>`;
+  }).join('');
+  if(canEdit){
+    reqGrid.querySelectorAll('[data-reqkey]').forEach(sel=>{
+      sel.addEventListener('change', async ()=>{
+        const key = sel.dataset.reqkey;
+        const newStatus = sel.value;
+        sel.disabled = true;
+        const { error } = await sb.from('requirement_status').upsert(
+          { form_id: form.id, requirement: key, status: newStatus, computed_at: new Date().toISOString() },
+          { onConflict: 'form_id,requirement' }
+        );
+        sel.disabled = false;
+        if(error){ showToast('تعذّر حفظ التقييم: '+error.message); return; }
+        const idx = reviewDetail.reqRows.findIndex(x=>x.requirement===key);
+        if(idx>-1) reviewDetail.reqRows[idx].status = newStatus; else reviewDetail.reqRows.push({requirement:key, status:newStatus});
+        const { data: newOverall } = await sb.rpc('compute_overall_readiness', { p_form_id: form.id });
+        reviewDetail.overall = newOverall || 'pending';
+        showToast('تم حفظ التقييم');
+        renderReviewDetail(proj);
+      });
+    });
+  }
+
+  // الملفات — روابط عرض/تنزيل موقّعة تُولَّد عند الطلب
+  const filesWrap = document.getElementById('filesListWrap');
+  if(files.length){
+    filesWrap.innerHTML = files.map((f,i)=>`
+      <div class="file-chip" style="margin-bottom:6px">
+        <span class="fc-name">📄 ${f.file_name} <span class="mono" style="color:var(--ink-400);font-size:11px">(${f.field_key})</span></span>
+        <button class="btn btn-ghost btn-sm" data-viewfile="${i}">فتح الملف</button>
+      </div>
+    `).join('');
+    filesWrap.querySelectorAll('[data-viewfile]').forEach(b=>{
+      b.addEventListener('click', async ()=>{
+        const f = files[parseInt(b.dataset.viewfile)];
+        b.disabled = true; b.textContent = 'جارٍ التحضير…';
+        const { data, error } = await sb.storage.from('form-attachments').createSignedUrl(f.storage_path, 300);
+        b.disabled = false; b.textContent = 'فتح الملف';
+        if(error || !data){ showToast('تعذّر فتح الملف: '+(error?.message||'')); return; }
+        window.open(data.signedUrl, '_blank');
+      });
+    });
+  }
+
+  // كل الإجابات مصنَّفة حسب الأقسام (باستخدام sections المحمَّلة أصلًا لتبويب الأسئلة)
+  const answersWrap = document.getElementById('answersWrap');
+  answersWrap.innerHTML = sections.map(sec=>{
+    const rows = sec.questions.map(q=>{
+      if(!(q.id in av)) return '';
+      return `<div style="padding:8px 0;border-bottom:1px solid var(--line)"><div style="font-size:11.5px;color:var(--ink-400);margin-bottom:2px">${q.label}</div><div style="font-size:13px">${fmtAnsValue(av[q.id])}</div></div>`;
+    }).join('');
+    if(!rows) return '';
+    return `<div style="margin-bottom:16px"><div style="font-weight:700;color:var(--navy-800);font-size:13.5px;margin-bottom:6px">${sec.title}</div>${rows}</div>`;
+  }).join('') || `<div class="empty-hint">لا توجد إجابات محفوظة بعد</div>`;
+
+  // إضافة ملاحظة جديدة
+  const addNoteBtn = document.getElementById('addNoteBtn');
+  if(addNoteBtn){
+    addNoteBtn.addEventListener('click', async ()=>{
+      const text = document.getElementById('newNoteText').value.trim();
+      if(!text){ showToast('اكتب نص الملاحظة أولًا'); return; }
+      const isVisible = document.getElementById('newNoteVisible').checked;
+      addNoteBtn.disabled = true; addNoteBtn.textContent = 'جارٍ الحفظ…';
+      const { data, error } = await sb.from('review_notes').insert({
+        form_id: form.id, note: text, is_internal: !isVisible, created_by: currentAdmin.id,
+      }).select().single();
+      addNoteBtn.disabled = false; addNoteBtn.textContent = 'إضافة الملاحظة';
+      if(error){ showToast('تعذّر إضافة الملاحظة: '+error.message); return; }
+      reviewDetail.notes.unshift(data);
+      showToast('تمت إضافة الملاحظة');
+      renderReviewDetail(proj);
+    });
+  }
+}
+
 /* ---------------- عرض شامل ---------------- */
 function renderAll(){
   renderTabs();
   if(activeTab==='dashboard') renderDashboard();
+  if(activeTab==='review') renderReview();
   if(activeTab==='builder') renderBuilder();
   if(activeTab==='eligibility') renderEligibility();
   if(activeTab==='users') renderUsers();
