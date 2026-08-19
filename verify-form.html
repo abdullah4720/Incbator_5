@@ -96,6 +96,22 @@ a{color:inherit;}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--teal-500),var(--gold-500));transition:width .35s ease;}
 .progress-label{max-width:1180px;margin:6px auto 0;font-size:11.5px;color:rgba(255,255,255,.55);display:flex;justify-content:space-between;}
 
+/* ===== شريط علوي مضغوط على الجوال — الجزء الثابت كان يأخذ مساحة كبيرة من الشاشة ===== */
+@media(max-width:640px){
+  .topbar{padding:10px 14px;}
+  .topbar-inner{flex-wrap:wrap;gap:8px;row-gap:6px;}
+  .brand-mark{width:30px;height:30px;}
+  .brand-eyebrow{display:none;}
+  .brand-title{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .brand-sub{display:none;}
+  .project-pill{padding:4px 10px;font-size:10.5px;order:3;}
+  .topbar-actions{gap:6px;order:4;margin-inline-start:auto;}
+  .btn-topbar{padding:5px 10px;font-size:10.5px;}
+  .progress-shell{margin-top:8px;}
+  .progress-label{font-size:9.5px;margin-top:4px;}
+  .eq-divider{height:12px;}
+}
+
 /* ===== layout ===== */
 .layout{max-width:1180px;margin:0 auto;padding:28px;display:grid;grid-template-columns:280px 1fr;gap:24px;align-items:start;}
 @media(max-width:920px){.layout{grid-template-columns:1fr;padding:16px;}}
@@ -334,8 +350,16 @@ function requireSessionOrRedirect(){
   return session;
 }
 
-const CITIES = ["الرياض","جدة","مكة المكرمة","المدينة المنورة","الدمام","الخبر","الظهران","بريدة","عنيزة","تبوك","أبها","خميس مشيط","حائل","جازان","نجران","الطائف","ينبع","الجبيل","سكاكا","عرعر","القريات","بيشة","الباحة","مدينة أخرى"];
+/* ============================================================
+   الأقسام والأسئلة — تُحمَّل ديناميكيًا من Supabase (form_sections +
+   form_questions) بدل أن تكون ثابتة بالكود. الأقسام ذات الواجهة الخاصة
+   (فريق العمل، مراحل النموذج، قائمة التحقق، الإقرار) تحتفظ بعناصرها
+   الهيكلية الخاصة، لكن الحقول العادية داخلها — وكل حقول الأقسام الأخرى —
+   ديناميكية بالكامل: أي تعديل/إضافة/حذف من لوحة التحكم ينعكس هنا مباشرة.
+   ============================================================ */
 
+// ثابت هيكلي فقط لواجهة منتقي المراحل (العناوين والأوصاف) — لا يُدار من
+// لوحة التحكم لأنه مرتبط بتصميم بصري خاص، وليس سؤالًا عاديًا.
 const STAGES = [
   {v:"idea", n:"5.1", t:"مرحلة الفكرة", d:"الفكرة مصاغة دون تصميم أو نموذج مادي"},
   {v:"design", n:"5.2", t:"مرحلة التصور والتصميم", d:"رسومات أولية أو تصور للحل دون نموذج قابل للتجربة"},
@@ -348,10 +372,6 @@ const STAGES = [
 ];
 const STAGE_QUALIFIES_IDX = 2; // فهرس 5.3 فأعلى يستوفي
 
-const PITCH_SECTIONS = ["المشكلة","الحل","القيمة المقترحة","السوق","الفئة المستهدفة","المنافسون","نموذج العمل","التسويق","الإنجازات","النموذج الأولي","الفريق","الاحتياج التمويلي","خطة التطوير"];
-const VALIDATION_METHODS = ["مقابلات شخصية","استبيانات إلكترونية","اختبار قابلية الاستخدام","تحليل بيانات السوق","مجموعات تركيز (Focus Groups)","اختبار A/B","تجربة ميدانية مصغرة","تحليل المنافسين","حملة تجريبية (اختبار MVP)","تحليل الطلب المسبق (Pre-orders)","أسلوب آخر"];
-const PRIOR_ACHIEVEMENTS = ["ملكية فكرية","براءة اختراع","نموذج صناعي","علامة تجارية","احتضان أو تسريع","تمويل","جائزة","شراكة","عميل فعلي","مبيعات أو إيرادات"];
-
 /* ---------------- الحالة ---------------- */
 const state = {
   current: 1,
@@ -361,125 +381,75 @@ const state = {
   videoMode: {}, // fieldId -> 'upload' | 'link'
 };
 
-function setVal(id,v){ state.values[id]=v; }
-function getVal(id){ return state.values[id] ?? ""; }
+let SECTIONS = []; // تُعبَّى بواسطة loadFormDefinition() قبل أول عرض
 
-/* ---------------- تعريف الأقسام والحقول ---------------- */
-const SECTIONS = [
-{id:1,key:"project",title:"بيانات المشروع وقائد الفريق",desc:"تُعبأ البيانات المتوفرة في المنصة تلقائيًا، مع إتاحة مراجعتها وتعديلها.",
- fields:[
-  {id:"f1_1",label:"رقم المشروع في المنصة",type:"text",required:true,readOnly:true},
-  {id:"f1_2",label:"اسم المشروع",type:"text",required:true},
-  {id:"f1_3",label:"مسار المشاركة",type:"select",required:true,options:["مسار الابتكار","مسار التحديات"]},
-  {id:"f1_4",label:"المجال الرئيس للمشروع",type:"select",required:true,options:["صحة الإنسان","الريادة في الطاقة والصناعة","اقتصاديات المستقبل","استدامة البيئة والاحتياجات الأساسية"]},
-  {id:"f1_5",label:"اسم قائد الفريق",type:"text",required:true},
-  {id:"f1_6",label:"رقم الهوية الوطنية أو الإقامة",type:"text",required:true,numeric:true},
-  {id:"f1_7",label:"رقم الجوال",type:"text",required:true},
-  {id:"f1_8",label:"البريد الإلكتروني",type:"email",required:true},
-  {id:"f1_9",label:"المدينة الحالية",type:"select",required:true,options:CITIES},
-  {id:"f1_9b",label:"اسم المدينة",type:"text",required:true,condition:s=>getVal("f1_9")==="مدينة أخرى"},
- ]},
-{id:2,key:"cr",title:"السجل التجاري والوضع النظامي",desc:"وجود سجل تجاري قائم يُعد أحد متطلبات الانتقال إلى مرحلة التحكيم.",
- banner:"وجود سجل تجاري قائم أحد متطلبات الانتقال إلى مرحلة التحكيم.",
- fields:[
-  {id:"f2_1",label:"هل يوجد سجل تجاري قائم للمشروع أو للشركة الناشئة؟",type:"radio",required:true,options:["نعم","لا"]},
-  {id:"f2_2",label:"اسم المنشأة المسجل",type:"text",required:true,condition:s=>getVal("f2_1")==="نعم"},
-  {id:"f2_3",label:"رقم السجل التجاري",type:"text",required:true,condition:s=>getVal("f2_1")==="نعم"},
-  {id:"f2_4",label:"تاريخ الإصدار",type:"date",required:true,condition:s=>getVal("f2_1")==="نعم"},
-  {id:"f2_5",label:"تاريخ الانتهاء",type:"date",required:true,condition:s=>getVal("f2_1")==="نعم"},
-  {id:"f2_6",label:"حالة السجل التجاري",type:"select",required:true,options:["قائم وساري","منتهي","موقوف","تحت التحديث"],condition:s=>getVal("f2_1")==="نعم"},
-  {id:"f2_7",label:"صفة قائد الفريق في المنشأة",type:"select",required:true,options:["مالك","شريك","مدير","مفوض","عضو في فريق المشروع"],condition:s=>getVal("f2_1")==="نعم"},
-  {id:"f2_8",label:"رفع نسخة السجل التجاري",type:"file",required:true,accept:".pdf",condition:s=>getVal("f2_1")==="نعم"},
-  {id:"f2_9",label:"الحالة الحالية لإصدار السجل التجاري",type:"select",required:true,options:["تم التقديم وقيد المعالجة","لم يبدأ التقديم بعد","تم رفض الطلب","متوقف مؤقتًا"],condition:s=>getVal("f2_1")==="لا"},
-  {id:"f2_10",label:"العائق الرئيس أمام الإصدار",type:"select",required:true,options:["تكلفة الإصدار","تعقيد الإجراءات","عدم اكتمال المستندات المطلوبة","خلاف بين الشركاء","أخرى"],condition:s=>getVal("f2_1")==="لا"},
-  {id:"f2_11",label:"توضيح العائق",type:"textarea",required:true,condition:s=>getVal("f2_1")==="لا"&&getVal("f2_10")==="أخرى"},
-  {id:"f2_12",label:"رفع ما يثبت البدء في إجراءات الإصدار",type:"file",required:false,multiple:true,accept:".pdf",condition:s=>getVal("f2_1")==="لا"},
- ]},
-{id:3,key:"camp",title:"استكمال المشاركة في المعسكر التدريبي",desc:"التحقق من الحضور سيتم من خلال سجلات البرنامج، وليس اعتمادًا على إفادة المشارك وحدها.",
- fields:[
-  {id:"f3_1",label:"المعسكر الذي شارك فيه الفريق",type:"select",required:true,options:["كاوست","مدينة الملك عبدالله للطاقة الذرية والمتجددة – الرياض","جامعة القصيم"]},
-  {id:"f3_2",label:"هل أكمل الفريق المشاركة في جميع أيام وبرامج المعسكر؟",type:"radio",required:true,options:["نعم","لا"]},
-  {id:"f3_3",label:"سبب عدم اكتمال المشاركة",type:"select",required:true,options:["ظروف صحية","ظروف عمل أو دراسة","ظروف سفر","انسحاب عضو رئيس من الفريق","أخرى"],condition:s=>getVal("f3_2")==="لا"},
-  {id:"f3_4",label:"توضيح السبب",type:"textarea",required:true,condition:s=>getVal("f3_2")==="لا"&&getVal("f3_3")==="أخرى"},
-  {id:"f3_5",label:"رفع ما يؤيد السبب",type:"file",required:false,multiple:true,accept:".pdf",condition:s=>getVal("f3_2")==="لا"},
- ]},
-{id:4,key:"team",title:"بيانات فريق العمل",desc:"الحد الأدنى عضوان، بمن فيهم قائد الفريق.",
- isTeamSection:true,
- fields:[
-  {id:"f4_10",label:"رفع مستند تعريف بفريق العمل وتوزيع الأدوار",type:"file",required:true,accept:".pdf"},
-  {id:"f4_11",label:"هل من المتوقع استمرار جميع أعضاء الفريق حتى مرحلة التحكيم؟",type:"radio",required:true,options:["نعم","لا"]},
-  {id:"f4_12",label:"توضيح التغييرات المتوقعة وأثرها",type:"textarea",required:true,condition:s=>getVal("f4_11")==="لا"},
- ]},
-{id:5,key:"proto",title:"مستوى تطوير المشروع والنموذج الأولي",desc:"اختر المرحلة التي تصف الوضع الحالي للمشروع بدقة.",
- isStageSection:true,
- fields:[
-  {id:"f5_9",label:"نوع النموذج المتوفر",type:"select",required:true,options:["نموذج رقمي (تطبيق/موقع)","نموذج مادي (منتج ملموس)","نموذج مختلط (رقمي ومادي)","نموذج خدمي (تجربة/عملية)"],condition:s=>stageQualifies()},
-  {id:"f5_10",label:"نسبة اكتمال النموذج",type:"select",required:true,options:["أقل من 25%","25% – 50%","50% – 75%","أكثر من 75%"],condition:s=>stageQualifies()},
-  {id:"f5_11",label:"حالة اختبار النموذج",type:"select",required:true,options:["لم يُختبر بعد","اختبار داخلي فقط","اختبار مع مستخدمين حقيقيين"],condition:s=>stageQualifies()},
-  {id:"f5_12",label:"عدد المستفيدين الذين جرّبوه",type:"number",required:true,condition:s=>stageQualifies()},
-  {id:"f5_13",label:"الوظائف التي يحققها النموذج",type:"textarea",required:true,condition:s=>stageQualifies()},
-  {id:"f5_14",label:"نتيجة الاختبار",type:"textarea",required:true,condition:s=>stageQualifies()},
-  {id:"f5_15",label:"أبرز العوائق المتعلقة بالنموذج",type:"textarea",required:false,condition:s=>stageQualifies()},
-  {id:"f5_16",label:"رفع ملف توثيق النموذج",type:"file",required:true,multiple:true,accept:".pdf",condition:s=>stageQualifies()},
-  {id:"f5_17",label:"فيديو توضيحي للنموذج",type:"video",required:true,condition:s=>stageQualifies()},
-  {id:"f5_18",label:"رابط النموذج أو النسخة التجريبية",type:"url",required:false,condition:s=>stageQualifies()},
-  {id:"f5_19",label:"بيانات دخول حساب تجريبي مخصص للمراجعة",type:"text",required:false,hint:"يُرجى عدم استخدام بيانات الحسابات الشخصية.",condition:s=>stageQualifies()},
-  {id:"f5_20",label:"السبب الرئيس لعدم توفر نموذج",type:"select",required:true,options:["نقص في التمويل","نقص في الخبرات التقنية","المشروع في مرحلة بحث مبكرة","تغيير في فكرة المشروع","أخرى"],condition:s=>!stageQualifies()&&getVal("f5_1")},
-  {id:"f5_21",label:"المرحلة المتوقعة قبل التحكيم",type:"select",required:true,options:STAGES.map(x=>x.t),condition:s=>!stageQualifies()&&getVal("f5_1")},
-  {id:"f5_22",label:"خطة استكمال النموذج",type:"textarea",required:true,condition:s=>!stageQualifies()&&getVal("f5_1")},
-  {id:"f5_23",label:"العوائق التي تمنع تطويره",type:"textarea",required:false,condition:s=>!stageQualifies()&&getVal("f5_1")},
- ]},
-{id:6,key:"pitch",title:"العرض الاستثماري",desc:"يجب أن يغطي العرض: المشكلة، الحل، القيمة المقترحة، السوق، الفئة المستهدفة، المنافسون، نموذج العمل، التسويق، الإنجازات، النموذج الأولي، الفريق، الاحتياج التمويلي، وخطة التطوير.",
- fields:[
-  {id:"f6_1",label:"حالة إعداد العرض الاستثماري",type:"select",required:true,options:["مكتمل وفق النموذج المعتمد","مكتمل مع تعديلات محدودة","مكتمل بصيغة مختلفة","غير مكتمل","لم يبدأ"]},
-  {id:"f6_2",label:"رفع العرض الاستثماري",type:"file",required:true,accept:".pdf",condition:s=>getVal("f6_1")&&getVal("f6_1")!=="لم يبدأ"},
-  {id:"f6_3",label:"الأقسام الناقصة في العرض",type:"multiselect",required:true,options:PITCH_SECTIONS,condition:s=>["غير مكتمل","لم يبدأ"].includes(getVal("f6_1"))},
-  {id:"f6_4",label:"العائق الرئيس أمام استكمال العرض",type:"textarea",required:true,condition:s=>["غير مكتمل","لم يبدأ"].includes(getVal("f6_1"))},
-  {id:"f6_5",label:"فيديو تعريفي عام بالمشروع",type:"video",required:false,condition:s=>["غير مكتمل","لم يبدأ"].includes(getVal("f6_1"))},
- ]},
-{id:7,key:"market",title:"التحقق الأولي من احتياج السوق",desc:"وثّق الأسلوب الذي تحققت به من وجود حاجة حقيقية في السوق لمشروعك.",
- fields:[
-  {id:"f7_1",label:"حالة التحقق من احتياج السوق",type:"select",required:true,options:["تحقق مكتمل","تحقق جزئي","تحقق جارٍ","لم يبدأ التحقق"]},
-  {id:"f7_2",label:"الأساليب المستخدمة في التحقق",type:"multiselect",required:true,options:VALIDATION_METHODS,condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))},
-  {id:"f7_3",label:"توضيح الأسلوب",type:"text",required:true,condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))&&(getVal("f7_2")||[]).includes("أسلوب آخر")},
-  {id:"f7_4",label:"الفئة التي تم التحقق معها",type:"text",required:true,condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))},
-  {id:"f7_5",label:"عدد الأشخاص أو الجهات التي تم التواصل معها",type:"number",required:true,condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))},
-  {id:"f7_6",label:"أبرز نتائج التحقق",type:"textarea",required:true,condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))},
-  {id:"f7_7",label:"هل تم تعديل المشروع بناءً على النتائج؟",type:"radio",required:true,options:["نعم","لا"],condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))},
-  {id:"f7_8",label:"الجوانب التي تم تعديلها",type:"textarea",required:true,condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))&&getVal("f7_7")==="نعم"},
-  {id:"f7_9",label:"رفع ما يثبت التحقق",type:"file",required:true,multiple:true,accept:".pdf",condition:s=>["تحقق مكتمل","تحقق جزئي"].includes(getVal("f7_1"))},
-  {id:"f7_10",label:"العوائق أمام إكمال التحقق",type:"textarea",required:true,condition:s=>["تحقق جارٍ","لم يبدأ التحقق"].includes(getVal("f7_1"))},
- ]},
-{id:8,key:"progress",title:"حالة المشروع والتقدم المحقق",desc:"شارك أبرز ما تحقق منذ انتهاء المعسكر.",
- fields:[
-  {id:"f8_1",label:"أبرز ما تم إنجازه منذ المعسكر",type:"textarea",required:true},
-  {id:"f8_2",label:"أبرز التغييرات بعد التدريب والإرشاد",type:"textarea",required:false},
-  {id:"f8_3",label:"التحديات الحالية",type:"textarea",required:false},
-  {id:"f8_4",label:"الإنجازات السابقة",type:"multiselect",required:false,options:PRIOR_ACHIEVEMENTS},
-  {id:"f8_5",label:"رفع المستندات المؤيدة",type:"file",required:false,multiple:true,accept:".pdf"},
- ]},
-{id:9,key:"attendance",title:"جاهزية الفريق لحضور مرحلة التحكيم",desc:"مرحلة التحكيم تُعقد حضوريًا في مدينة الرياض.",
- fields:[
-  {id:"f9_1",label:"الالتزام بالحضور الشخصي في الرياض",type:"radio",required:true,options:["نعم","حضور جزئي","لا يمكن الالتزام"]},
-  {id:"f9_2",label:"عدد الأعضاء المتوقع حضورهم",type:"number",required:true},
-  {id:"f9_3",label:"اختيار أسماء الأعضاء الحاضرين",type:"multiselect",required:true,optionsFn:()=>state.members.map(m=>m.name).filter(Boolean)},
-  {id:"f9_4",label:"هل توجد ظروف قد تؤثر في الحضور؟",type:"radio",required:true,options:["نعم","لا"]},
-  {id:"f9_5",label:"توضيح الظروف",type:"textarea",required:true,condition:s=>getVal("f9_4")==="نعم"},
- ]},
-{id:10,key:"checklist",title:"قائمة التحقق النهائية",desc:"تُحسب حالة كل متطلب تلقائيًا من إجاباتك أعلاه، وتخضع لمراجعة فريق البرنامج.",
- isChecklistSection:true,
- fields:[
-  {id:"f10_1",label:"تقييم عام لحالة استيفاء المشروع",type:"select",required:true,options:["مستوفٍ لجميع المتطلبات","مستوفٍ لمعظمها ويجري استكمال بعضها","غير مستوفٍ لعدد منها"]},
-  {id:"f10_2",label:"ملاحظات إضافية",type:"textarea",required:false},
- ]},
-{id:11,key:"declare",title:"الإقرار والتعهد",desc:"يُرجى قراءة الإقرار بعناية قبل التوقيع.",
- isDeclareSection:true,
- fields:[
-  {id:"f11_2",label:"اسم قائد الفريق",type:"text",required:true},
-  {id:"f11_3",label:"التاريخ",type:"date",required:true},
-  {id:"f11_4",label:"التوقيع الإلكتروني المبسّط (كتابة الاسم الكامل)",type:"text",required:true},
- ]},
-];
+/* ---------------- مقيّم الشروط الشرطية (يقرأ condition_expr القادم من القاعدة) ---------------- */
+function evalCond(cond){
+  if(!cond) return true;
+  if(cond.all) return cond.all.every(c=>evalCond(c));
+  const val = getVal(cond.field);
+  switch(cond.op){
+    case 'eq': return val === cond.value;
+    case 'neq': return val !== cond.value;
+    case 'in': return Array.isArray(cond.value) && cond.value.includes(val);
+    case 'not_in': return Array.isArray(cond.value) && !cond.value.includes(val);
+    case 'includes': return Array.isArray(val) && val.includes(cond.value);
+    case 'not_empty': return val !== undefined && val !== null && String(val).trim() !== '';
+    default: return true;
+  }
+}
+
+/* ---------------- تحويل صف form_questions إلى تعريف حقل يفهمه المُصيِّر ---------------- */
+function buildFieldFromDB(q){
+  const f = { id: q.field_key, label: q.label, type: q.type, required: q.required };
+  if(q.options && q.options.length) f.options = q.options;
+  if(q.multiple) f.multiple = true;
+  if(q.type === 'file') f.accept = '.pdf';
+  if(q.hint) f.hint = q.hint;
+  if(q.condition_expr) f.condition = ()=>evalCond(q.condition_expr);
+
+  // استثناءات هيكلية معروفة — سلوك خاص مربوط بمعرّف الحقل نفسه، لا يُدار من
+  // لوحة التحكم لأنه جزء من منطق النموذج الأساسي (مو نص/خيارات فقط):
+  if(q.field_key === 'f1_1') f.readOnly = true;                 // رقم المشروع يُعبَّى تلقائيًا
+  if(q.field_key === 'f9_3'){                                    // خيارات أسماء الحضور تُشتق من أعضاء الفريق فعليًا
+    f.optionsFn = ()=>state.members.map(m=>m.name).filter(Boolean);
+    delete f.options;
+  }
+  return f;
+}
+
+/* ---------------- تحميل تعريف النموذج كاملًا من Supabase ---------------- */
+async function loadFormDefinition(){
+  const { data: secRows, error: secErr } = await SB.from('form_sections')
+    .select('*').eq('is_active', true).order('order_index');
+  if(secErr) throw secErr;
+  const { data: qRows, error: qErr } = await SB.from('form_questions')
+    .select('*').eq('is_active', true).order('order_index');
+  if(qErr) throw qErr;
+
+  SECTIONS = (secRows||[]).map(s=>{
+    const obj = {
+      id: s.id, key: s.section_key || null,
+      title: s.title, desc: s.description || '',
+      banner: s.banner || undefined,
+      // f5_1 وf11_1 لهما عناصر واجهة خاصة مُهيكلة (منتقي المراحل، شارة الإقرار)
+      // مرسومة يدويًا في renderStageSection/renderDeclareSection — نستبعدهما هنا
+      // كي لا يُرسَما مرتين، مع بقائهما قابلين للتعديل نصيًا من لوحة التحكم.
+      fields: (qRows||[])
+        .filter(q=>q.section_id===s.id && !['f5_1','f11_1'].includes(q.field_key))
+        .map(buildFieldFromDB),
+    };
+    if(s.section_key === 'team') obj.isTeamSection = true;
+    if(s.section_key === 'proto') obj.isStageSection = true;
+    if(s.section_key === 'checklist') obj.isChecklistSection = true;
+    if(s.section_key === 'declare') obj.isDeclareSection = true;
+    return obj;
+  });
+
+  if(SECTIONS.length === 0){
+    throw new Error('لم يتم تحميل أي أقسام من قاعدة البيانات — تأكد من تنفيذ schema.sql وأن الأقسام نشطة.');
+  }
+}
 
 function stageQualifies(){
   const v = getVal("f5_1");
@@ -547,14 +517,14 @@ function sectionStatus(section){
 /* ---------------- الشريط الجانبي ---------------- */
 function renderStepper(){
   const el=document.getElementById('stepper');
-  el.innerHTML = SECTIONS.map(s=>{
+  el.innerHTML = SECTIONS.map((s,idx)=>{
     const st=sectionStatus(s);
     const cls = ["step-item"];
     if(s.id===state.current) cls.push("active");
     if(st==="done") cls.push("done");
     if(st==="warn") cls.push("warn");
     return `<div class="${cls.join(' ')}" data-goto="${s.id}">
-      <div class="step-num">${st==='done'?'✓':s.id}</div>
+      <div class="step-num">${st==='done'?'✓':idx+1}</div>
       <div class="step-title">${s.title}</div>
     </div>`;
   }).join('');
@@ -761,12 +731,15 @@ function renderDeclareSection(section){
 /* ---------------- عرض القسم الحالي ---------------- */
 const ACCENT_CYCLE = ['#0E7C7B','#6B4FA0','#C9A24B','#2FA36B'];
 function renderSection(){
-  const section = SECTIONS.find(s=>s.id===state.current);
+  const sectionIndex = SECTIONS.findIndex(s=>s.id===state.current);
+  const section = SECTIONS[sectionIndex] || SECTIONS[0];
+  const isFirst = sectionIndex <= 0;
+  const isLast = sectionIndex === SECTIONS.length - 1;
   const card = document.getElementById('sectionCard');
-  const accent = ACCENT_CYCLE[(section.id-1) % ACCENT_CYCLE.length];
+  const accent = ACCENT_CYCLE[sectionIndex % ACCENT_CYCLE.length];
   let inner = `<div class="section-head">
-    <div class="section-eyebrow">القسم ${toArabicOrdinalIdx(section.id)} / 11</div>
-    <div class="section-title"><span class="section-num-badge" style="background:${accent}">${section.id}</span>${section.title}</div>
+    <div class="section-eyebrow">القسم ${sectionIndex+1} / ${SECTIONS.length}</div>
+    <div class="section-title"><span class="section-num-badge" style="background:${accent}">${sectionIndex+1}</span>${section.title}</div>
     <div class="section-desc">${section.desc}</div>
   </div>`;
   if(section.banner) inner += `<div class="req-banner"><b>تنبيه:</b>&nbsp;${section.banner}</div>`;
@@ -778,10 +751,10 @@ function renderSection(){
   else inner += visibleFields(section).map(renderField).join('');
 
   inner += `<div class="nav-row">
-    <button class="btn btn-ghost" id="btnPrev" ${section.id===1?'disabled':''}>القسم السابق</button>
+    <button class="btn btn-ghost" id="btnPrev" ${isFirst?'disabled':''}>القسم السابق</button>
     <div class="side-actions">
       <button class="btn btn-ghost" id="btnSaveDraft">حفظ كمسودة</button>
-      ${section.id===11
+      ${isLast
         ? `<button class="btn btn-gold" id="btnSubmit">إرسال النموذج</button>`
         : `<button class="btn btn-primary" id="btnNext">القسم التالي</button>`}
     </div>
@@ -789,11 +762,6 @@ function renderSection(){
   card.innerHTML = inner;
   bindSectionEvents(section);
 }
-function toArabicOrdinalIdx(n){
-  const words=["","الأول","الثاني","الثالث","الرابع","الخامس","السادس","السابع","الثامن","التاسع","العاشر","الحادي عشر"];
-  return words[n]||n;
-}
-
 /* ---------------- ربط الأحداث ---------------- */
 function bindSectionEvents(section){
   document.querySelectorAll('[data-id]').forEach(el=>{
@@ -906,10 +874,16 @@ function bindSectionEvents(section){
   if(dc) dc.addEventListener('click',()=>{ state.values.f11_1 = !state.values.f11_1; renderAll(); });
 
   const prev=document.getElementById('btnPrev');
-  if(prev) prev.addEventListener('click',()=>{ if(state.current>1){ state.current--; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); }});
+  if(prev) prev.addEventListener('click',()=>{
+    const idx = SECTIONS.findIndex(s=>s.id===state.current);
+    if(idx>0){ state.current = SECTIONS[idx-1].id; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); }
+  });
   const next=document.getElementById('btnNext');
   if(next) next.addEventListener('click',()=>{
-    if(validateSection(section)){ state.current=Math.min(11,state.current+1); renderAll(); window.scrollTo({top:0,behavior:'smooth'}); }
+    if(validateSection(section)){
+      const idx = SECTIONS.findIndex(s=>s.id===state.current);
+      if(idx < SECTIONS.length-1){ state.current = SECTIONS[idx+1].id; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); }
+    }
   });
   const save=document.getElementById('btnSaveDraft');
   if(save) save.addEventListener('click',()=>{ saveDraft(); });
@@ -1059,6 +1033,9 @@ async function initApp(){
   SB_AUTH = SB; // عميل واحد يكفي الآن — الوصول محكوم بـ RLS على "مشروع نشط" فقط
 
   try{
+    // 0) تعريف النموذج نفسه (الأقسام والأسئلة) — لازم يُحمَّل قبل أي شيء آخر
+    await loadFormDefinition();
+
     // 1) بيانات المشروع الأساسية
     const { data: proj } = await SB.from('eligible_projects')
       .select('project_id, project_name, team_leader_name, track, domain')
@@ -1112,6 +1089,16 @@ async function initApp(){
   } catch(e){
     showToast('تعذّر تحميل بيانات النموذج: ' + (e.message || 'خطأ غير معروف'));
   }
+
+  if(SECTIONS.length === 0){
+    document.getElementById('sectionCard').innerHTML = `
+      <div style="text-align:center;padding:40px 20px">
+        <div style="font-size:15px;font-weight:700;color:var(--navy-800);margin-bottom:8px">تعذّر تحميل النموذج</div>
+        <div style="font-size:13px;color:var(--ink-600)">حدث خطأ أثناء تحميل الأسئلة من الخادم. يرجى تحديث الصفحة، وإن استمرت المشكلة تواصل مع فريق البرنامج.</div>
+      </div>`;
+    return;
+  }
+  if(!SECTIONS.find(s=>s.id===state.current)) state.current = SECTIONS[0].id;
 
   bindTopbarActions();
   renderAll();
