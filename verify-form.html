@@ -415,7 +415,11 @@ function buildFieldFromDB(q){
 
   // استثناءات هيكلية معروفة — سلوك خاص مربوط بمعرّف الحقل نفسه، لا يُدار من
   // لوحة التحكم لأنه جزء من منطق النموذج الأساسي (مو نص/خيارات فقط):
-  if(q.field_key === 'f1_1') f.readOnly = true;                 // رقم المشروع يُعبَّى تلقائيًا
+  if(q.field_key === 'f1_1') f.readOnly = true;                 // رقم المشروع يُعبَّى تلقائيًا دائمًا
+  // بيانات ثابتة من سجل المشروع (eligible_projects) — تُقفَل فقط إذا كانت
+  // متوفرة فعليًا؛ لو كانت فارغة (مثلًا جوال ناقص من الاستيراد) تبقى قابلة
+  // للتعبئة كي لا يعلق المشارك بدون طريقة لإدخالها.
+  if(['f1_3','f1_4','f1_5','f1_7','f1_8'].includes(q.field_key)) f.lockWhenFilled = true;
   if(q.field_key === 'f9_3'){                                    // خيارات أسماء الحضور تُشتق من أعضاء الفريق فعليًا
     f.optionsFn = ()=>state.members.map(m=>m.name).filter(Boolean);
     delete f.options;
@@ -548,17 +552,19 @@ function labelHTML(f){
 }
 function renderField(f){
   const val = getVal(f.id);
+  const locked = f.readOnly || (f.lockWhenFilled && val);
+  if(locked && f.lockWhenFilled && !f.readOnly) f.hint = 'بيانات ثابتة من سجل تسجيلك في المنصة — تواصل مع فريق البرنامج لتصحيحها.';
   let body = "";
   switch(f.type){
     case "text": case "email": case "url": case "number": case "date":
-      body = `<input type="${f.type}" id="in_${f.id}" data-id="${f.id}" value="${val?String(val).replace(/"/g,'&quot;'):''}" ${f.readOnly?'disabled':''} ${f.id==='f9_2'?`max="${state.members.length}" min="0"`:''} placeholder="${f.readOnly?'':''}">`;
+      body = `<input type="${f.type}" id="in_${f.id}" data-id="${f.id}" value="${val?String(val).replace(/"/g,'&quot;'):''}" ${locked?'disabled':''} ${f.id==='f9_2'?`max="${state.members.length}" min="0"`:''} placeholder="${locked?'':''}">`;
       if(f.id==='f9_2') f.hint = `الحد الأقصى ${state.members.length} (عدد أعضاء الفريق المسجَّلين)`;
       break;
     case "textarea":
       body = `<textarea id="in_${f.id}" data-id="${f.id}">${val?String(val):''}</textarea>`;
       break;
     case "select":
-      body = `<select id="in_${f.id}" data-id="${f.id}">
+      body = `<select id="in_${f.id}" data-id="${f.id}" ${locked?'disabled':''}>
         <option value="" ${!val?'selected':''}>اختر…</option>
         ${f.options.map(o=>`<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join('')}
       </select>`;
@@ -1133,7 +1139,7 @@ async function initApp(){
 
     // 1) بيانات المشروع الأساسية
     const { data: proj } = await SB.from('eligible_projects')
-      .select('project_id, project_name, team_leader_name, track, domain')
+      .select('project_id, project_name, team_leader_name, team_leader_phone, team_leader_email, track, domain')
       .eq('project_id', PROJECT_ID).maybeSingle();
 
     // 2) جلب سجل النموذج أو إنشاؤه لأول مرة
@@ -1172,12 +1178,15 @@ async function initApp(){
       state.files[f.field_key].push({ name:f.file_name, size:f.size_bytes, id:f.id, storage_path:f.storage_path });
     });
 
-    // 6) تعبئة بيانات المشروع الأساسية
+    // 6) تعبئة بيانات المشروع الأساسية — eligible_projects هو المصدر الرسمي
+    // لهذه الحقول (لذلك تُقفَل في الواجهة)، فتُعتمد قيمته دائمًا عند توفرها.
     setVal('f1_1', PROJECT_ID);
     if(proj){
-      if(!getVal('f1_5')) setVal('f1_5', proj.team_leader_name);
-      if(!getVal('f1_3') && proj.track) setVal('f1_3', proj.track);
-      if(!getVal('f1_4') && proj.domain) setVal('f1_4', proj.domain);
+      if(proj.team_leader_name) setVal('f1_5', proj.team_leader_name);
+      if(proj.track) setVal('f1_3', proj.track);
+      if(proj.domain) setVal('f1_4', proj.domain);
+      if(proj.team_leader_phone) setVal('f1_7', proj.team_leader_phone);
+      if(proj.team_leader_email) setVal('f1_8', proj.team_leader_email);
     }
 
     // 7) إعدادات النموذج — هل يُسمح بالتعديل بعد الإرسال؟
