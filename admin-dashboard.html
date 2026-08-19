@@ -1092,29 +1092,48 @@ function openImportPanel(){
       <div class="section-title-row"><div>
         <h2>استيراد قائمة الفرق من ملف CSV</h2>
         <p>الأعمدة المطلوبة بالترتيب: <span class="mono">project_id, project_name, track, domain, team_leader_name, team_leader_email, team_leader_phone</span></p>
+        <p style="margin-top:6px">⚠️ يجب حفظ الملف بصيغة <b>CSV</b> فعليًا (مو Excel .xlsx) — من إكسل: File → Save As → اختر "CSV UTF-8 (Comma delimited)".</p>
       </div></div>
-      <input type="file" id="csvInput" accept=".csv" style="margin-bottom:12px">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
+        <input type="file" id="csvInput" accept=".csv">
+        <button class="btn btn-ghost btn-sm" id="downloadTemplateBtn">تنزيل قالب CSV جاهز</button>
+      </div>
       <div id="importPreviewWrap"></div>
     </div>
   `;
   document.getElementById('csvInput').addEventListener('change', handleCsvFile);
+  document.getElementById('downloadTemplateBtn').addEventListener('click', downloadCsvTemplate);
 }
 function parseCSV(text){
+  // إزالة علامة BOM التي يضيفها إكسل تلقائيًا عند التصدير كـ"CSV UTF-8" —
+  // بدونها يفشل تطابق اسم أول عمود (project_id) صامتًا في كل الصفوف.
+  text = text.replace(/^\uFEFF/, '');
   const lines = text.replace(/\r/g,'').split('\n').filter(l=>l.trim().length>0);
   if(lines.length<2) return [];
+
+  // اكتشاف الفاصل تلقائيًا: إكسل بإعدادات عربية/خليجية غالبًا يصدّر بفاصلة
+  // منقوطة (;) بدل الفاصلة العادية (,). نحسب الأكثر تكرارًا في سطر العناوين.
+  const headerLine = lines[0];
+  const commaCount = (headerLine.match(/,/g)||[]).length;
+  const semiCount = (headerLine.match(/;/g)||[]).length;
+  const tabCount = (headerLine.match(/\t/g)||[]).length;
+  let delim = ',';
+  if(semiCount > commaCount && semiCount >= tabCount) delim = ';';
+  else if(tabCount > commaCount && tabCount > semiCount) delim = '\t';
+
   const splitLine = (line)=>{
-    // دعم مبسّط للحقول المحاطة بعلامات تنصيص تحتوي فواصل
+    // دعم مبسّط للحقول المحاطة بعلامات تنصيص تحتوي الفاصل نفسه
     const out=[]; let cur=''; let inQuotes=false;
     for(let i=0;i<line.length;i++){
       const ch=line[i];
       if(ch==='"'){ inQuotes=!inQuotes; continue; }
-      if(ch===',' && !inQuotes){ out.push(cur.trim()); cur=''; continue; }
+      if(ch===delim && !inQuotes){ out.push(cur.trim()); cur=''; continue; }
       cur+=ch;
     }
     out.push(cur.trim());
     return out;
   };
-  const headers = splitLine(lines[0]).map(h=>h.trim().toLowerCase());
+  const headers = splitLine(lines[0]).map(h=>h.trim().toLowerCase().replace(/^\uFEFF/, ''));
   return lines.slice(1).map(line=>{
     const cells = splitLine(line);
     const row = {};
@@ -1122,13 +1141,34 @@ function parseCSV(text){
     return row;
   });
 }
+function downloadCsvTemplate(){
+  const headers = ["project_id","project_name","track","domain","team_leader_name","team_leader_email","team_leader_phone"];
+  const sample = ["INV5-2026-00900","مثال: مشروع تجريبي","مسار الابتكار","صحة الإنسان","اسم قائد الفريق","email@example.com","0500000000"];
+  const csv = "\uFEFF" + headers.join(',') + '\n' + sample.map(v=>`"${v}"`).join(',');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'eligible_projects_template.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
 function handleCsvFile(e){
   const file = e.target.files[0];
   if(!file) return;
   const reader = new FileReader();
   reader.onload = (ev)=>{
-    const rows = parseCSV(ev.target.result);
-    if(rows.length===0){ showToast('الملف فارغ أو غير صالح'); return; }
+    const text = ev.target.result;
+    // ملفات .xlsx الحقيقية تبدأ بتوقيع ثنائي (PK..) حتى لو سُمّي الملف .csv
+    if(text.slice(0,2) === 'PK'){
+      showToast('هذا ملف Excel فعلي (.xlsx) وليس CSV — احفظه من إكسل بصيغة "CSV UTF-8" أولًا ثم أعد الرفع.');
+      return;
+    }
+    const rows = parseCSV(text);
+    if(rows.length===0){ showToast('الملف فارغ، أو لا يحتوي على صف بيانات واحد على الأقل تحت صف العناوين.'); return; }
+    const foundHeaders = Object.keys(rows[0]);
+    if(!foundHeaders.includes('project_id') || !foundHeaders.includes('team_leader_email')){
+      showToast('تعذّر التعرّف على أعمدة الملف (project_id / team_leader_email). تأكد من أسماء الأعمدة في السطر الأول، أو نزّل القالب الجاهز.');
+    }
     pendingImportRows = rows.map(r=>{
       const project_id = r.project_id || '';
       const team_leader_email = (r.team_leader_email||'').trim().toLowerCase();
@@ -1171,7 +1211,7 @@ function renderImportPreview(){
             <td>${r.project_name||'—'}</td>
             <td>${r.team_leader_name||'—'}</td>
             <td class="mono">${r.team_leader_email||'—'}</td>
-            <td>${r.errors.length? `<span class="badge no">${r.errors[0]}</span>` : (r.willUpdate?`<span class="badge mid">تحديث</span>`:`<span class="badge ok">جديد</span>`)}</td>
+            <td>${r.errors.length? r.errors.map(er=>`<span class="badge no" style="margin-inline-end:4px">${er}</span>`).join('') : (r.willUpdate?`<span class="badge mid">تحديث</span>`:`<span class="badge ok">جديد</span>`)}</td>
           </tr>
         `).join('')}</tbody>
       </table>
