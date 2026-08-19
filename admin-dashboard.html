@@ -511,6 +511,7 @@ async function loadEligibleProjects(){
     project_id: p.project_id, project_name: p.project_name, track: p.track, domain: p.domain,
     team_leader_name: p.team_leader_name, team_leader_email: p.team_leader_email,
     team_leader_phone: p.team_leader_phone, is_active: p.is_active, source: "—",
+    has_password: !!p.password_set_at,
   }));
 }
 async function loadUsers(){
@@ -937,7 +938,7 @@ function renderEligibility(){
   const withEmail = eligibleProjects.filter(p=>isValidEmail(p.team_leader_email)).length;
   el.innerHTML = `
     <div class="section-title-row">
-      <div><h2>الفرق المؤهّلة للدخول</h2><p>القائمة التي تتحقق منها صفحة الدخول (رقم المشروع + البريد) — دخول مباشر لا يدخل أي بريد غير موجود هنا.</p></div>
+      <div><h2>الفرق المؤهّلة للدخول</h2><p>القائمة التي تتحقق منها صفحة الدخول — كل فريق يُنشئ كلمة مروره بنفسه في أول دخول، وتقدر تمسحها من هنا عند نسيانها.</p></div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-ghost" id="exportEligBtn">تصدير CSV</button>
         <button class="btn btn-primary" id="openImportBtn">استيراد من ملف CSV</button>
@@ -949,6 +950,8 @@ function renderEligibility(){
         <div class="kval mono">${total}</div><div class="klabel">فريق مسجَّل في قائمة الأهلية</div></div>
       <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">✓</div>
         <div class="kval mono">${withEmail}</div><div class="klabel">بريد إلكتروني صالح ومحفوظ</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--amber-100);color:var(--amber)">🔑</div>
+        <div class="kval mono">${eligibleProjects.filter(p=>!p.has_password).length}</div><div class="klabel">فريق بلا كلمة مرور بعد</div></div>
       <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">⛔</div>
         <div class="kval mono">${eligibleProjects.filter(p=>!p.is_active).length}</div><div class="klabel">معطَّل عن الدخول حاليًا</div></div>
     </div>
@@ -967,7 +970,7 @@ function renderEligibility(){
         <button class="btn btn-ghost" id="addOneBtn">+ إضافة فريق واحد يدويًا</button>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th><th>قائد الفريق</th><th>البريد الإلكتروني</th><th>الحالة</th><th>المصدر</th><th></th></tr></thead>
+        <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th><th>قائد الفريق</th><th>البريد الإلكتروني</th><th>كلمة المرور</th><th>الحالة</th><th>المصدر</th><th></th></tr></thead>
         <tbody id="eligTbody"></tbody>
       </table></div>
     </div>
@@ -985,7 +988,7 @@ function renderEligibility(){
 function renderEligTbody(){
   const tb = document.getElementById('eligTbody');
   const rows = filteredEligible();
-  if(rows.length===0){ tb.innerHTML = `<tr><td colspan="8"><div class="empty-hint">لا توجد نتائج مطابقة</div></td></tr>`; return; }
+  if(rows.length===0){ tb.innerHTML = `<tr><td colspan="9"><div class="empty-hint">لا توجد نتائج مطابقة</div></td></tr>`; return; }
   tb.innerHTML = rows.map(p=>`
     <tr>
       <td class="mono">${p.project_id}</td>
@@ -993,6 +996,11 @@ function renderEligTbody(){
       <td>${p.track||'—'}</td>
       <td>${p.team_leader_name}</td>
       <td class="mono" style="${isValidEmail(p.team_leader_email)?'':'color:var(--danger)'}">${p.team_leader_email||'—'}</td>
+      <td>
+        ${p.has_password
+          ? `<span class="badge ok">أنشأها الفريق</span> <button class="icon-btn danger" data-resetpw="${p.project_id}" title="إعادة تعيين (نسيان كلمة المرور)">↻</button>`
+          : `<span class="badge mid">لم تُنشأ بعد</span>`}
+      </td>
       <td><span class="badge ${p.is_active?'ok':'no'}">${p.is_active?'مفعَّل':'معطَّل'}</span></td>
       <td style="color:var(--ink-400);font-size:12px">${p.source||'يدوي'}</td>
       <td style="text-align:left"><div style="display:flex;gap:4px;justify-content:flex-end">
@@ -1002,6 +1010,7 @@ function renderEligTbody(){
       </div></td>
     </tr>
   `).join('');
+  tb.querySelectorAll('[data-resetpw]').forEach(b=>b.addEventListener('click',()=>resetParticipantPassword(b.dataset.resetpw)));
   tb.querySelectorAll('[data-editelig]').forEach(b=>b.addEventListener('click',()=>openEligEditor(b.dataset.editelig)));
   tb.querySelectorAll('[data-toggleelig]').forEach(b=>b.addEventListener('click', async ()=>{
     const p = eligibleProjects.find(x=>x.project_id===b.dataset.toggleelig);
@@ -1019,6 +1028,18 @@ function renderEligTbody(){
       renderEligTbody(); showToast('تم حذف الفريق من قائمة الأهلية');
     });
   }));
+}
+
+/* ---------------- إعادة تعيين كلمة مرور فريق (عند نسيانها) ---------------- */
+function resetParticipantPassword(projectId){
+  const p = eligibleProjects.find(x=>x.project_id===projectId);
+  openConfirm(`سيتم مسح كلمة مرور فريق "${p.project_name}" الحالية. سيحتاج قائد الفريق لإنشاء كلمة مرور جديدة بنفسه في دخوله التالي. هل تريد الاستمرار؟`, async ()=>{
+    const { error } = await sb.rpc('admin_reset_participant_password', { p_project_id: projectId });
+    if(error){ showToast('تعذّر إعادة التعيين: '+error.message); return; }
+    p.has_password = false;
+    renderEligTbody();
+    showToast(`تم مسح كلمة مرور "${p.project_name}" — سيُنشئ الفريق كلمة مرور جديدة عند دخوله القادم`);
+  });
 }
 
 /* ---------------- إضافة / تعديل فريق واحد ---------------- */

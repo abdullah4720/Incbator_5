@@ -139,7 +139,7 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
 
     <div id="stepIdentity">
       <h1>الدخول إلى نموذج التحقق</h1>
-      <p class="sub">أدخل رقم مشروعك في المنصة وبريد قائد الفريق المسجَّل لدينا للدخول مباشرة.</p>
+      <p class="sub">أدخل رقم مشروعك في المنصة وبريد قائد الفريق المسجَّل لدينا.</p>
 
       <div class="restricted-note">🔒 الدخول مقتصر على الفرق المسجَّلة رسميًا في حاضنة ابتكار 5.</div>
 
@@ -155,8 +155,37 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
         <input type="email" id="leaderEmail" placeholder="name@example.com">
       </div>
 
-      <button class="btn btn-primary" id="continueBtn">دخول</button>
-      <div class="footer-note">إدخال البيانات الصحيحة يأخذك مباشرة إلى النموذج دون أي خطوة إضافية.</div>
+      <button class="btn btn-primary" id="continueBtn">استمرار</button>
+    </div>
+
+    <div id="stepSetup" style="display:none">
+      <h1>إنشاء كلمة مرور</h1>
+      <p class="sub">هذه أول مرة تدخل فيها فريقكم — أنشئ كلمة مرور خاصة بفريقك لاستخدامها في كل دخول لاحق.</p>
+      <div class="err-box" id="errBox2"></div>
+      <div class="field">
+        <label for="newPassword">كلمة المرور الجديدة</label>
+        <input type="password" id="newPassword" placeholder="8 أحرف على الأقل">
+      </div>
+      <div class="field">
+        <label for="confirmPassword">تأكيد كلمة المرور</label>
+        <input type="password" id="confirmPassword" placeholder="أعد كتابة كلمة المرور">
+        <div class="field-hint">احفظها في مكان آمن — يستخدمها قائد الفريق فقط لكل دخول لاحق لهذا المشروع.</div>
+      </div>
+      <button class="btn btn-primary" id="setupBtn">إنشاء كلمة المرور والدخول</button>
+      <button class="btn btn-ghost" id="backBtn1" style="width:100%">رجوع</button>
+    </div>
+
+    <div id="stepPassword" style="display:none">
+      <h1>أدخل كلمة المرور</h1>
+      <p class="sub">أدخل كلمة مرور فريقك لإكمال الدخول إلى النموذج.</p>
+      <div class="err-box" id="errBox3"></div>
+      <div class="field">
+        <label for="loginPassword">كلمة المرور</label>
+        <input type="password" id="loginPassword" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary" id="loginBtn">دخول</button>
+      <button class="btn btn-ghost" id="backBtn2" style="width:100%">رجوع</button>
+      <div class="footer-note">نسيت كلمة المرور؟ تواصل مع فريق البرنامج لإعادة تعيينها.</div>
     </div>
 
     <div class="success-stage" id="successStage">
@@ -174,9 +203,13 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
 /* ==========================================================================
    دخول المشاركين — حاضنة ابتكار 5
    ==========================================================================
-   الدخول مباشر: رقم المشروع + البريد فقط → check_project_login() يتحقق من
-   المطابقة مع eligible_projects، وعند النجاح تحويل فوري لنموذج التحقق —
-   بدون كلمة مرور أو جلسات معقّدة (نفس نمط "إنفاذ" و"Innovation Marketplace").
+   الخطوة 1: رقم المشروع + البريد → check_login_stage() يحدد إن كان الفريق
+   يدخل لأول مرة (needs_setup) أو لديه كلمة مرور مسبقًا (ready)، أو مرفوض
+   (not_found).
+   الخطوة 2أ: إنشاء كلمة مرور لأول مرة → set_participant_password()
+   الخطوة 2ب: دخول بكلمة مرور موجودة → verify_project_login()
+   لا جلسات معقّدة ولا رؤوس HTTP مخصّصة — الجلسة مجرد project_id+email
+   يُخزَّنان محليًا بعد نجاح التحقق، ويكفيان RLS المبسَّط في verify-form.html.
    ========================================================================== */
 
 const SUPABASE_URL = "https://zxruviveljkywxbdqjxc.supabase.co";
@@ -186,13 +219,24 @@ const sb = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE
 
 const steps = {
   identity: document.getElementById('stepIdentity'),
+  setup: document.getElementById('stepSetup'),
+  password: document.getElementById('stepPassword'),
   success: document.getElementById('successStage'),
 };
 const els = {
   projectId: document.getElementById('projectId'),
   leaderEmail: document.getElementById('leaderEmail'),
+  newPassword: document.getElementById('newPassword'),
+  confirmPassword: document.getElementById('confirmPassword'),
+  loginPassword: document.getElementById('loginPassword'),
   continueBtn: document.getElementById('continueBtn'),
+  setupBtn: document.getElementById('setupBtn'),
+  loginBtn: document.getElementById('loginBtn'),
+  backBtn1: document.getElementById('backBtn1'),
+  backBtn2: document.getElementById('backBtn2'),
   errBox1: document.getElementById('errBox1'),
+  errBox2: document.getElementById('errBox2'),
+  errBox3: document.getElementById('errBox3'),
 };
 
 function showStep(name){
@@ -206,7 +250,10 @@ function setBtnLoading(btn, loading, label){
   btn.innerHTML = loading ? '<span class="spinner"></span>جارٍ التحقق…' : label;
 }
 
-/* ---------------- مطابقة رقم المشروع + البريد ثم تحويل مباشر ---------------- */
+let currentProjectId = '';
+let currentEmail = '';
+
+/* ---------------- الخطوة 1: تحديد مرحلة الدخول المناسبة ---------------- */
 async function handleContinue(){
   clearErr(els.errBox1);
   const projectId = els.projectId.value.trim();
@@ -216,31 +263,89 @@ async function handleContinue(){
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ showErr(els.errBox1, 'صيغة البريد الإلكتروني غير صحيحة.'); return; }
   if(!sb){ showErr(els.errBox1, 'تعذّر تحميل مكتبة الاتصال بقاعدة البيانات. يرجى المحاولة لاحقًا.'); return; }
 
-  setBtnLoading(els.continueBtn, true, 'دخول');
+  setBtnLoading(els.continueBtn, true, 'استمرار');
   try{
-    const { data: ok, error } = await sb.rpc('check_project_login', { p_project_id: projectId, p_email: email });
-    setBtnLoading(els.continueBtn, false, 'دخول');
+    const { data: stage, error } = await sb.rpc('check_login_stage', { p_project_id: projectId, p_email: email });
+    setBtnLoading(els.continueBtn, false, 'استمرار');
     if(error){ showErr(els.errBox1, 'حدث خطأ تقني: ' + error.message); return; }
-    if(!ok){ showErr(els.errBox1, 'رقم المشروع أو البريد الإلكتروني غير مطابق لسجلات البرنامج. تواصل مع فريق البرنامج إذا كنت متأكدًا من صحة بياناتك.'); return; }
 
-    sessionStorage.setItem('ib5_session', JSON.stringify({
-      project_id: projectId,
-      team_leader_email: email,
-      entered_at: new Date().toISOString(),
-    }));
+    currentProjectId = projectId;
+    currentEmail = email;
 
-    showStep('success');
-    setTimeout(()=>{
-      window.location.href = 'verify-form.html?project=' + encodeURIComponent(projectId);
-    }, 600);
+    if(stage === 'not_found'){ showErr(els.errBox1, 'رقم المشروع أو البريد الإلكتروني غير مطابق لسجلات البرنامج. تواصل مع فريق البرنامج إذا كنت متأكدًا من صحة بياناتك.'); return; }
+    if(stage === 'needs_setup'){ showStep('setup'); return; }
+    if(stage === 'ready'){ showStep('password'); return; }
+    showErr(els.errBox1, 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
   } catch(e){
-    setBtnLoading(els.continueBtn, false, 'دخول');
+    setBtnLoading(els.continueBtn, false, 'استمرار');
     showErr(els.errBox1, 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
   }
 }
 
+/* ---------------- الخطوة 2أ: إنشاء كلمة مرور لأول مرة ---------------- */
+async function handleSetup(){
+  clearErr(els.errBox2);
+  const p1 = els.newPassword.value;
+  const p2 = els.confirmPassword.value;
+
+  if(p1.length < 8){ showErr(els.errBox2, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.'); return; }
+  if(p1 !== p2){ showErr(els.errBox2, 'كلمتا المرور غير متطابقتين.'); return; }
+
+  setBtnLoading(els.setupBtn, true, 'إنشاء كلمة المرور والدخول');
+  try{
+    const { data: ok, error } = await sb.rpc('set_participant_password', {
+      p_project_id: currentProjectId, p_email: currentEmail, p_password: p1,
+    });
+    if(error){ setBtnLoading(els.setupBtn, false, 'إنشاء كلمة المرور والدخول'); showErr(els.errBox2, 'حدث خطأ: ' + error.message); return; }
+    if(!ok){ setBtnLoading(els.setupBtn, false, 'إنشاء كلمة المرور والدخول'); showErr(els.errBox2, 'تعذّر إنشاء كلمة المرور — قد تكون كلمة مرور موجودة مسبقًا. أعد تحميل الصفحة وحاول الدخول بها.'); return; }
+    completeLogin();
+  } catch(e){
+    setBtnLoading(els.setupBtn, false, 'إنشاء كلمة المرور والدخول');
+    showErr(els.errBox2, 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
+  }
+}
+
+/* ---------------- الخطوة 2ب: دخول بكلمة مرور موجودة ---------------- */
+async function handleLogin(){
+  clearErr(els.errBox3);
+  const pwd = els.loginPassword.value;
+  if(!pwd){ showErr(els.errBox3, 'يرجى إدخال كلمة المرور.'); return; }
+
+  setBtnLoading(els.loginBtn, true, 'دخول');
+  try{
+    const { data: ok, error } = await sb.rpc('verify_project_login', {
+      p_project_id: currentProjectId, p_email: currentEmail, p_password: pwd,
+    });
+    setBtnLoading(els.loginBtn, false, 'دخول');
+    if(error){ showErr(els.errBox3, 'حدث خطأ تقني: ' + error.message); return; }
+    if(!ok){ showErr(els.errBox3, 'كلمة المرور غير صحيحة.'); return; }
+    completeLogin();
+  } catch(e){
+    setBtnLoading(els.loginBtn, false, 'دخول');
+    showErr(els.errBox3, 'حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.');
+  }
+}
+
+function completeLogin(){
+  sessionStorage.setItem('ib5_session', JSON.stringify({
+    project_id: currentProjectId,
+    team_leader_email: currentEmail,
+    entered_at: new Date().toISOString(),
+  }));
+  showStep('success');
+  setTimeout(()=>{
+    window.location.href = 'verify-form.html?project=' + encodeURIComponent(currentProjectId);
+  }, 600);
+}
+
 els.continueBtn.addEventListener('click', handleContinue);
+els.setupBtn.addEventListener('click', handleSetup);
+els.loginBtn.addEventListener('click', handleLogin);
+els.backBtn1.addEventListener('click', ()=>{ clearErr(els.errBox1); showStep('identity'); });
+els.backBtn2.addEventListener('click', ()=>{ clearErr(els.errBox1); showStep('identity'); });
 [els.projectId, els.leaderEmail].forEach(inp=>inp.addEventListener('keydown', e=>{ if(e.key==='Enter') handleContinue(); }));
+[els.newPassword, els.confirmPassword].forEach(inp=>inp.addEventListener('keydown', e=>{ if(e.key==='Enter') handleSetup(); }));
+els.loginPassword.addEventListener('keydown', e=>{ if(e.key==='Enter') handleLogin(); });
 
 /* ---------------- تعبئة مسبقة إن وُجدت جلسة سابقة في هذا المتصفح ---------------- */
 (function prefillFromSession(){
