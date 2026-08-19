@@ -327,6 +327,8 @@ const SUPABASE_ANON_KEY = "sb_publishable_URvlZnzYTl0CwwVxCikLvA_OeGSzhJh";
 let PROJECT_ID = null;
 let FORM_ID = null;
 let SB = null;       // عميل عام — يُستخدم لكل عمليات النموذج (لا حاجة لتوكن خاص)
+let showingThankYou = false;
+let ALLOW_EDIT_AFTER_SUBMIT = true;
 let SB_AUTH = null;  // نفس العميل — أُبقي على الاسمين لتوافق باقي الكود دون تعديل كل استدعاء
 
 /* ---------------- حارس الجلسة: يشترط دخولًا صحيحًا سابقًا عبر login.html ---------------- */
@@ -376,7 +378,7 @@ const STAGE_QUALIFIES_IDX = 2; // فهرس 5.3 فأعلى يستوفي
 const state = {
   current: 1,
   values: {},
-  members: [ {name:"",id:"",phone:"",email:"",role:"",spec:"",camp:"",title:""}, {name:"",id:"",phone:"",email:"",role:"",spec:"",camp:"",title:""} ],
+  members: [ {name:"",id:"",phone:"",email:"",role:"",spec:"",specOther:"",camp:"",title:""}, {name:"",id:"",phone:"",email:"",role:"",spec:"",specOther:"",camp:"",title:""} ],
   files: {}, // fieldId -> [{name,size,id,storage_path}]
   videoMode: {}, // fieldId -> 'upload' | 'link'
 };
@@ -532,7 +534,11 @@ function renderStepper(){
     </div>`;
   }).join('');
   el.querySelectorAll('[data-goto]').forEach(n=>{
-    n.addEventListener('click',()=>{ state.current=parseInt(n.dataset.goto); renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
+    n.addEventListener('click',()=>{
+      if(showingThankYou && !ALLOW_EDIT_AFTER_SUBMIT) return; // التعديل بعد الإرسال غير متاح
+      showingThankYou = false;
+      state.current=parseInt(n.dataset.goto); renderAll(); window.scrollTo({top:0,behavior:'smooth'});
+    });
   });
 }
 
@@ -545,7 +551,8 @@ function renderField(f){
   let body = "";
   switch(f.type){
     case "text": case "email": case "url": case "number": case "date":
-      body = `<input type="${f.type}" id="in_${f.id}" data-id="${f.id}" value="${val?String(val).replace(/"/g,'&quot;'):''}" ${f.readOnly?'disabled':''} placeholder="${f.readOnly?'':''}">`;
+      body = `<input type="${f.type}" id="in_${f.id}" data-id="${f.id}" value="${val?String(val).replace(/"/g,'&quot;'):''}" ${f.readOnly?'disabled':''} ${f.id==='f9_2'?`max="${state.members.length}" min="0"`:''} placeholder="${f.readOnly?'':''}">`;
+      if(f.id==='f9_2') f.hint = `الحد الأقصى ${state.members.length} (عدد أعضاء الفريق المسجَّلين)`;
       break;
     case "textarea":
       body = `<textarea id="in_${f.id}" data-id="${f.id}">${val?String(val):''}</textarea>`;
@@ -623,10 +630,25 @@ function syncLeaderFromProjectInfo(){
   state.members[0].email = getVal('f1_8') || '';
   state.members[0].role = 'قائد الفريق';
 }
+const SPECIALIZATIONS = ["الهندسة والتقنية","تطوير البرمجيات وتقنية المعلومات","إدارة الأعمال وريادة الأعمال","التسويق والمبيعات","التصميم وتجربة المستخدم","المالية والمحاسبة","العلوم الطبية والصحية","الذكاء الاصطناعي وعلوم البيانات","الهندسة الصناعية والتصنيع","القانون والشؤون التنظيمية","الموارد البشرية","العلوم البيئية والاستدامة","أخرى"];
+function findDuplicateValues(list, key, normalize){
+  const counts = {};
+  list.forEach(m=>{
+    const raw = (m[key]||'').trim();
+    if(!raw) return;
+    const v = normalize ? normalize(raw) : raw;
+    counts[v] = (counts[v]||0)+1;
+  });
+  return new Set(Object.keys(counts).filter(v=>counts[v]>1));
+}
 function renderTeamSection(section){
   syncLeaderFromProjectInfo();
+  const dupPhones = findDuplicateValues(state.members, 'phone', v=>v.replace(/\s+/g,''));
+  const dupEmails = findDuplicateValues(state.members, 'email', v=>v.toLowerCase());
   let html = state.members.map((m,i)=>{
     const isLeader = i===0;
+    const phoneDup = dupPhones.has((m.phone||'').replace(/\s+/g,''));
+    const emailDup = dupEmails.has((m.email||'').toLowerCase());
     return `
     <div class="member-card">
       <div class="member-head">
@@ -639,8 +661,8 @@ function renderTeamSection(section){
         <div class="field"><div class="field-label">رقم الهوية أو الإقامة<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="id" value="${m.id.replace(/"/g,'&quot;')}" ${isLeader?'disabled':''}></div>
       </div>
       <div class="two-col">
-        <div class="field"><div class="field-label">رقم الجوال<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="phone" value="${m.phone.replace(/"/g,'&quot;')}" ${isLeader?'disabled':''}></div>
-        <div class="field"><div class="field-label">البريد الإلكتروني<span class="req-star">*</span></div><input type="email" data-member="${i}" data-mkey="email" value="${m.email.replace(/"/g,'&quot;')}" ${isLeader?'disabled':''}></div>
+        <div class="field ${phoneDup?'has-error':''}"><div class="field-label">رقم الجوال<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="phone" value="${m.phone.replace(/"/g,'&quot;')}" ${isLeader?'disabled':''}>${phoneDup?'<div class="error-text" style="display:block">هذا الرقم مستخدَم لعضو آخر في الفريق</div>':''}</div>
+        <div class="field ${emailDup?'has-error':''}"><div class="field-label">البريد الإلكتروني<span class="req-star">*</span></div><input type="email" data-member="${i}" data-mkey="email" value="${m.email.replace(/"/g,'&quot;')}" ${isLeader?'disabled':''}>${emailDup?'<div class="error-text" style="display:block">هذا البريد مستخدَم لعضو آخر في الفريق</div>':''}</div>
       </div>
       <div class="two-col">
         <div class="field"><div class="field-label">الدور الرئيس في المشروع<span class="req-star">*</span></div>
@@ -651,8 +673,14 @@ function renderTeamSection(section){
                 ${["التطوير التقني","تطوير المنتج أو الخدمة","نموذج العمل التجاري","التسويق والمبيعات","الإدارة المالية","العمليات","التصميم وتجربة المستخدم","البحث والتطوير","دور آخر"].map(o=>`<option value="${o}" ${m.role===o?'selected':''}>${o}</option>`).join('')}
               </select>`}
         </div>
-        <div class="field"><div class="field-label">التخصص أو مجال الخبرة<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="spec" value="${m.spec.replace(/"/g,'&quot;')}"></div>
+        <div class="field"><div class="field-label">التخصص أو مجال الخبرة<span class="req-star">*</span></div>
+          <select data-member="${i}" data-mkey="spec">
+            <option value="">اختر…</option>
+            ${SPECIALIZATIONS.map(o=>`<option value="${o}" ${m.spec===o?'selected':''}>${o}</option>`).join('')}
+          </select>
+        </div>
       </div>
+      ${m.spec==='أخرى' ? `<div class="field"><div class="field-label">حدّد التخصص<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="specOther" value="${(m.specOther||'').replace(/"/g,'&quot;')}" placeholder="اكتب التخصص"></div>` : ''}
       <div class="two-col">
         <div class="field"><div class="field-label">هل شارك في المعسكر؟<span class="req-star">*</span></div>
           <select data-member="${i}" data-mkey="camp"><option value="">اختر…</option><option value="نعم" ${m.camp==='نعم'?'selected':''}>نعم</option><option value="لا" ${m.camp==='لا'?'selected':''}>لا</option></select>
@@ -885,7 +913,7 @@ function bindSectionEvents(section){
   });
   const addBtn = document.getElementById('addMemberBtn');
   if(addBtn) addBtn.addEventListener('click',()=>{
-    state.members.push({name:"",id:"",phone:"",email:"",role:"",spec:"",camp:"",title:""});
+    state.members.push({name:"",id:"",phone:"",email:"",role:"",spec:"",specOther:"",camp:"",title:""});
     renderAll();
   });
   document.querySelectorAll('[data-removemember]').forEach(btn=>{
@@ -922,6 +950,7 @@ function findFieldDef(id){
 /* ---------------- التحقق ---------------- */
 function validateSection(section){
   let ok=true;
+  let customMsg = null;
   visibleFields(section).forEach(f=>{
     if(!f.required) return;
     const wrap=document.getElementById('fld_'+f.id);
@@ -935,13 +964,28 @@ function validateSection(section){
     else filled = getVal(f.id) && String(getVal(f.id)).trim()!=="";
     if(!filled){ ok=false; if(wrap) wrap.classList.add('has-error'); }
     else if(wrap) wrap.classList.remove('has-error');
+
+    // حد أقصى لعدد الحضور المتوقع = عدد أعضاء الفريق فعليًا
+    if(f.id==='f9_2'){
+      const val = parseInt(getVal('f9_2'))||0;
+      if(val > state.members.length){
+        ok=false; customMsg = `عدد الحضور المتوقع (${val}) لا يمكن أن يتجاوز عدد أعضاء الفريق (${state.members.length}).`;
+      }
+    }
   });
   if(section.isTeamSection){
     if(state.members.length<2) ok=false;
-    state.members.forEach(m=>{ if(!m.name||!m.id||!m.phone||!m.email||!m.role||!m.spec||!m.camp) ok=false; });
+    state.members.forEach(m=>{
+      if(!m.name||!m.id||!m.phone||!m.email||!m.role||!m.spec||!m.camp) ok=false;
+      if(m.spec==='أخرى' && !(m.specOther||'').trim()) ok=false;
+    });
+    const dupPhones = findDuplicateValues(state.members, 'phone', v=>v.replace(/\s+/g,''));
+    const dupEmails = findDuplicateValues(state.members, 'email', v=>v.toLowerCase());
+    if(dupPhones.size){ ok=false; customMsg = 'لا يمكن تكرار رقم الجوال بين أعضاء الفريق — كل عضو يجب أن يكون له رقم مختلف.'; }
+    if(dupEmails.size){ ok=false; customMsg = 'لا يمكن تكرار البريد الإلكتروني بين أعضاء الفريق — كل عضو يجب أن يكون له بريد مختلف.'; }
   }
   if(section.isDeclareSection && !state.values.f11_1) ok=false;
-  if(!ok) showToast('يرجى استكمال الحقول الإلزامية المظللة قبل المتابعة');
+  if(!ok) showToast(customMsg || 'يرجى استكمال الحقول الإلزامية المظللة قبل المتابعة');
   return ok;
 }
 
@@ -983,7 +1027,7 @@ async function saveDraft(showToastOnSuccess = true){
     if(membersToSave.length){
       const memberRows = membersToSave.map((m,i) => ({
         form_id: FORM_ID, full_name: m.name, national_id: m.id, phone: m.phone, email: m.email,
-        role_in_project: m.role, specialization: m.spec,
+        role_in_project: m.role, specialization: (m.spec==='أخرى' ? (m.specOther||'').trim() || 'أخرى' : m.spec),
         attended_camp: m.camp === "نعم" ? true : (m.camp === "لا" ? false : null),
         title_in_entity: m.title || null, is_leader: i === 0, order_index: i,
       }));
@@ -1002,7 +1046,7 @@ async function saveDraft(showToastOnSuccess = true){
 }
 
 async function trySubmit(){
-  const declareSection = SECTIONS.find(s=>s.id===11);
+  const declareSection = SECTIONS.find(s=>s.isDeclareSection) || SECTIONS[SECTIONS.length-1];
   if(!validateSection(declareSection)){ return; }
 
   const saved = await saveDraft(false);
@@ -1015,6 +1059,9 @@ async function trySubmit(){
       .eq('id', FORM_ID);
     if(error) throw error;
     showToast('تم إرسال النموذج بنجاح — سيقوم فريق البرنامج بالمراجعة');
+    showingThankYou = true;
+    renderAll();
+    window.scrollTo({top:0,behavior:'smooth'});
   } catch(e){
     showToast('تعذّر إرسال النموذج: ' + (e.message || 'خطأ غير معروف'));
   }
@@ -1041,8 +1088,31 @@ function updateTopbar(){
   document.getElementById('subProjectName').textContent = getVal('f1_2') ? ('مشروع: '+getVal('f1_2')) : 'مسار المشاركة والمجال يُحددان تلقائيًا من بيانات المنصة';
 }
 
+function renderThankYouScreen(){
+  const card = document.getElementById('sectionCard');
+  card.innerHTML = `
+    <div style="text-align:center;padding:56px 20px">
+      <div style="width:64px;height:64px;border-radius:50%;background:var(--success-100);color:var(--success);display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 20px">✓</div>
+      <div style="font-size:20px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:10px">تم إرسال النموذج بنجاح</div>
+      <div style="font-size:14px;color:var(--ink-600);max-width:480px;margin:0 auto 26px;line-height:1.9">
+        شكرًا لإكمال نموذج التحقق من استيفاء متطلبات الانتقال إلى مرحلة التحكيم. سيقوم فريق البرنامج بمراجعة طلبكم، وسيتم التواصل معكم في حال الحاجة لأي استكمال.
+      </div>
+      ${ALLOW_EDIT_AFTER_SUBMIT
+        ? `<button class="btn btn-primary" id="btnEditAfterSubmit">تعديل الإجابات</button>`
+        : `<div class="req-banner" style="display:inline-flex;max-width:420px;text-align:right">تعديل الإجابات بعد الإرسال غير متاح حاليًا — تواصل مع فريق البرنامج إذا احتجت لتحديث بياناتك.</div>`}
+    </div>
+  `;
+  const editBtn = document.getElementById('btnEditAfterSubmit');
+  if(editBtn) editBtn.addEventListener('click', ()=>{
+    showingThankYou = false;
+    renderAll();
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+}
+
 function renderAll(){
   renderStepper();
+  if(showingThankYou){ renderThankYouScreen(); updateTopbar(); return; }
   renderSection();
   updateTopbar();
   scheduleAutosave();
@@ -1087,7 +1157,9 @@ async function initApp(){
     if(members && members.length){
       state.members = members.map(m=>({
         name:m.full_name||"", id:m.national_id||"", phone:m.phone||"", email:m.email||"",
-        role:m.role_in_project||"", spec:m.specialization||"",
+        role:m.role_in_project||"",
+        spec: SPECIALIZATIONS.includes(m.specialization) ? m.specialization : (m.specialization ? "أخرى" : ""),
+        specOther: SPECIALIZATIONS.includes(m.specialization) ? "" : (m.specialization||""),
         camp: m.attended_camp===true?"نعم":(m.attended_camp===false?"لا":""),
         title: m.title_in_entity||"",
       }));
@@ -1108,8 +1180,12 @@ async function initApp(){
       if(!getVal('f1_4') && proj.domain) setVal('f1_4', proj.domain);
     }
 
+    // 7) إعدادات النموذج — هل يُسمح بالتعديل بعد الإرسال؟
+    const { data: settings } = await SB.from('form_settings').select('allow_edit_after_submit').eq('id',1).maybeSingle();
+    if(settings && settings.allow_edit_after_submit === false) ALLOW_EDIT_AFTER_SUBMIT = false;
+
     if(form.status === 'submitted'){
-      showToast('تم إرسال هذا النموذج مسبقًا — يمكنك مراجعة إجاباتك، وأي تعديل سيُحفظ كمسودة جديدة');
+      showingThankYou = true;
     }
   } catch(e){
     showToast('تعذّر تحميل بيانات النموذج: ' + (e.message || 'خطأ غير معروف'));
