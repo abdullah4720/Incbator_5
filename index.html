@@ -208,6 +208,12 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
       <h1>تم التحقق بنجاح</h1>
       <p class="sub">جارٍ تحويلك إلى نموذج التحقق…</p>
     </div>
+
+    <div class="success-stage" id="closedStage" style="display:none">
+      <div class="success-icon" style="background:var(--danger-100);color:var(--danger)"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg></div>
+      <h1>النموذج مغلق حاليًا</h1>
+      <p class="sub" id="closedReasonText">تم إغلاق استقبال الطلبات.</p>
+    </div>
   </div>
 
 
@@ -286,6 +292,7 @@ const steps = {
   setup: document.getElementById('stepSetup'),
   password: document.getElementById('stepPassword'),
   success: document.getElementById('successStage'),
+  closed: document.getElementById('closedStage'),
 };
 const els = {
   projectId: document.getElementById('projectId'),
@@ -418,6 +425,22 @@ els.loginPassword.addEventListener('keydown', e=>{ if(e.key==='Enter') handleLog
     if(!raw) return;
     const s = JSON.parse(raw);
     if(s && s.project_id){ els.projectId.value = s.project_id; els.leaderEmail.value = s.team_leader_email || ''; }
+  }catch(e){}
+})();
+
+/* ---------------- فحص إغلاق النموذج (يدوي أو بعد الموعد النهائي) قبل عرض نموذج الدخول ---------------- */
+(async function checkFormClosed(){
+  if(!sb) return;
+  try{
+    const { data } = await sb.from('form_settings').select('is_open, deadline_at').eq('id',1).maybeSingle();
+    if(!data) return;
+    const deadlinePassed = data.deadline_at && new Date() >= new Date(data.deadline_at);
+    if(data.is_open === false || deadlinePassed){
+      document.getElementById('closedReasonText').textContent = deadlinePassed
+        ? `انتهى الموعد النهائي لاستقبال الطلبات بتاريخ ${new Date(data.deadline_at).toLocaleDateString('ar-SA')}.`
+        : 'تم إغلاق النموذج مؤقتًا من قبل فريق البرنامج.';
+      showStep('closed');
+    }
   }catch(e){}
 })();
 </script>

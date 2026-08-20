@@ -305,6 +305,7 @@ input:disabled,select:disabled{background:#F0F1F4;color:var(--ink-400);}
       <div class="brand-sub" id="subProjectName">جاري تحميل بيانات المشروع…</div>
     </div>
     <div class="project-pill"><span class="dot"></span><span class="mono" id="pillProjectId">—</span></div>
+    <div class="project-pill" id="deadlineCountdown" style="display:none;color:var(--gold-500);border-color:rgba(201,162,75,.35)"></div>
     <div class="topbar-actions">
       <button class="btn-topbar" id="btnTopSave" title="حفظ البيانات الآن">حفظ</button>
       <button class="btn-topbar" id="btnLogout" title="تسجيل الخروج">خروج</button>
@@ -408,6 +409,19 @@ let FORM_ID = null;
 let SB = null;       // عميل عام — يُستخدم لكل عمليات النموذج (لا حاجة لتوكن خاص)
 let showingThankYou = false;
 let ALLOW_EDIT_AFTER_SUBMIT = true;
+let FORM_IS_OPEN = true;
+let FORM_DEADLINE = null; // Date أو null
+let FORM_CLOSED_REASON = null; // 'manual' | 'deadline' | null
+let FORM_STATUS = 'draft';
+let countdownTimer = null;
+let closeWatchTimer = null;
+
+function computeClosedState(){
+  if(!FORM_IS_OPEN){ FORM_CLOSED_REASON = 'manual'; return true; }
+  if(FORM_DEADLINE && new Date() >= FORM_DEADLINE){ FORM_CLOSED_REASON = 'deadline'; return true; }
+  FORM_CLOSED_REASON = null;
+  return false;
+}
 let SB_AUTH = null;  // نفس العميل — أُبقي على الاسمين لتوافق باقي الكود دون تعديل كل استدعاء
 
 /* ---------------- حارس الجلسة: يشترط دخولًا صحيحًا سابقًا عبر login.html ---------------- */
@@ -1168,6 +1182,8 @@ function updateTopbar(){
 
 function renderThankYouScreen(){
   const card = document.getElementById('sectionCard');
+  const closed = computeClosedState();
+  const canEdit = ALLOW_EDIT_AFTER_SUBMIT && !closed;
   card.innerHTML = `
     <div style="text-align:center;padding:56px 20px">
       <div style="width:64px;height:64px;border-radius:50%;background:var(--success-100);color:var(--success);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">${icon('check',{size:30,strokeWidth:2.5})}</div>
@@ -1175,9 +1191,9 @@ function renderThankYouScreen(){
       <div style="font-size:14px;color:var(--ink-600);max-width:480px;margin:0 auto 26px;line-height:1.9">
         شكرًا لإكمال نموذج التحقق من استيفاء متطلبات الانتقال إلى مرحلة التحكيم. سيقوم فريق البرنامج بمراجعة طلبكم، وسيتم التواصل معكم في حال الحاجة لأي استكمال.
       </div>
-      ${ALLOW_EDIT_AFTER_SUBMIT
+      ${canEdit
         ? `<button class="btn btn-primary" id="btnEditAfterSubmit">تعديل الإجابات</button>`
-        : `<div class="req-banner" style="display:inline-flex;max-width:420px;text-align:right">تعديل الإجابات بعد الإرسال غير متاح حاليًا — تواصل مع فريق البرنامج إذا احتجت لتحديث بياناتك.</div>`}
+        : `<div class="req-banner" style="display:inline-flex;max-width:420px;text-align:right">${closed?'تم إغلاق النموذج، ولا يمكن تعديل الإجابات حاليًا.':'تعديل الإجابات بعد الإرسال غير متاح حاليًا — تواصل مع فريق البرنامج إذا احتجت لتحديث بياناتك.'}</div>`}
     </div>
   `;
   const editBtn = document.getElementById('btnEditAfterSubmit');
@@ -1186,6 +1202,68 @@ function renderThankYouScreen(){
     renderAll();
     window.scrollTo({top:0,behavior:'smooth'});
   });
+}
+
+/* ---------------- شاشة إغلاق النموذج (يدوي أو بعد الموعد النهائي) ---------------- */
+function renderClosedScreen(){
+  document.getElementById('sectionCard').innerHTML = `
+    <div style="text-align:center;padding:56px 20px">
+      <div style="width:64px;height:64px;border-radius:50%;background:var(--danger-100);color:var(--danger);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">${icon('lock',{size:28})}</div>
+      <div style="font-size:20px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:10px">النموذج مغلق حاليًا</div>
+      <div style="font-size:14px;color:var(--ink-600);max-width:480px;margin:0 auto 10px;line-height:1.9">
+        ${FORM_CLOSED_REASON==='deadline'
+          ? `انتهى الموعد النهائي لاستقبال الطلبات${FORM_DEADLINE?(' بتاريخ '+FORM_DEADLINE.toLocaleDateString('ar-SA')+' الساعة '+FORM_DEADLINE.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})):''}.`
+          : 'تم إغلاق النموذج مؤقتًا من قبل فريق البرنامج.'}
+      </div>
+      <div style="font-size:13px;color:var(--ink-400);margin-top:18px">لأي استفسار، تواصل مع فريق البرنامج على <span class="mono">icip@qu.edu.sa</span></div>
+    </div>
+  `;
+  updateTopbar();
+  document.getElementById('stepper').innerHTML = '';
+}
+
+/* ---------------- عد تنازلي حي حتى الموعد النهائي ---------------- */
+function fmtCountdown(ms){
+  if(ms<=0) return null;
+  const totalMin = Math.floor(ms/60000);
+  const days = Math.floor(totalMin/1440);
+  const hours = Math.floor((totalMin%1440)/60);
+  const mins = totalMin%60;
+  if(days>0) return `${days} يوم ${hours} ساعة`;
+  if(hours>0) return `${hours} ساعة ${mins} د`;
+  return `${mins} دقيقة`;
+}
+function startCountdown(){
+  const el = document.getElementById('deadlineCountdown');
+  if(!el || !FORM_DEADLINE) return;
+  el.style.display = 'flex';
+  el.style.alignItems = 'center';
+  el.style.gap = '5px';
+  clearInterval(countdownTimer);
+  const tick = ()=>{
+    const remaining = FORM_DEADLINE - new Date();
+    const label = fmtCountdown(remaining);
+    if(!label){
+      clearInterval(countdownTimer);
+      window.location.reload(); // الموعد وصل فعليًا — أعد التحميل ليطبَّق القفل فورًا
+      return;
+    }
+    el.innerHTML = `${icon('hourglass',{size:11})} يُغلق خلال ${label}`;
+  };
+  tick();
+  countdownTimer = setInterval(tick, 30000);
+}
+/* فحص دوري: لو الإداري أغلق النموذج يدويًا أثناء وجود المشارك بالصفحة */
+function startCloseWatcher(){
+  clearInterval(closeWatchTimer);
+  closeWatchTimer = setInterval(async ()=>{
+    try{
+      const { data } = await SB.from('form_settings').select('is_open').eq('id',1).maybeSingle();
+      if(data && data.is_open === false && FORM_STATUS !== 'submitted'){
+        window.location.reload();
+      }
+    }catch(e){}
+  }, 120000); // كل دقيقتين
 }
 
 function renderAll(){
@@ -1261,15 +1339,26 @@ async function initApp(){
       if(proj.team_leader_email) setVal('f1_8', proj.team_leader_email);
     }
 
-    // 7) إعدادات النموذج — هل يُسمح بالتعديل بعد الإرسال؟
-    const { data: settings } = await SB.from('form_settings').select('allow_edit_after_submit').eq('id',1).maybeSingle();
-    if(settings && settings.allow_edit_after_submit === false) ALLOW_EDIT_AFTER_SUBMIT = false;
+    // 7) إعدادات النموذج — هل يُسمح بالتعديل بعد الإرسال؟ وهل النموذج مفتوح؟
+    const { data: settings } = await SB.from('form_settings').select('allow_edit_after_submit, is_open, deadline_at').eq('id',1).maybeSingle();
+    if(settings){
+      if(settings.allow_edit_after_submit === false) ALLOW_EDIT_AFTER_SUBMIT = false;
+      FORM_IS_OPEN = settings.is_open !== false;
+      FORM_DEADLINE = settings.deadline_at ? new Date(settings.deadline_at) : null;
+    }
 
     if(form.status === 'submitted'){
       showingThankYou = true;
     }
+    FORM_STATUS = form.status;
   } catch(e){
     showToast('تعذّر تحميل بيانات النموذج: ' + (e.message || 'خطأ غير معروف'));
+  }
+
+  // إغلاق النموذج (يدوي أو بعد الموعد) — يمنع الوصول لأي مشروع لم يُرسِل بعد
+  if(computeClosedState() && FORM_STATUS !== 'submitted'){
+    renderClosedScreen();
+    return;
   }
 
   if(SECTIONS.length === 0){
@@ -1284,6 +1373,8 @@ async function initApp(){
 
   bindTopbarActions();
   renderAll();
+  if(FORM_DEADLINE && !computeClosedState()) startCountdown();
+  startCloseWatcher();
 }
 
 /* ---------------- أزرار الحفظ وتسجيل الخروج في الشريط العلوي ---------------- */
