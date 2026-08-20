@@ -792,11 +792,7 @@ function renderStageSection(section){
     </div>
   `).join('')}</div>`;
   if(cur){
-    const qualifies = stageQualifies();
-    html += `<div class="req-banner" style="margin-top:18px">
-      ${qualifies?`<b>${icon('check',{size:12})} مستوفى:</b> هذه المرحلة تُعد مستوفية لمتطلب توفر نموذج أولي.`:'<b>تنبيه:</b> عدم توفر نموذج (المرحلتان 5.1 و5.2) يُصنَّف تلقائيًا «غير مستوفى» لهذا المتطلب حتى إشعار آخر.'}
-    </div>`;
-    html += `<div style="margin-top:10px">${visibleFields(section).map(renderField).join('')}</div>`;
+    html += `<div style="margin-top:18px">${visibleFields(section).map(renderField).join('')}</div>`;
   }
   return html;
 }
