@@ -422,6 +422,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
   <div class="view" id="view-builder"></div>
   <div class="view" id="view-eligibility"></div>
   <div class="view" id="view-users"></div>
+  <div class="view" id="view-announcements"></div>
   <div class="view" id="view-settings"></div>
 </div>
 </div>
@@ -444,6 +445,8 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
    مكتبة أيقونات Lucide مضمَّنة محليًا (بدون أي اعتماد على CDN خارجي)
    ============================================================ */
 const LUCIDE_ICONS = {
+  "sparkles": `<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" /> <path d="M20 2v4" /> <path d="M22 4h-4" /> <circle cx="4" cy="20" r="2" />`,
+  "megaphone": `<path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" /> <path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14" /> <path d="M8 6v8" />`,
   "bar-chart-3": `<path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" />`,
   "lock": `<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /> <path d="M7 11V7a5 5 0 0 1 10 0v4" />`,
   "check": `<path d="M20 6 9 17l-5-5" />`,
@@ -757,6 +760,7 @@ async function loadAllAdminData(){
     loadFormSettings(),
     loadReviewList(),
     loadAnalyticsData(),
+    loadAnnouncements(),
   ]);
 }
 
@@ -794,6 +798,7 @@ const TABS = [
   {id:"builder", l:"الأسئلة والنموذج", adminOnly:true},
   {id:"eligibility", l:"الفرق المؤهّلة للدخول", adminOnly:true},
   {id:"users", l:"المستخدمون والأدوار", adminOnly:true},
+  {id:"announcements", l:"التحديثات", adminOnly:true},
   {id:"settings", l:"إعدادات النموذج", adminOnly:true},
 ];
 function visibleTabs(){
@@ -1855,6 +1860,98 @@ function renderSettings(){
 }
 
 /* ==========================================================================
+   التحديثات/الإعلانات — رسائل يشوفها كل مشارك فور دخوله على نموذج التحقق
+   ========================================================================== */
+let announcementsData = [];
+
+async function loadAnnouncements(){
+  const { data, error } = await sb.from('announcements').select('*').order('created_at', {ascending:false});
+  if(error){ showToast('تعذّر تحميل التحديثات: '+error.message); announcementsData=[]; return; }
+  announcementsData = data || [];
+}
+
+function renderAnnouncements(){
+  const el = document.getElementById('view-announcements');
+  const canEdit = currentAdmin && currentAdmin.role === 'admin';
+  el.innerHTML = `
+    <div class="section-title-row">
+      <div><h2>التحديثات والإعلانات</h2><p>أي رسالة تفعّلها هنا تظهر فورًا لكل مشارك يفتح نموذج التحقق — مفيدة لتمديد الموعد أو تعليمات عاجلة.</p></div>
+    </div>
+    ${canEdit ? `
+    <div class="card" style="margin-bottom:18px">
+      <div class="field-inline"><label class="flabel">إعلان جديد</label>
+        <textarea id="newAnnouncementText" placeholder="مثال: تم تمديد الموعد النهائي لاستقبال الطلبات إلى نهاية يوم الخميس القادم." style="min-height:70px"></textarea>
+      </div>
+      <button class="btn btn-primary btn-sm" id="addAnnouncementBtn">نشر الإعلان</button>
+    </div>` : ''}
+    <div id="announcementsList"></div>
+  `;
+  if(canEdit){
+    document.getElementById('addAnnouncementBtn').addEventListener('click', async ()=>{
+      const ta = document.getElementById('newAnnouncementText');
+      const msg = ta.value.trim();
+      if(!msg){ showToast('اكتب نص الإعلان أولًا'); return; }
+      const btn = document.getElementById('addAnnouncementBtn');
+      btn.disabled = true; btn.textContent = 'جارٍ النشر…';
+      const { data, error } = await sb.from('announcements').insert({ message: msg, is_active: true }).select().single();
+      btn.disabled = false; btn.textContent = 'نشر الإعلان';
+      if(error){ showToast('تعذّر النشر: '+error.message); return; }
+      announcementsData.unshift(data);
+      ta.value = '';
+      showToast('تم نشر الإعلان');
+      renderAnnouncementsList();
+    });
+  }
+  renderAnnouncementsList();
+}
+
+function renderAnnouncementsList(){
+  const wrap = document.getElementById('announcementsList');
+  const canEdit = currentAdmin && currentAdmin.role === 'admin';
+  if(announcementsData.length===0){ wrap.innerHTML = `<div class="empty-hint">لا توجد إعلانات بعد</div>`; return; }
+  wrap.innerHTML = announcementsData.map(a=>`
+    <div class="card" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start;gap:14px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;color:var(--ink-900);white-space:pre-wrap;margin-bottom:8px">${a.message}</div>
+        <div style="font-size:11px;color:var(--ink-400)">${relativeTime(a.created_at)}</div>
+      </div>
+      ${canEdit ? `
+      <div style="display:flex;align-items:center;gap:10px;flex:none">
+        <div class="toggle"><input type="checkbox" data-annactive="${a.id}" ${a.is_active?'checked':''}><label class="tk" for="ann_${a.id}"></label></div>
+        <button class="icon-btn danger" data-anndel="${a.id}" title="حذف">${icon('trash-2',{size:13})}</button>
+      </div>` : `<span class="badge ${a.is_active?'ok':'mid'}">${a.is_active?'مفعَّل':'متوقف'}</span>`}
+    </div>
+  `).join('');
+
+  if(!canEdit) return;
+  wrap.querySelectorAll('[data-annactive]').forEach(cb=>{
+    cb.id = 'ann_'+cb.dataset.annactive;
+    cb.addEventListener('change', async ()=>{
+      const id = parseInt(cb.dataset.annactive);
+      const newVal = cb.checked;
+      cb.disabled = true;
+      const { error } = await sb.from('announcements').update({ is_active: newVal }).eq('id', id);
+      cb.disabled = false;
+      if(error){ showToast('تعذّر التحديث: '+error.message); cb.checked = !newVal; return; }
+      const a = announcementsData.find(x=>x.id===id); if(a) a.is_active = newVal;
+      showToast(newVal ? 'تم تفعيل الإعلان' : 'تم إيقاف الإعلان');
+    });
+  });
+  wrap.querySelectorAll('[data-anndel]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      openConfirm('هل تريد حذف هذا الإعلان نهائيًا؟', async ()=>{
+        const id = parseInt(b.dataset.anndel);
+        const { error } = await sb.from('announcements').delete().eq('id', id);
+        if(error){ showToast('تعذّر الحذف: '+error.message); return; }
+        announcementsData = announcementsData.filter(x=>x.id!==id);
+        showToast('تم حذف الإعلان');
+        renderAnnouncementsList();
+      });
+    });
+  });
+}
+
+/* ==========================================================================
    تحليل البيانات — توزيع إجابات الأسئلة القابلة للتصنيف (ديناميكي بالكامل)
    ========================================================================== */
 let analyticsData = [];
@@ -2326,6 +2423,7 @@ const SUBTABS = [
   {id:"answers", l:"الإجابات"},
   {id:"team", l:"الفريق"},
   {id:"files", l:"الملفات"},
+  {id:"ai", l:"التقييم الذكي"},
   {id:"notes", l:"الملاحظات"},
 ];
 function renderSubtabs(){
@@ -2342,6 +2440,7 @@ function renderSubtabContent(){
   else if(reviewActiveSubtab==='answers'){ content.innerHTML = answersTabHTML(); bindAccordions(); }
   else if(reviewActiveSubtab==='team') content.innerHTML = teamTabHTML();
   else if(reviewActiveSubtab==='files'){ content.innerHTML = filesTabHTML(); bindFileButtons(); }
+  else if(reviewActiveSubtab==='ai'){ renderAiTab(); }
   else if(reviewActiveSubtab==='notes'){ content.innerHTML = notesTabHTML(); bindNoteComposer(); }
 }
 
@@ -2478,11 +2577,204 @@ function bindNoteComposer(){
   });
 }
 
+/* ==========================================================================
+   التقييم الأولي بالذكاء الاصطناعي — استشاري فقط، يُحفظ ويُرجَع إليه لاحقًا
+   ========================================================================== */
+let aiEvalCache = {}; // form_id -> آخر تقييم محمَّل (لتفادي إعادة الجلب في نفس الجلسة)
+
+async function renderAiTab(){
+  const content = document.getElementById('subtabContent');
+  content.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  const formId = reviewDetail.form.id;
+  if(!(formId in aiEvalCache)){
+    const { data } = await sb.from('ai_evaluations').select('*').eq('form_id', formId).order('generated_at',{ascending:false}).limit(1).maybeSingle();
+    aiEvalCache[formId] = data || null;
+  }
+  renderAiTabContent();
+}
+
+function renderAiTabContent(){
+  const content = document.getElementById('subtabContent');
+  const formId = reviewDetail.form.id;
+  const existing = aiEvalCache[formId];
+  const canGenerate = currentAdmin && ['admin','reviewer'].includes(currentAdmin.role);
+
+  const disclaimer = `<div class="req-banner" style="margin-bottom:16px"><b>تنبيه:</b>&nbsp;هذا تقييم أولي استشاري مبني على الذكاء الاصطناعي، ومبني فقط على إجابات الفريق النصية — لا يشمل تحليل محتوى الملفات المرفوعة، ولا يُغني إطلاقًا عن المراجعة البشرية. القرار النهائي دائمًا للمراجع.</div>`;
+
+  if(!existing){
+    content.innerHTML = `
+      ${disclaimer}
+      <div class="empty-hint" style="padding:30px 0">لا يوجد تقييم أولي لهذا الطلب بعد</div>
+      ${canGenerate ? `<div style="text-align:center"><button class="btn btn-primary btn-sm" id="genAiBtn">${icon('sparkles',{size:14})} توليد تقييم أولي بالذكاء الاصطناعي</button></div>` : ''}
+    `;
+    bindAiGenerateButton();
+    return;
+  }
+
+  const ev = existing.evaluation || {};
+  content.innerHTML = `
+    ${disclaimer}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:11px;color:var(--ink-400)">آخر توليد: ${relativeTime(existing.generated_at)}</div>
+      ${canGenerate ? `<button class="btn btn-ghost btn-sm" id="genAiBtn">${icon('rotate-ccw',{size:12})} إعادة التوليد</button>` : ''}
+    </div>
+
+    <div class="analytics-card" style="margin-bottom:14px">
+      <div class="ac-title">الانطباع العام</div>
+      <div style="font-size:13px;color:var(--ink-900);line-height:1.9;margin-top:6px">${ev.overall_impression||'—'}</div>
+    </div>
+
+    <div class="member-grid" style="margin-bottom:14px">
+      <div class="analytics-card">
+        <div class="ac-title" style="color:var(--success)">${icon('check',{size:13})} نقاط القوة</div>
+        <ul style="margin:8px 0 0;padding-inline-start:18px;font-size:12.5px;color:var(--ink-900);line-height:1.9">
+          ${(ev.strengths||[]).map(s=>`<li>${s}</li>`).join('') || '<li style="color:var(--ink-400)">لا يوجد</li>'}
+        </ul>
+      </div>
+      <div class="analytics-card">
+        <div class="ac-title" style="color:var(--amber)">${icon('triangle-alert',{size:13})} نقاط تحتاج انتباه</div>
+        <ul style="margin:8px 0 0;padding-inline-start:18px;font-size:12.5px;color:var(--ink-900);line-height:1.9">
+          ${(ev.concerns||[]).map(s=>`<li>${s}</li>`).join('') || '<li style="color:var(--ink-400)">لا يوجد</li>'}
+        </ul>
+      </div>
+    </div>
+
+    <div class="analytics-card" style="margin-bottom:14px">
+      <div class="ac-title">ملاحظات لكل متطلب</div>
+      <div style="margin-top:10px">
+        ${REQUIREMENTS.map(r=>{
+          const note = (ev.requirement_notes||{})[r.key];
+          if(!note) return '';
+          return `<div class="req-row" style="margin-bottom:8px">
+            <div class="req-row-head"><div class="req-row-icon" style="background:${r.color}22;color:${r.color}">${icon(r.icon,{size:12})}</div><div class="req-row-label">${r.label}</div></div>
+            <div style="font-size:12.5px;color:var(--ink-600);margin-top:4px">${note}</div>
+          </div>`;
+        }).join('') || '<div class="empty-hint">لا توجد ملاحظات</div>'}
+      </div>
+    </div>
+
+    ${(ev.suggested_focus_areas||[]).length ? `
+    <div class="analytics-card">
+      <div class="ac-title">${icon('search',{size:13})} يُنصح المراجع بالتركيز على</div>
+      <ul style="margin:8px 0 0;padding-inline-start:18px;font-size:12.5px;color:var(--ink-900);line-height:1.9">
+        ${ev.suggested_focus_areas.map(s=>`<li>${s}</li>`).join('')}
+      </ul>
+    </div>` : ''}
+  `;
+  bindAiGenerateButton();
+}
+
+function bindAiGenerateButton(){
+  const btn = document.getElementById('genAiBtn');
+  if(!btn) return;
+  btn.addEventListener('click', openAiPromptModal);
+}
+
+/* بما إن استدعاء الذكاء الاصطناعي مباشرة من متصفح موقع خارجي غير ممكن أمنيًا
+   (يتطلب إخفاء مفتاح API على خادم، وما عندنا خادم خلفي بهذا المشروع)، الحل
+   العملي: نجهّز النص الجاهز لك، تنسخه وتلصقه في محادثة Claude، وتلصق الرد هنا
+   ليُحفظ في قاعدة البيانات مثل أي تقييم آخر. */
+function buildAiPrompt(){
+  const av = ansMap();
+  let qaText = '';
+  sections.forEach(sec=>{
+    const rows = sec.questions.filter(q=>q.id in av && av[q.id] !== null && av[q.id] !== '');
+    if(!rows.length) return;
+    qaText += `\n## ${sec.title}\n`;
+    rows.forEach(q=>{
+      let val = av[q.id];
+      if(Array.isArray(val)) val = val.join('، ');
+      qaText += `- ${q.label}: ${val}\n`;
+    });
+  });
+  return `أنت مساعد مراجعة أولي لبرنامج حاضنة أعمال جامعية (حاضنة ابتكار). راجع إجابات فريق المشروع التالية بعناية، وقدّم تقييمًا أوليًا استشاريًا (غير نهائي بأي حال) يساعد فريق البرنامج على المراجعة البشرية لاحقًا. اعتمد فقط على النص المُدخل من الفريق نفسه أدناه، ولا تفترض معلومات غير مذكورة.
+
+بيانات الفريق وإجاباته:
+${qaText}
+
+المتطلبات الستة الأساسية للانتقال لمرحلة التحكيم هي: السجل التجاري، حضور المعسكر، عدد أعضاء الفريق، النموذج الأولي، العرض الاستثماري، والتحقق من احتياج السوق.
+
+أعد ردك بصيغة JSON فقط بدون أي نص أو شرح خارج الكائن، وبدون علامات markdown، بالشكل التالي بالضبط:
+{
+  "overall_impression": "فقرة موجزة من 3 إلى 4 جمل بالعربية عن الانطباع العام على جاهزية المشروع",
+  "strengths": ["نقطة قوة محددة 1", "نقطة قوة محددة 2"],
+  "concerns": ["نقطة تحتاج انتباه أو توضيح 1", "نقطة تحتاج انتباه أو توضيح 2"],
+  "requirement_notes": {
+    "commercial_registration": "ملاحظة قصيرة بناءً على إجابات الفريق",
+    "camp_attendance": "ملاحظة قصيرة",
+    "team_size": "ملاحظة قصيرة",
+    "prototype": "ملاحظة قصيرة",
+    "pitch_deck": "ملاحظة قصيرة",
+    "market_validation": "ملاحظة قصيرة"
+  },
+  "suggested_focus_areas": ["نقطة يُنصح المراجع البشري يتحقق منها بعناية أثناء المراجعة"]
+}`;
+}
+
+function openAiPromptModal(){
+  const av = ansMap();
+  const hasAnyAnswers = sections.some(sec=>sec.questions.some(q=>q.id in av && av[q.id]!==null && av[q.id]!==''));
+  if(!hasAnyAnswers){ showToast('لا توجد إجابات كافية لهذا الطلب بعد لتوليد تقييم'); return; }
+
+  const prompt = buildAiPrompt();
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '640px';
+  box.innerHTML = `
+    <h3>${icon('sparkles',{size:15})} توليد تقييم أولي بالذكاء الاصطناعي</h3>
+    <p>1) انسخ النص أدناه كاملًا. 2) افتح محادثة جديدة على claude.ai والصقه. 3) انسخ رد Claude كاملًا والصقه في الحقل الثاني بالأسفل. 4) اضغط حفظ.</p>
+    <div class="field-inline">
+      <label class="flabel">النص الجاهز للنسخ</label>
+      <textarea id="aiPromptText" readonly style="min-height:140px;font-family:'IBM Plex Mono',monospace;font-size:11.5px">${prompt.replace(/</g,'&lt;')}</textarea>
+      <button type="button" class="btn btn-ghost btn-sm" id="copyPromptBtn" style="margin-top:8px">${icon('paperclip',{size:12})} نسخ النص</button>
+    </div>
+    <div class="field-inline">
+      <label class="flabel">الصق رد Claude هنا (كاملًا)</label>
+      <textarea id="aiResponseText" placeholder="{&quot;overall_impression&quot;: ...}" style="min-height:140px;font-family:'IBM Plex Mono',monospace;font-size:11.5px"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="aiModalCancel">إلغاء</button>
+      <button class="btn btn-primary" id="aiModalSave">حفظ التقييم</button>
+    </div>
+  `;
+  modal.classList.add('show');
+
+  document.getElementById('copyPromptBtn').addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(prompt); showToast('تم نسخ النص'); }
+    catch(e){ document.getElementById('aiPromptText').select(); document.execCommand('copy'); showToast('تم نسخ النص'); }
+  });
+  document.getElementById('aiModalCancel').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('aiModalSave').addEventListener('click', async ()=>{
+    const raw = document.getElementById('aiResponseText').value.trim();
+    if(!raw){ showToast('الصق رد Claude أولًا'); return; }
+    let parsed;
+    try{
+      const cleaned = raw.replace(/```json|```/g,'').trim();
+      parsed = JSON.parse(cleaned);
+    }catch(e){ showToast('تعذّر قراءة النص الملصَق — تأكد إنه JSON صحيح كامل'); return; }
+
+    const saveBtn = document.getElementById('aiModalSave');
+    saveBtn.disabled = true; saveBtn.textContent = 'جارٍ الحفظ…';
+    const { data, error } = await sb.from('ai_evaluations').insert({
+      form_id: reviewDetail.form.id, evaluation: parsed, model: 'claude (يدوي)', generated_by: currentAdmin.id,
+    }).select().single();
+    saveBtn.disabled = false; saveBtn.textContent = 'حفظ التقييم';
+    if(error){ showToast('تعذّر الحفظ: '+error.message); return; }
+
+    aiEvalCache[reviewDetail.form.id] = data;
+    modal.classList.remove('show');
+    restoreConfirmModal();
+    showToast('تم حفظ التقييم بنجاح');
+    renderAiTabContent();
+  });
+}
+
 /* ---------------- عرض شامل ---------------- */
 function renderAll(){
   renderTabs();
   if(activeTab==='dashboard') renderDashboard();
   if(activeTab==='analytics') renderAnalytics();
+  if(activeTab==='announcements') renderAnnouncements();
   if(activeTab==='review') renderReview();
   if(activeTab==='builder') renderBuilder();
   if(activeTab==='eligibility') renderEligibility();
