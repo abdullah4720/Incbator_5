@@ -157,9 +157,10 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
 
 .editor-box{border:1.5px solid var(--teal-500);border-radius:12px;padding:16px;margin-bottom:14px;background:#fff;box-shadow:0 2px 12px rgba(14,124,123,.08);}
 .editor-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;}
-.opt-chip-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
-.opt-chip{background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:4px 10px;font-size:12px;display:flex;align-items:center;gap:6px;}
-.opt-chip button{background:none;border:none;color:var(--danger);cursor:pointer;font-size:11px;}
+.opt-edit-row{display:flex;align-items:center;gap:6px;margin-top:6px;}
+.opt-edit-row input{flex:1;padding:7px 10px;font-size:12.5px;}
+.opt-edit-row button{background:var(--paper);border:1px solid var(--line);border-radius:7px;width:28px;height:28px;flex:none;display:flex;align-items:center;justify-content:center;color:var(--danger);cursor:pointer;}
+.opt-edit-row button:hover{background:var(--danger-100);}
 .opt-add-row{display:flex;gap:8px;margin-top:8px;}
 .opt-add-row input{flex:1;}
 
@@ -1126,8 +1127,8 @@ function openEditorFor(sectionId, questionId){
     </div>
     <div class="field-inline" id="ed_options_wrap" style="display:${OPTION_TYPES.includes(draft.type)?'block':'none'}">
       <label class="flabel">خيارات القائمة</label>
-      <div class="opt-chip-row" id="ed_opts_row">${(draft.options||[]).map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">${icon('x',{size:10})}</button></span>`).join('')}</div>
-      <div class="opt-add-row"><input type="text" id="ed_new_opt" placeholder="أضف خيارًا واضغط Enter"><button type="button" class="btn btn-ghost btn-sm" id="ed_add_opt">إضافة</button></div>
+      <div id="ed_opts_row"></div>
+      <button type="button" class="btn btn-ghost btn-sm" id="ed_add_opt">+ إضافة خيار جديد</button>
     </div>
     <div class="field-inline"><label class="flabel">نص توضيحي صغير (اختياري)</label>
       <input type="text" id="ed_hint" value="${(draft.hint||'').replace(/"/g,'&quot;')}" placeholder="يظهر تحت الحقل مباشرة">
@@ -1153,23 +1154,30 @@ function openEditorFor(sectionId, questionId){
     document.getElementById('ed_multiple_wrap').style.display = ['file','video'].includes(e.target.value) ? 'block':'none';
   });
   function addOpt(){
-    const inp = document.getElementById('ed_new_opt');
-    const v = inp.value.trim();
-    if(!v) return;
     draft.options = draft.options||[];
-    draft.options.push(v);
-    inp.value='';
+    draft.options.push('');
     refreshOptsRow();
+    // ركّز على آخر حقل مُضاف مباشرة كي يكتب المستخدم فيه فورًا
+    const rows = document.querySelectorAll('#ed_opts_row [data-optinput]');
+    if(rows.length) rows[rows.length-1].focus();
   }
   function refreshOptsRow(){
-    document.getElementById('ed_opts_row').innerHTML = (draft.options||[]).map((o,i)=>`<span class="opt-chip">${o}<button type="button" data-rmopt="${i}">${icon('x',{size:10})}</button></span>`).join('');
-    document.getElementById('ed_opts_row').querySelectorAll('[data-rmopt]').forEach(b=>{
+    const wrap = document.getElementById('ed_opts_row');
+    wrap.innerHTML = (draft.options||[]).map((o,i)=>`
+      <div class="opt-edit-row" data-optrow="${i}">
+        <input type="text" data-optinput="${i}" value="${(o||'').replace(/"/g,'&quot;')}" placeholder="نص الخيار">
+        <button type="button" data-rmopt="${i}" title="حذف هذا الخيار">${icon('x',{size:12})}</button>
+      </div>
+    `).join('');
+    wrap.querySelectorAll('[data-optinput]').forEach(inp=>{
+      inp.addEventListener('input',()=>{ draft.options[parseInt(inp.dataset.optinput)] = inp.value; });
+    });
+    wrap.querySelectorAll('[data-rmopt]').forEach(b=>{
       b.addEventListener('click',()=>{ draft.options.splice(parseInt(b.dataset.rmopt),1); refreshOptsRow(); });
     });
   }
   refreshOptsRow();
   document.getElementById('ed_add_opt').addEventListener('click',addOpt);
-  document.getElementById('ed_new_opt').addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); addOpt(); }});
 
   function refreshCondRows(){
     const wrap = document.getElementById('ed_cond_rows');
@@ -1209,6 +1217,10 @@ function openEditorFor(sectionId, questionId){
     draft.multiple = ['file','video'].includes(draft.type) ? document.getElementById('ed_multiple').checked : false;
     draft.hint = document.getElementById('ed_hint').value.trim();
     if(!OPTION_TYPES.includes(draft.type)) delete draft.options;
+    else{
+      draft.options = (draft.options||[]).map(o=>(o||'').trim()).filter(Boolean);
+      if(draft.options.length===0){ showToast('أضف خيارًا واحدًا على الأقل لهذا النوع من الأسئلة'); return; }
+    }
 
     // بناء condition_expr من condRows
     const finalRows = condRows
