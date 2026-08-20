@@ -1082,8 +1082,28 @@ function validateSection(section){
 }
 
 /* ---------------- الحفظ والإرسال ---------------- */
+/* تحقق فوري ومباشر من قاعدة البيانات (لا يعتمد على الحالة المحمَّلة سابقًا في
+   المتصفح) — يُستدعى قبل كل عملية حفظ أو إرسال، حتى لو كانت الصفحة مفتوحة من
+   قبل إغلاق النموذج ولم تُحدَّث بعد. */
+async function refuseIfClosed(){
+  try{
+    const { data } = await SB.from('form_settings').select('is_open, deadline_at').eq('id',1).maybeSingle();
+    if(data){
+      FORM_IS_OPEN = data.is_open !== false;
+      FORM_DEADLINE = data.deadline_at ? new Date(data.deadline_at) : null;
+    }
+  }catch(e){ /* لو فشل الاتصال، نعتمد على آخر حالة معروفة بدل ما نمنع الحفظ بالخطأ */ }
+  if(computeClosedState()){
+    showToast(FORM_CLOSED_REASON==='deadline' ? 'انتهى الموعد النهائي — تعذّر الحفظ.' : 'تم إغلاق النموذج من قبل فريق البرنامج — تعذّر الحفظ.');
+    setTimeout(()=>window.location.reload(), 1800);
+    return true;
+  }
+  return false;
+}
+
 async function saveDraft(showToastOnSuccess = true){
   if(!FORM_ID){ showToast('تعذّر الحفظ: لم يتم تحميل النموذج بعد'); return false; }
+  if(await refuseIfClosed()) return false;
   syncLeaderFromProjectInfo();
   document.getElementById('draftStatus').textContent = 'جارٍ الحفظ…';
   try{
@@ -1138,11 +1158,12 @@ async function saveDraft(showToastOnSuccess = true){
 }
 
 async function trySubmit(){
+  if(await refuseIfClosed()) return;
   const declareSection = SECTIONS.find(s=>s.isDeclareSection) || SECTIONS[SECTIONS.length-1];
   if(!validateSection(declareSection)){ return; }
 
   const saved = await saveDraft(false);
-  if(!saved){ showToast('تعذّر حفظ آخر التعديلات — حاول مرة أخرى قبل الإرسال'); return; }
+  if(!saved){ return; }
 
   try{
     const { error } = await SB_AUTH
