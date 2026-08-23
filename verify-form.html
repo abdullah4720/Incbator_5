@@ -596,7 +596,7 @@ function computeSectionCompletion(section){
   let total=0, done=0;
   if(section.isTeamSection){
     state.members.forEach(m=>{
-      ["name","id","phone","email","role","spec","camp"].forEach(k=>{ total++; if(m[k]) done++; });
+      ["name","phone","email","role","spec","camp"].forEach(k=>{ total++; if(m[k]) done++; });
     });
   }
   visibleFields(section).forEach(f=>{
@@ -827,7 +827,7 @@ function deriveChecklist(){
   const cr1=getVal("f2_1");
   const crStatus = cr1==="نعم" ? "ok" : (cr1==="لا"?"no":"pending");
   const campStatus = getVal("f3_2")==="نعم"?"ok":(getVal("f3_2")==="لا"?"mid":"pending");
-  const membersFilled = state.members.filter(m=>m.name && m.id).length;
+  const membersFilled = state.members.filter(m=>m.name).length;
   const teamStatus = membersFilled>=2 ? "ok":"no";
   const stageSet = !!getVal("f5_1");
   const protoStatus = stageSet ? (stageQualifies()?"ok":"no") : "pending";
