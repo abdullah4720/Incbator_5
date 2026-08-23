@@ -1042,12 +1042,12 @@ function findFieldDef(id){
 }
 
 /* ---------------- التحقق ---------------- */
-function validateSection(section){
+function validateSection(section, silent=false){
   let ok=true;
   let customMsg = null;
   visibleFields(section).forEach(f=>{
     if(!f.required) return;
-    const wrap=document.getElementById('fld_'+f.id);
+    const wrap = silent ? null : document.getElementById('fld_'+f.id);
     let filled=true;
     if(f.type==='file') filled=(state.files[f.id]||[]).length>0;
     else if(f.type==='video'){
@@ -1079,8 +1079,18 @@ function validateSection(section){
     if(dupEmails.size){ ok=false; customMsg = 'لا يمكن تكرار البريد الإلكتروني بين أعضاء الفريق — كل عضو يجب أن يكون له بريد مختلف.'; }
   }
   if(section.isDeclareSection && !state.values.f11_1) ok=false;
-  if(!ok) showToast(customMsg || 'يرجى استكمال الحقول الإلزامية المظللة قبل المتابعة');
+  if(!ok && !silent) showToast(customMsg || 'يرجى استكمال الحقول الإلزامية المظللة قبل المتابعة');
   return ok;
+}
+
+/* تفحص كل الأقسام (مو بس القسم الحالي) وترجع أول قسم فيه حقول إلزامية ناقصة —
+   ضرورية قبل الإرسال، لأن المشارك يقدر يقفز مباشرة لقسم الإقرار عبر الشريط
+   الجانبي متجاوزًا أزرار "التالي" اللي تتحقق من القسم الحالي فقط. */
+function findFirstInvalidSection(){
+  for(const sec of SECTIONS){
+    if(!validateSection(sec, true)) return sec;
+  }
+  return null;
 }
 
 /* ---------------- الحفظ والإرسال ---------------- */
@@ -1161,8 +1171,16 @@ async function saveDraft(showToastOnSuccess = true){
 
 async function trySubmit(){
   if(await refuseIfClosed()) return;
-  const declareSection = SECTIONS.find(s=>s.isDeclareSection) || SECTIONS[SECTIONS.length-1];
-  if(!validateSection(declareSection)){ return; }
+
+  const invalidSection = findFirstInvalidSection();
+  if(invalidSection){
+    state.current = invalidSection.id;
+    renderAll();
+    window.scrollTo({top:0,behavior:'smooth'});
+    validateSection(invalidSection); // إعادة تشغيل التحقق (غير صامت) الآن لتظليل الحقول الناقصة بصريًا
+    showToast(`يوجد حقول إلزامية غير مكتملة في قسم "${invalidSection.title}" — أكملها قبل الإرسال.`);
+    return;
+  }
 
   const saved = await saveDraft(false);
   if(!saved){ return; }

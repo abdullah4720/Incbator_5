@@ -2538,7 +2538,7 @@ function filesTabHTML(){
     <div class="file-card">
       <div class="fic">${iconFor(f.mime_type)}</div>
       <div class="fname">${f.file_name}</div>
-      <div class="ffield mono">${f.field_key}</div>
+      <div class="ffield">${findFieldLabel(f.field_key)}</div>
       <button class="btn btn-ghost btn-sm" data-viewfile="${i}">فتح الملف</button>
     </div>
   `).join('')}</div>`;
