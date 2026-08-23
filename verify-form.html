@@ -414,6 +414,10 @@ let FORM_ID = null;
 let SB = null;       // عميل عام — يُستخدم لكل عمليات النموذج (لا حاجة لتوكن خاص)
 let showingThankYou = false;
 let ALLOW_EDIT_AFTER_SUBMIT = true;
+let MAX_PDF_MB = 10;
+let MAX_VIDEO_MB = 200;
+let MAX_VIDEO_MINUTES = 5;
+let MAX_FILES_PER_FIELD = 5;
 let FORM_IS_OPEN = true;
 let FORM_DEADLINE = null; // Date أو null
 let FORM_CLOSED_REASON = null; // 'manual' | 'deadline' | null
@@ -563,6 +567,14 @@ function stageQualifies(){
 }
 
 /* ---------------- أدوات مساعدة ---------------- */
+/* تنقية أي نص قبل إدراجه في innerHTML — للحماية من حقن HTML/JS، خصوصًا في
+   محتوى الإعلانات (يعرضها كل مشارك يفتح الصفحة). */
+function escHtml(str){
+  if(str===null||str===undefined) return '';
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 function fmtSize(bytes){
   if(bytes<1024) return bytes+" B";
   if(bytes<1024*1024) return (bytes/1024).toFixed(0)+" KB";
@@ -688,7 +700,7 @@ function renderField(f){
       const files = state.files[f.id]||[];
       body = `<div class="file-drop" data-filetrigger="${f.id}">
         <div class="fi-title">اضغط لإرفاق ${f.multiple?'ملف أو أكثر':'ملف'} (PDF)</div>
-        <div class="fi-sub">الحد الأقصى 10 م.ب لكل ملف${f.multiple?' — حتى 5 ملفات':''}</div>
+        <div class="fi-sub">الحد الأقصى ${MAX_PDF_MB} م.ب لكل ملف${f.multiple?` — حتى ${MAX_FILES_PER_FIELD} ملفات`:''}</div>
       </div>
       <input type="file" id="file_${f.id}" data-fileinput="${f.id}" accept="${f.accept||'.pdf'}" ${f.multiple?'multiple':''} style="display:none">
       <div class="file-list">${files.map((fl,i)=>`
@@ -706,7 +718,7 @@ function renderField(f){
       if(mode==="upload"){
         body += `<div class="file-drop" data-filetrigger="${f.id}">
           <div class="fi-title">اضغط لرفع الفيديو</div>
-          <div class="fi-sub">الحد الأقصى 200 م.ب ومدة 5 دقائق</div>
+          <div class="fi-sub">الحد الأقصى ${MAX_VIDEO_MB} م.ب ومدة ${MAX_VIDEO_MINUTES} دقائق</div>
         </div>
         <input type="file" id="file_${f.id}" data-fileinput="${f.id}" accept="video/*" style="display:none">
         <div class="file-list">${files.map((fl,i)=>`
@@ -935,14 +947,14 @@ function bindSectionEvents(section){
       const id=inp.dataset.fileinput;
       const list = state.files[id]||[];
       const fdef = findFieldDef(id);
-      const maxSize = fdef && fdef.type==='video' ? 200*1024*1024 : 10*1024*1024;
+      const maxSize = fdef && fdef.type==='video' ? MAX_VIDEO_MB*1024*1024 : MAX_PDF_MB*1024*1024;
       const filesToUpload = [];
       Array.from(inp.files).forEach(file=>{
         if(fdef && fdef.type!=='video' && !file.name.toLowerCase().endsWith('.pdf')){
           showToast('تعذّر رفع الملف — يُقبل PDF فقط'); return;
         }
-        if(file.size>maxSize){ showToast('تجاوز الحجم المسموح به'); return; }
-        if(list.length>=5 && fdef.multiple){ showToast('الحد الأقصى 5 ملفات لهذا الحقل'); return; }
+        if(file.size>maxSize){ showToast(`تجاوز الحجم المسموح به (الحد الأقصى ${fdef && fdef.type==='video' ? MAX_VIDEO_MB : MAX_PDF_MB} م.ب)`); return; }
+        if(list.length>=MAX_FILES_PER_FIELD && fdef.multiple){ showToast(`الحد الأقصى ${MAX_FILES_PER_FIELD} ملفات لهذا الحقل`); return; }
         filesToUpload.push(file);
       });
       if(filesToUpload.length===0) return;
@@ -1311,7 +1323,7 @@ function renderAnnouncementsBanner(){
   const el = document.getElementById('announcementsBanner');
   if(!el) return;
   if(!ACTIVE_ANNOUNCEMENTS.length){ el.innerHTML = ''; return; }
-  el.innerHTML = ACTIVE_ANNOUNCEMENTS.map(a=>`<div class="ann-banner">${icon('megaphone',{size:14})}<span>${(a.message||'').replace(/</g,'&lt;')}</span></div>`).join('');
+  el.innerHTML = ACTIVE_ANNOUNCEMENTS.map(a=>`<div class="ann-banner">${icon('megaphone',{size:14})}<span>${escHtml(a.message)}</span></div>`).join('');
 }
 
 function renderAll(){
@@ -1388,12 +1400,18 @@ async function initApp(){
       if(proj.team_leader_email) setVal('f1_8', proj.team_leader_email);
     }
 
-    // 7) إعدادات النموذج — هل يُسمح بالتعديل بعد الإرسال؟ وهل النموذج مفتوح؟
-    const { data: settings } = await SB.from('form_settings').select('allow_edit_after_submit, is_open, deadline_at').eq('id',1).maybeSingle();
+    // 7) إعدادات النموذج — هل يُسمح بالتعديل بعد الإرسال؟ وهل النموذج مفتوح؟ وحدود الملفات؟
+    const { data: settings } = await SB.from('form_settings')
+      .select('allow_edit_after_submit, is_open, deadline_at, max_pdf_mb, max_video_mb, max_video_minutes, max_files_per_field')
+      .eq('id',1).maybeSingle();
     if(settings){
       if(settings.allow_edit_after_submit === false) ALLOW_EDIT_AFTER_SUBMIT = false;
       FORM_IS_OPEN = settings.is_open !== false;
       FORM_DEADLINE = settings.deadline_at ? new Date(settings.deadline_at) : null;
+      if(settings.max_pdf_mb) MAX_PDF_MB = settings.max_pdf_mb;
+      if(settings.max_video_mb) MAX_VIDEO_MB = settings.max_video_mb;
+      if(settings.max_video_minutes) MAX_VIDEO_MINUTES = settings.max_video_minutes;
+      if(settings.max_files_per_field) MAX_FILES_PER_FIELD = settings.max_files_per_field;
     }
 
     // 7.1) الإعلانات المفعَّلة حاليًا
