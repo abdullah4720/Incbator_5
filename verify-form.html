@@ -351,6 +351,7 @@ input:disabled,select:disabled{background:#F0F1F4;color:var(--ink-400);}
    مكتبة أيقونات Lucide مضمَّنة محليًا (بدون أي اعتماد على CDN خارجي)
    ============================================================ */
 const LUCIDE_ICONS = {
+  "chevron-up": `<path d="m18 15-6-6-6 6" />`,
   "sparkles": `<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" /> <path d="M20 2v4" /> <path d="M22 4h-4" /> <circle cx="4" cy="20" r="2" />`,
   "megaphone": `<path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" /> <path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14" /> <path d="M8 6v8" />`,
   "bar-chart-3": `<path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" />`,
@@ -462,18 +463,18 @@ function requireSessionOrRedirect(){
 // لوحة التحكم لأنه مرتبط بتصميم بصري خاص، وليس سؤالًا عاديًا.
 const STAGES = [
   {v:"idea", n:"5.1", t:"مرحلة الفكرة", d:"الفكرة مصاغة دون تصميم أو نموذج مادي"},
-  {v:"design", n:"5.2", t:"مرحلة التصور والتصميم", d:"رسومات أولية أو تصور للحل دون نموذج قابل للتجربة"},
-  {v:"poc", n:"5.3", t:"نموذج إثبات مفهوم (PoC)", d:"إثبات تقني مبسّط دون تجربة مستخدم كاملة"},
-  {v:"proto_early", n:"5.4", t:"نموذج أولي أولي", d:"نموذج مبدئي بوظائف محدودة"},
-  {v:"proto_func", n:"5.5", t:"نموذج أولي وظيفي", d:"تعمل وظائفه الأساسية ويمكن تجربته"},
+  {v:"poc", n:"5.2", t:"نموذج إثبات مفهوم (PoC)", d:"إثبات تقني مبسّط دون تجربة مستخدم كاملة"},
+  {v:"prototype", n:"5.3", t:"نموذج أولي (Protoyping)", d:"نموذج أولي بوظائف محدودة أو أساسية يمكن تجربته"},
+  {v:"mvp", n:"5.4", t:"منتج أولي قابل للاستخدام (MVP)", d:"منتج فعلي يحقق الحاجة الأساسية للمستخدم — وليس نموذجًا تصميميًا"},
+  {v:"market", n:"5.5", t:"منتج/خدمة مطروحة في السوق", d:"متاح تجاريًا"},
 ];
-const STAGE_QUALIFIES_IDX = 2; // فهرس 5.3 فأعلى يستوفي
+const STAGE_QUALIFIES_IDX = 1; // فهرس نموذج إثبات المفهوم (PoC) فأعلى يستوفي
 
 /* ---------------- الحالة ---------------- */
 const state = {
   current: 1,
   values: {},
-  members: [ {name:"",id:"",phone:"",email:"",role:"",spec:"",specOther:"",camp:"",title:""}, {name:"",id:"",phone:"",email:"",role:"",spec:"",specOther:"",camp:"",title:""} ],
+  members: [ {name:"",phone:"",email:"",role:"",spec:"",specOther:"",camp:"",title:""}, {name:"",phone:"",email:"",role:"",spec:"",specOther:"",camp:"",title:""} ],
   files: {}, // fieldId -> [{name,size,id,storage_path}]
   videoMode: {}, // fieldId -> 'upload' | 'link'
 };
@@ -726,7 +727,6 @@ function renderField(f){
 function syncLeaderFromProjectInfo(){
   if(!state.members[0]) return;
   state.members[0].name = getVal('f1_5') || '';
-  state.members[0].id = getVal('f1_6') || '';
   state.members[0].phone = getVal('f1_7') || '';
   state.members[0].email = getVal('f1_8') || '';
   state.members[0].role = 'قائد الفريق';
@@ -756,11 +756,8 @@ function renderTeamSection(section){
         <span class="member-tag">${isLeader?'قائد الفريق':'عضو '+(i+1)}</span>
         ${state.members.length>2 && i>0 ? `<button type="button" class="member-remove" data-removemember="${i}">إزالة العضو</button>`:''}
       </div>
-      ${isLeader ? `<div class="field-hint" style="margin-bottom:14px">بيانات قائد الفريق (الاسم، الهوية، الجوال، البريد) مأخوذة تلقائيًا من القسم الأول — عدّلها من هناك إذا احتجت تصحيحها.</div>` : ''}
-      <div class="two-col">
-        <div class="field"><div class="field-label">الاسم الرباعي<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="name" value="${m.name.replace(/"/g,'&quot;')}" ${isLeader?'disabled':''}></div>
-        <div class="field"><div class="field-label">رقم الهوية أو الإقامة<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="id" value="${m.id.replace(/"/g,'&quot;')}" ${isLeader?'disabled':''}></div>
-      </div>
+      ${isLeader ? `<div class="field-hint" style="margin-bottom:14px">بيانات قائد الفريق (الاسم، الجوال، البريد) مأخوذة تلقائيًا من القسم الأول — عدّلها من هناك إذا احتجت تصحيحها.</div>` : ''}
+      <div class="field"><div class="field-label">الاسم الرباعي<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="name" value="${m.name.replace(/"/g,'&quot;')}" ${isLeader?'disabled':''}></div>
       <div class="two-col">
         <div class="field ${phoneDup?'has-error':''}"><div class="field-label">رقم الجوال<span class="req-star">*</span></div><input type="text" data-member="${i}" data-mkey="phone" value="${m.phone.replace(/"/g,'&quot;')}" ${isLeader?'disabled':''}>${phoneDup?'<div class="error-text" style="display:block">هذا الرقم مستخدَم لعضو آخر في الفريق</div>':''}</div>
         <div class="field ${emailDup?'has-error':''}"><div class="field-label">البريد الإلكتروني<span class="req-star">*</span></div><input type="email" data-member="${i}" data-mkey="email" value="${m.email.replace(/"/g,'&quot;')}" ${isLeader?'disabled':''}>${emailDup?'<div class="error-text" style="display:block">هذا البريد مستخدَم لعضو آخر في الفريق</div>':''}</div>
@@ -1010,7 +1007,7 @@ function bindSectionEvents(section){
   });
   const addBtn = document.getElementById('addMemberBtn');
   if(addBtn) addBtn.addEventListener('click',()=>{
-    state.members.push({name:"",id:"",phone:"",email:"",role:"",spec:"",specOther:"",camp:"",title:""});
+    state.members.push({name:"",phone:"",email:"",role:"",spec:"",specOther:"",camp:"",title:""});
     renderAll();
   });
   document.querySelectorAll('[data-removemember]').forEach(btn=>{
@@ -1073,7 +1070,7 @@ function validateSection(section){
   if(section.isTeamSection){
     if(state.members.length<2) ok=false;
     state.members.forEach(m=>{
-      if(!m.name||!m.id||!m.phone||!m.email||!m.role||!m.spec||!m.camp) ok=false;
+      if(!m.name||!m.phone||!m.email||!m.role||!m.spec||!m.camp) ok=false;
       if(m.spec==='أخرى' && !(m.specOther||'').trim()) ok=false;
     });
     const dupPhones = findDuplicateValues(state.members, 'phone', v=>v.replace(/\s+/g,''));
@@ -1143,7 +1140,7 @@ async function saveDraft(showToastOnSuccess = true){
     if(delErr) throw delErr;
     if(membersToSave.length){
       const memberRows = membersToSave.map((m,i) => ({
-        form_id: FORM_ID, full_name: m.name, national_id: m.id, phone: m.phone, email: m.email,
+        form_id: FORM_ID, full_name: m.name, phone: m.phone, email: m.email,
         role_in_project: m.role, specialization: (m.spec==='أخرى' ? (m.specOther||'').trim() || 'أخرى' : m.spec),
         attended_camp: m.camp === "نعم" ? true : (m.camp === "لا" ? false : null),
         title_in_entity: m.title || null, is_leader: i === 0, order_index: i,
@@ -1346,7 +1343,7 @@ async function initApp(){
     const { data: members } = await SB_AUTH.from('team_members').select('*').eq('form_id', FORM_ID).order('order_index');
     if(members && members.length){
       state.members = members.map(m=>({
-        name:m.full_name||"", id:m.national_id||"", phone:m.phone||"", email:m.email||"",
+        name:m.full_name||"", phone:m.phone||"", email:m.email||"",
         role:m.role_in_project||"",
         spec: SPECIALIZATIONS.includes(m.specialization) ? m.specialization : (m.specialization ? "أخرى" : ""),
         specOther: SPECIALIZATIONS.includes(m.specialization) ? "" : (m.specialization||""),

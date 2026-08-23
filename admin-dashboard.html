@@ -445,6 +445,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
    مكتبة أيقونات Lucide مضمَّنة محليًا (بدون أي اعتماد على CDN خارجي)
    ============================================================ */
 const LUCIDE_ICONS = {
+  "chevron-up": `<path d="m18 15-6-6-6 6" />`,
   "sparkles": `<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" /> <path d="M20 2v4" /> <path d="M22 4h-4" /> <circle cx="4" cy="20" r="2" />`,
   "megaphone": `<path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" /> <path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14" /> <path d="M8 6v8" />`,
   "bar-chart-3": `<path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" />`,
@@ -1015,10 +1016,31 @@ function renderQuestionsPane(section){
       <div><h2 class="mono" style="font-family:'IBM Plex Sans Arabic'">${section.title}</h2><p>${section.desc||'—'} · ${section.questions.length} سؤال</p></div>
     </div>`;
   if(section.banner) html += `<div class="req-banner" style="margin-bottom:16px"><b>تنبيه:</b>&nbsp;${section.banner}</div>`;
-  html += section.questions.map(q=>questionCardHTML(section.id,q)).join('');
+  html += section.questions.map((q,idx)=>questionCardHTML(section.id,q,idx,section.questions.length)).join('');
   html += `<div class="add-q-btn" id="addQBtn">+ إضافة سؤال جديد لهذا القسم</div>`;
   pane.innerHTML = html;
 
+  pane.querySelectorAll('[data-moveq]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const qid = b.dataset.moveq;
+      const dir = b.dataset.dir;
+      const idx = section.questions.findIndex(x=>x.id===qid);
+      const swapIdx = dir==='up' ? idx-1 : idx+1;
+      if(swapIdx<0 || swapIdx>=section.questions.length) return;
+
+      pane.querySelectorAll('[data-moveq]').forEach(x=>x.disabled=true);
+      const a = section.questions[idx], bq = section.questions[swapIdx];
+      const [err1, err2] = await Promise.all([
+        sb.from('form_questions').update({ order_index: swapIdx }).eq('id', a.dbId),
+        sb.from('form_questions').update({ order_index: idx }).eq('id', bq.dbId),
+      ]).then(results=>results.map(r=>r.error));
+      if(err1 || err2){ showToast('تعذّر تغيير الترتيب: '+((err1||err2).message)); renderQuestionsPane(section); return; }
+
+      section.questions[idx] = bq;
+      section.questions[swapIdx] = a;
+      renderQuestionsPane(section);
+    });
+  });
   pane.querySelectorAll('[data-editq]').forEach(b=>{
     b.addEventListener('click',()=>{ openEditorFor(section.id, b.dataset.editq); });
   });
@@ -1053,7 +1075,7 @@ function describeCondition(cond){
   const valText = Array.isArray(cond.value) ? cond.value.join('، ') : cond.value;
   return `يظهر إذا: «${label}» ${opText} ${valText}`;
 }
-function questionCardHTML(sectionId, q){
+function questionCardHTML(sectionId, q, idx, total){
   return `<div class="q-card">
     <div class="q-head">
       <div style="flex:1;min-width:0">
@@ -1068,6 +1090,8 @@ function questionCardHTML(sectionId, q){
         ${q.condition?`<div class="q-cond">${describeCondition(q.condition)}</div>`:''}
       </div>
       <div class="q-actions">
+        <button class="icon-btn" data-moveq="${q.id}" data-dir="up" title="نقل لأعلى" ${idx===0?'disabled':''}>${icon('chevron-up',{size:13})}</button>
+        <button class="icon-btn" data-moveq="${q.id}" data-dir="down" title="نقل لأسفل" ${idx===total-1?'disabled':''}>${icon('chevron-down',{size:13})}</button>
         <button class="icon-btn" data-editq="${q.id}" title="تعديل">${icon('pencil',{size:13})}</button>
         <button class="icon-btn danger" data-delq="${q.id}" title="حذف">${icon('trash-2',{size:13})}</button>
       </div>
@@ -2076,8 +2100,8 @@ function analyticsCardHTML(q){
 // يطابق رموز v: في STAGES بملف verify-form.html — تُستخدم لعرض اسم مرحلة
 // النموذج الأولي بصيغة مقروءة بدل الرمز الداخلي المخزَّن في f5_1.
 const STAGE_CODE_LABELS = {
-  idea:"مرحلة الفكرة", design:"مرحلة التصور والتصميم", poc:"نموذج إثبات مفهوم (PoC)",
-  proto_early:"نموذج أولي أولي", proto_func:"نموذج أولي وظيفي",
+  idea:"مرحلة الفكرة", poc:"نموذج إثبات مفهوم (PoC)", prototype:"نموذج أولي (Protoyping)",
+  mvp:"منتج أولي قابل للاستخدام (MVP)", market:"منتج/خدمة مطروحة في السوق",
 };
 let reviewFormsRaw = [];
 let reviewReqStatusAll = [];      // كل صفوف requirement_status لكل النماذج (تُحمَّل مرة واحدة)
@@ -2605,9 +2629,12 @@ function renderAiTabContent(){
     content.innerHTML = `
       ${disclaimer}
       <div class="empty-hint" style="padding:30px 0">لا يوجد تقييم أولي لهذا الطلب بعد</div>
-      ${canGenerate ? `<div style="text-align:center"><button class="btn btn-primary btn-sm" id="genAiBtn">${icon('sparkles',{size:14})} توليد تقييم أولي بالذكاء الاصطناعي</button></div>` : ''}
+      ${canGenerate ? `<div style="text-align:center">
+        <button class="btn btn-primary btn-sm" id="genAiAutoBtn">${icon('sparkles',{size:14})} توليد تقييم أولي تلقائيًا</button>
+        <div style="margin-top:10px"><button class="btn btn-ghost btn-sm" id="genAiManualBtn" style="font-size:11.5px">أو انسخ النص والصق الرد يدويًا</button></div>
+      </div>` : ''}
     `;
-    bindAiGenerateButton();
+    bindAiGenerateButtons();
     return;
   }
 
@@ -2616,7 +2643,10 @@ function renderAiTabContent(){
     ${disclaimer}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div style="font-size:11px;color:var(--ink-400)">آخر توليد: ${relativeTime(existing.generated_at)}</div>
-      ${canGenerate ? `<button class="btn btn-ghost btn-sm" id="genAiBtn">${icon('rotate-ccw',{size:12})} إعادة التوليد</button>` : ''}
+      ${canGenerate ? `<div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" id="genAiAutoBtn">${icon('rotate-ccw',{size:12})} إعادة التوليد تلقائيًا</button>
+        <button class="btn btn-ghost btn-sm" id="genAiManualBtn" style="font-size:11px">يدويًا</button>
+      </div>` : ''}
     </div>
 
     <div class="analytics-card" style="margin-bottom:14px">
@@ -2661,20 +2691,19 @@ function renderAiTabContent(){
       </ul>
     </div>` : ''}
   `;
-  bindAiGenerateButton();
+  bindAiGenerateButtons();
 }
 
-function bindAiGenerateButton(){
-  const btn = document.getElementById('genAiBtn');
-  if(!btn) return;
-  btn.addEventListener('click', openAiPromptModal);
+function bindAiGenerateButtons(){
+  const autoBtn = document.getElementById('genAiAutoBtn');
+  const manualBtn = document.getElementById('genAiManualBtn');
+  if(autoBtn) autoBtn.addEventListener('click', runAutoAiGeneration);
+  if(manualBtn) manualBtn.addEventListener('click', openAiPromptModal);
 }
 
-/* بما إن استدعاء الذكاء الاصطناعي مباشرة من متصفح موقع خارجي غير ممكن أمنيًا
-   (يتطلب إخفاء مفتاح API على خادم، وما عندنا خادم خلفي بهذا المشروع)، الحل
-   العملي: نجهّز النص الجاهز لك، تنسخه وتلصقه في محادثة Claude، وتلصق الرد هنا
-   ليُحفظ في قاعدة البيانات مثل أي تقييم آخر. */
-function buildAiPrompt(){
+/* يبني نص الأسئلة والإجابات فقط (بدون تعليمات الذكاء الاصطناعي — هذي محفوظة
+   داخل دالة evaluate-submission على الخادم نفسه، مو هنا). */
+function buildQaText(){
   const av = ansMap();
   let qaText = '';
   sections.forEach(sec=>{
@@ -2687,6 +2716,42 @@ function buildAiPrompt(){
       qaText += `- ${q.label}: ${val}\n`;
     });
   });
+  return qaText;
+}
+
+async function runAutoAiGeneration(){
+  const qaText = buildQaText();
+  if(!qaText.trim()){ showToast('لا توجد إجابات كافية لهذا الطلب بعد لتوليد تقييم'); return; }
+
+  const btn = document.getElementById('genAiAutoBtn');
+  btn.disabled = true;
+  const original = btn.innerHTML;
+  btn.innerHTML = 'جارٍ التوليد… قد يأخذ نصف دقيقة';
+
+  try{
+    const { data, error } = await sb.functions.invoke('evaluate-submission', { body: { qaText } });
+    if(error) throw error;
+    if(data && data.error) throw new Error(data.error);
+    if(!data || !data.evaluation) throw new Error('رد غير متوقع من الخادم');
+
+    const { data: saved, error: saveErr } = await sb.from('ai_evaluations').insert({
+      form_id: reviewDetail.form.id, evaluation: data.evaluation, model: 'claude-sonnet-4-6', generated_by: currentAdmin.id,
+    }).select().single();
+    if(saveErr) throw saveErr;
+
+    aiEvalCache[reviewDetail.form.id] = saved;
+    showToast('تم توليد التقييم الأولي بنجاح');
+    renderAiTabContent();
+  }catch(e){
+    btn.disabled = false; btn.innerHTML = original;
+    showToast('تعذّر التوليد التلقائي: '+(e.message||'خطأ غير معروف')+' — جرّب الخيار اليدوي بالأسفل، أو تأكد من نشر دالة evaluate-submission بـ Supabase.');
+  }
+}
+
+/* الخيار الاحتياطي: لو الدالة الخلفية (Edge Function) غير مُنشَأة بعد، أو
+   تعذّر الاتصال بها لأي سبب، يبقى هذا المسار اليدوي متاحًا دائمًا كبديل. */
+function buildAiPrompt(){
+  const qaText = buildQaText();
   return `أنت مساعد مراجعة أولي لبرنامج حاضنة أعمال جامعية (حاضنة ابتكار). راجع إجابات فريق المشروع التالية بعناية، وقدّم تقييمًا أوليًا استشاريًا (غير نهائي بأي حال) يساعد فريق البرنامج على المراجعة البشرية لاحقًا. اعتمد فقط على النص المُدخل من الفريق نفسه أدناه، ولا تفترض معلومات غير مذكورة.
 
 بيانات الفريق وإجاباته:
