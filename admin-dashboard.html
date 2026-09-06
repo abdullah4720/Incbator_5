@@ -2563,7 +2563,9 @@ async function extractFunctionErrorDetail(error){
   try{
     if(error.context && typeof error.context.json === 'function'){
       const body = await error.context.json();
-      if(body && body.error) return body.error;
+      if(body && body.error){
+        return body.raw ? `${body.error} | بداية رد Claude الفعلي: "${body.raw.slice(0,200)}"` : body.error;
+      }
     }
   }catch(e){}
   return error.message || 'خطأ غير معروف';
