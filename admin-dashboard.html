@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Cairo:wght@700;800;900&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 :root{
   --navy-950:#12103C; --navy-800:#1A1852; --navy-700:#242066;
@@ -418,6 +419,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
 <div class="wrap">
   <div class="view" id="view-dashboard"></div>
   <div class="view" id="view-analytics"></div>
+  <div class="view" id="view-shortlist"></div>
   <div class="view" id="view-review"></div>
   <div class="view" id="view-builder"></div>
   <div class="view" id="view-eligibility"></div>
@@ -476,6 +478,7 @@ const LUCIDE_ICONS = {
   "chevron-right": `<path d="m9 18 6-6-6-6" />`,
   "chevron-left": `<path d="m15 18-6-6 6-6" />`,
   "chevron-down": `<path d="m6 9 6 6 6-6" />`,
+  "sliders": `<path d="M10 5H3" /> <path d="M12 19H3" /> <path d="M14 3v4" /> <path d="M16 17v4" /> <path d="M21 12h-9" /> <path d="M21 19h-5" /> <path d="M21 5h-7" /> <path d="M8 10v4" /> <path d="M8 12H3" />`,
   "download": `<path d="M12 15V3" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /> <path d="m7 10 5 5 5-5" />`,
   "plus": `<path d="M5 12h14" /> <path d="M12 5v14" />`,
   "upload": `<path d="M12 3v12" /> <path d="m17 8-5-5-5 5" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />`,
@@ -795,6 +798,7 @@ function openConfirm(text, onOk){
 const TABS = [
   {id:"dashboard", l:"لوحة القيادة", adminOnly:false},
   {id:"analytics", l:"تحليل البيانات", adminOnly:false},
+  {id:"shortlist", l:"الترشيح المبدئي", adminOnly:false},
   {id:"review", l:"مراجعة الطلبات", adminOnly:false},
   {id:"builder", l:"الأسئلة والنموذج", adminOnly:true},
   {id:"eligibility", l:"الفرق المؤهّلة للدخول", adminOnly:true},
@@ -1679,6 +1683,15 @@ function exportEligibleCSV(){
    المستخدمون والأدوار
    ========================================================================== */
 function initials(name){ return name.trim().split(' ').slice(0,2).map(w=>w[0]).join(''); }
+/* تنقية أي نص قبل إدراجه في innerHTML — ضرورية لكل بيانات يُدخلها المشارك
+   (إجابات، أسماء أعضاء، أسماء ملفات...) قبل عرضها بجلسة الإداري/المراجع،
+   لمنع حقن HTML/JS ضار (XSS مخزَّن). */
+function escHtml(str){
+  if(str===null||str===undefined) return '';
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 function renderUsers(){
   const el = document.getElementById('view-users');
   el.innerHTML = `
@@ -1936,7 +1949,7 @@ function renderAnnouncementsList(){
   wrap.innerHTML = announcementsData.map(a=>`
     <div class="card" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start;gap:14px">
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;color:var(--ink-900);white-space:pre-wrap;margin-bottom:8px">${a.message}</div>
+        <div style="font-size:13px;color:var(--ink-900);white-space:pre-wrap;margin-bottom:8px">${escHtml(a.message)}</div>
         <div style="font-size:11px;color:var(--ink-400)">${relativeTime(a.created_at)}</div>
       </div>
       ${canEdit ? `
@@ -2221,7 +2234,12 @@ function renderReviewList(){
   el.innerHTML = `
     <div class="section-title-row">
       <div><h2>مراجعة الطلبات</h2><p>${allRows.length} طلب مسجَّل — رتّبناها بالأولوية: المُرسَل وغير المُقيَّم بالكامل أولًا.</p></div>
-      <button class="btn btn-ghost" id="refreshReviewBtn">تحديث</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" id="batchAiBtn">${icon('sparkles',{size:13})} تقييم دفعي بالذكاء الاصطناعي</button>
+        <button class="btn btn-ghost" id="exportCustomBtn">${icon('sliders',{size:13})} تصدير مخصص</button>
+        <button class="btn btn-ghost" id="exportAllBtn">${icon('download',{size:13})} تصدير الكل (Excel)</button>
+        <button class="btn btn-ghost" id="refreshReviewBtn">تحديث</button>
+      </div>
     </div>
 
     <div class="queue-stats">
@@ -2263,8 +2281,8 @@ function renderReviewList(){
       const st = STATUS_LABELS[r.status] || [r.status,'mid'];
       const ov = OVERALL_LABELS[r.overall] || OVERALL_LABELS.pending;
       return `<tr class="queue-row" data-openreview="${r.project_id}">
-        <td><div class="user-cell"><div class="avatar-sm">${initials(r.team_leader_name||r.project_name)}</div>
-          <div><div class="un">${r.project_name}</div><div class="ue mono">${r.project_id}</div></div></div></td>
+        <td><div class="user-cell"><div class="avatar-sm">${escHtml(initials(r.team_leader_name||r.project_name))}</div>
+          <div><div class="un">${escHtml(r.project_name)}</div><div class="ue mono">${escHtml(r.project_id)}</div></div></div></td>
         <td>${r.track}</td>
         <td><span class="badge ${st[1]}">${st[0]}</span></td>
         <td><span class="badge ${ov[1]}">${ov[0]}</span> <span style="font-size:10.5px;color:var(--ink-400)">(${r.reqEvaluatedCount}/${REQUIREMENTS.length})</span></td>
@@ -2277,12 +2295,376 @@ function renderReviewList(){
   document.getElementById('reviewTrackFilter').addEventListener('change', e=>{ reviewFilter.track=e.target.value; renderReviewList(); });
   document.getElementById('reviewStatusFilter').addEventListener('change', e=>{ reviewFilter.status=e.target.value; renderReviewList(); });
   document.getElementById('refreshReviewBtn').addEventListener('click', async ()=>{ await loadReviewList(); renderReviewList(); showToast('تم تحديث القائمة'); });
+  document.getElementById('exportAllBtn').addEventListener('click', ()=>{
+    runExport({ scope:'all', includeAnswers:true, includeTeam:true, includeRequirements:true });
+  });
+  document.getElementById('exportCustomBtn').addEventListener('click', openExportModal);
+  document.getElementById('batchAiBtn').addEventListener('click', confirmBatchEvaluation);
   document.querySelectorAll('.queue-chip').forEach(c=>{
     c.addEventListener('click', ()=>{ reviewFilter.queue = c.dataset.queue; renderReviewList(); });
   });
   document.querySelectorAll('[data-openreview]').forEach(row=>{
     row.addEventListener('click', ()=>{ openReviewDetail(row.dataset.openreview); });
   });
+}
+
+/* ==========================================================================
+   تصدير Excel — سريع (كل شيء) أو مخصص (نطاق واختيار البيانات والأقسام)
+   ========================================================================== */
+function openExportModal(){
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '540px';
+  box.innerHTML = `
+    <h3>${icon('sliders',{size:15})} تصدير مخصص</h3>
+    <p>اختر بالضبط وش تبي يشمله ملف Excel.</p>
+
+    <div class="field-inline">
+      <label class="flabel">نطاق الطلبات</label>
+      <select id="exp_scope">
+        <option value="all">كل الطلبات (${joinedReviewRows().length})</option>
+        <option value="filtered">نفس الفلتر الحالي بالقائمة (${filteredReviewRows().length})</option>
+        <option value="submitted">المُرسَلة فقط</option>
+        <option value="draft">المسودات فقط</option>
+      </select>
+    </div>
+
+    <div class="field-inline">
+      <label class="flabel">البيانات المطلوب تضمينها</label>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="exp_answers" checked> إجابات النموذج (عمود لكل سؤال بالورقة الرئيسية)</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="exp_team" checked> أعضاء الفريق (ورقة منفصلة)</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="exp_reqs" checked> تقييم المتطلبات الستة (ورقة منفصلة)</label>
+      </div>
+    </div>
+
+    <div class="field-inline" id="exp_sections_wrap">
+      <label class="flabel">الأقسام المطلوب تضمين أسئلتها (كلها محددة افتراضيًا)</label>
+      <div style="max-height:160px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:6px">
+        ${sections.map(s=>`<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:4px 0"><input type="checkbox" class="exp-sec-cb" value="${s.id}" checked> ${s.title}</label>`).join('')}
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="expCancel">إلغاء</button>
+      <button class="btn btn-primary" id="expRun">تصدير الآن</button>
+    </div>
+  `;
+  modal.classList.add('show');
+
+  const answersCb = document.getElementById('exp_answers');
+  const secWrap = document.getElementById('exp_sections_wrap');
+  const syncSecWrap = ()=>{ secWrap.style.display = answersCb.checked ? 'block' : 'none'; };
+  answersCb.addEventListener('change', syncSecWrap);
+  syncSecWrap();
+
+  document.getElementById('expCancel').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('expRun').addEventListener('click', ()=>{
+    const scope = document.getElementById('exp_scope').value;
+    const includeAnswers = answersCb.checked;
+    const includeTeam = document.getElementById('exp_team').checked;
+    const includeRequirements = document.getElementById('exp_reqs').checked;
+    const sectionIds = Array.from(document.querySelectorAll('.exp-sec-cb:checked')).map(cb=>parseInt(cb.value));
+    modal.classList.remove('show');
+    restoreConfirmModal();
+    runExport({ scope, includeAnswers, includeTeam, includeRequirements, sectionIds });
+  });
+}
+
+async function runExport(options){
+  if(typeof XLSX === 'undefined'){ showToast('تعذّر تحميل مكتبة التصدير — تأكد من اتصالك بالإنترنت وأعد المحاولة'); return; }
+  showToast('جارٍ تجهيز ملف التصدير…');
+  try{
+    let rows = joinedReviewRows();
+    if(options.scope === 'filtered') rows = filteredReviewRows();
+    else if(options.scope === 'submitted') rows = rows.filter(r=>r.status==='submitted');
+    else if(options.scope === 'draft') rows = rows.filter(r=>r.status==='draft');
+
+    if(rows.length === 0){ showToast('لا توجد طلبات مطابقة للتصدير'); return; }
+
+    const formIds = rows.map(r=>r.form_id);
+
+    const [{data: allAnswers, error: aErr}, {data: allMembers, error: mErr}] = await Promise.all([
+      options.includeAnswers ? sb.from('form_answers').select('*').in('form_id', formIds) : Promise.resolve({data:[]}),
+      options.includeTeam ? sb.from('team_members').select('*').in('form_id', formIds).order('order_index') : Promise.resolve({data:[]}),
+    ]);
+    if(aErr || mErr) throw (aErr||mErr);
+
+    const wb = XLSX.utils.book_new();
+
+    // ---- الورقة الرئيسية: بيانات المشروع + الإجابات (اختياري) ----
+    let questionCols = [];
+    if(options.includeAnswers){
+      const allowedSectionIds = options.sectionIds && options.sectionIds.length ? new Set(options.sectionIds) : null;
+      sections.forEach(sec=>{
+        if(allowedSectionIds && !allowedSectionIds.has(sec.id)) return;
+        sec.questions.forEach(q=>{ questionCols.push({field_key:q.id, label:q.label}); });
+      });
+    }
+    const answersByForm = {};
+    (allAnswers||[]).forEach(a=>{
+      if(!answersByForm[a.form_id]) answersByForm[a.form_id] = {};
+      answersByForm[a.form_id][a.field_key] = a.value_json!==null ? a.value_json : a.value_text;
+    });
+
+    const mainHeader = ['رقم المشروع','اسم المشروع (السجل الرسمي)','المسار','قائد الفريق','البريد الإلكتروني','حالة الإرسال','نسبة الاكتمال','آخر تحديث', ...questionCols.map(c=>c.label)];
+    const mainRows = rows.map(r=>{
+      const av = answersByForm[r.form_id] || {};
+      const st = STATUS_LABELS[r.status] ? STATUS_LABELS[r.status][0] : r.status;
+      const base = [r.project_id, r.project_name, r.track, r.team_leader_name, r.team_leader_email, st, r.completion_pct+'%', new Date(r.updated_at).toLocaleString('ar-SA')];
+      const qVals = questionCols.map(c=>{ let v = av[c.field_key]; if(Array.isArray(v)) v = v.join('، '); return v ?? ''; });
+      return [...base, ...qVals];
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([mainHeader, ...mainRows]), 'الطلبات');
+
+    // ---- ورقة أعضاء الفريق ----
+    if(options.includeTeam){
+      const formIdToProject = {}; rows.forEach(r=>{ formIdToProject[r.form_id]=r.project_id; });
+      const teamHeader = ['رقم المشروع','اسم العضو','قائد؟','الدور','التخصص','الجوال','البريد','حضر المعسكر'];
+      const teamRows = (allMembers||[]).filter(m=>formIdToProject[m.form_id]).map(m=>[
+        formIdToProject[m.form_id], m.full_name, m.is_leader?'نعم':'لا', m.role_in_project||'', m.specialization||'',
+        m.phone||'', m.email||'', m.attended_camp===true?'نعم':(m.attended_camp===false?'لا':''),
+      ]);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([teamHeader, ...teamRows]), 'أعضاء الفريق');
+    }
+
+    // ---- ورقة تقييم المتطلبات الستة (نستخدم البيانات المحمَّلة أصلًا، بدون طلب إضافي) ----
+    if(options.includeRequirements){
+      const reqHeader = ['رقم المشروع', ...REQUIREMENTS.map(r=>r.label), 'الحالة العامة'];
+      const reqsByForm = {};
+      reviewReqStatusAll.forEach(rq=>{ (reqsByForm[rq.form_id] = reqsByForm[rq.form_id]||{})[rq.requirement] = rq.status; });
+      const reqRowsOut = rows.map(r=>{
+        const rq = reqsByForm[r.form_id] || {};
+        const statusLabels = REQUIREMENTS.map(req=>{
+          const opt = REQ_STATUS_OPTIONS.find(o=>o.v===rq[req.key]);
+          return opt ? opt.l : 'لم تُراجَع';
+        });
+        const overallLabel = OVERALL_LABELS[r.overall] ? OVERALL_LABELS[r.overall][0] : r.overall;
+        return [r.project_id, ...statusLabels, overallLabel];
+      });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([reqHeader, ...reqRowsOut]), 'تقييم المتطلبات');
+    }
+
+    const filename = `تصدير_الطلبات_${new Date().toISOString().slice(0,10)}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    showToast('تم تصدير الملف بنجاح');
+  }catch(e){
+    showToast('تعذّر التصدير: '+(e.message||'خطأ غير معروف'));
+  }
+}
+
+/* ==========================================================================
+   الترشيح المبدئي — يفرز كل الطلبات المُقيَّمة بالذكاء الاصطناعي حسب درجة
+   الجاهزية، متقاطعًا مع حالة المتطلبات الستة المعتمَدة من المراجع البشري.
+   استشاري بالكامل — لا يُعتمد عليه وحده لأي قرار نهائي.
+   ========================================================================== */
+let shortlistEvals = null; // form_id -> آخر تقييم (يُحمَّل مرة ويُخزَّن هنا)
+
+async function loadShortlistData(){
+  const { data, error } = await sb.from('ai_evaluations').select('form_id, evaluation, generated_at').order('generated_at', {ascending:false});
+  if(error){ showToast('تعذّر تحميل بيانات الترشيح: '+error.message); shortlistEvals = {}; return; }
+  shortlistEvals = {};
+  (data||[]).forEach(row=>{
+    if(!shortlistEvals[row.form_id]) shortlistEvals[row.form_id] = row; // أول ظهور = الأحدث بسبب الترتيب
+  });
+}
+
+async function renderShortlist(){
+  const el = document.getElementById('view-shortlist');
+  if(shortlistEvals === null){
+    el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+    await loadShortlistData();
+  }
+
+  const rows = joinedReviewRows()
+    .filter(r=>r.status==='submitted')
+    .map(r=>{
+      const ev = shortlistEvals[r.form_id];
+      const score = ev && typeof ev.evaluation.readiness_score === 'number' ? ev.evaluation.readiness_score : null;
+      return { ...r, aiScore: score, aiGeneratedAt: ev ? ev.generated_at : null };
+    })
+    .sort((a,b)=>{
+      if(a.aiScore===null && b.aiScore===null) return 0;
+      if(a.aiScore===null) return 1;
+      if(b.aiScore===null) return -1;
+      return b.aiScore - a.aiScore;
+    });
+
+  const evaluatedCount = rows.filter(r=>r.aiScore!==null).length;
+
+  el.innerHTML = `
+    <div class="section-title-row">
+      <div><h2>الترشيح المبدئي</h2><p>ترتيب استشاري للطلبات المُرسَلة حسب درجة الجاهزية بالذكاء الاصطناعي، جنبًا إلى جنب مع حالة المتطلبات الستة الموثَّقة من المراجع البشري.</p></div>
+      <button class="btn btn-ghost" id="refreshShortlistBtn">تحديث</button>
+    </div>
+
+    <div class="req-banner" style="margin-bottom:16px">
+      <b>تنبيه مهم:</b>&nbsp;هذا ترتيب أولي استشاري فقط، مبني على تقييم الذكاء الاصطناعي لوضوح واكتمال الإجابات النصية — لا يُغني إطلاقًا عن المراجعة البشرية الكاملة، ولا يشمل تقييم محتوى الملفات المرفوعة. القرار النهائي دائمًا لفريق البرنامج.
+    </div>
+
+    <div class="grid kpi-row" style="margin-bottom:18px">
+      <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('sparkles',{size:18})}</div>
+        <div class="kval mono">${evaluatedCount}</div><div class="klabel">طلب مُقيَّم من ${rows.length} مُرسَل</div></div>
+    </div>
+
+    ${rows.length===0 ? `<div class="empty-hint">لا توجد طلبات مُرسَلة بعد</div>` : `
+    <div class="card">
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th>#</th><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th>
+          <th>درجة الجاهزية (AI)</th><th>المتطلبات الموثَّقة</th><th>الحالة العامة</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${rows.map((r,i)=>{
+            const scoreColor = r.aiScore===null ? 'var(--ink-400)' : r.aiScore>=71 ? 'var(--success)' : r.aiScore>=41 ? 'var(--amber)' : 'var(--danger)';
+            const overallInfo = OVERALL_LABELS[r.overall] || ['—','mid'];
+            return `<tr>
+              <td class="mono" style="color:var(--ink-400)">${i+1}</td>
+              <td class="mono">${escHtml(r.project_id)}</td>
+              <td>${escHtml(r.project_name)}</td>
+              <td>${escHtml(r.track)}</td>
+              <td><b class="mono" style="color:${scoreColor};font-size:14px">${r.aiScore!==null ? r.aiScore : '—'}</b></td>
+              <td class="mono">${r.reqEvaluatedCount}/${REQUIREMENTS.length}</td>
+              <td><span class="badge ${overallInfo[1]}">${overallInfo[0]}</span></td>
+              <td><button class="btn btn-ghost btn-sm" data-openreview="${r.project_id}">فتح</button></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>
+    </div>`}
+  `;
+
+  document.getElementById('refreshShortlistBtn').addEventListener('click', async ()=>{
+    shortlistEvals = null;
+    await renderShortlist();
+    showToast('تم التحديث');
+  });
+  el.querySelectorAll('[data-openreview]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      activeTab = 'review';
+      renderTabs();
+      openReviewDetail(b.dataset.openreview);
+    });
+  });
+}
+
+/* ==========================================================================
+   التقييم الدفعي — يقيّم عشرات الطلبات المُرسَلة تباعًا (لا بالتوازي) لتفادي
+   حدود معدل الاستدعاء، مع شريط تقدّم وإمكانية الإيقاف.
+   ========================================================================== */
+let batchCancelled = false;
+
+/* عند فشل استدعاء الدالة الخلفية بخطأ HTTP (non-2xx)، Supabase JS يُرجع خطأ
+   عامًا لا يحتوي التفاصيل مباشرة — التفاصيل الفعلية (اللي أرسلتها الدالة
+   بنفسها، مثل "المفتاح غير معرَّف" أو "فشل الاتصال بـ Claude") موجودة داخل
+   جسم الاستجابة، ونحتاج قراءته صراحة. */
+async function extractFunctionErrorDetail(error){
+  if(!error) return 'خطأ غير معروف';
+  try{
+    if(error.context && typeof error.context.json === 'function'){
+      const body = await error.context.json();
+      if(body && body.error) return body.error;
+    }
+  }catch(e){}
+  return error.message || 'خطأ غير معروف';
+}
+
+async function confirmBatchEvaluation(){
+  const targets = joinedReviewRows().filter(r=>r.status==='submitted');
+  if(!targets.length){ showToast('لا توجد طلبات مُرسَلة للتقييم'); return; }
+
+  const { data: existingEvals } = await sb.from('ai_evaluations').select('form_id');
+  const evaluatedFormIds = new Set((existingEvals||[]).map(e=>e.form_id));
+  const newCount = targets.filter(r=>!evaluatedFormIds.has(r.form_id)).length;
+  const alreadyCount = targets.length - newCount;
+
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '480px';
+  box.innerHTML = `
+    <h3>${icon('sparkles',{size:15})} تقييم دفعي بالذكاء الاصطناعي</h3>
+    <p>يوجد ${targets.length} طلبًا مُرسَلًا (${newCount} بدون تقييم سابق، ${alreadyCount} مُقيَّم من قبل).</p>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:14px 0">
+      <input type="checkbox" id="batch_redo_existing"> أعد تقييم الطلبات المُقيَّمة مسبقًا أيضًا (يستهلك رصيدًا إضافيًا من حسابكم على Anthropic)
+    </label>
+    <div class="req-banner">العملية تستدعي الذكاء الاصطناعي لكل طلب على حدة تباعًا (مو دفعة وحدة)، وقد تستغرق عدة دقائق حسب العدد. تحتاج دالة evaluate-submission منشورة على Supabase مسبقًا.</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="batchCancelBtn">إلغاء</button>
+      <button class="btn btn-primary" id="batchStartBtn">ابدأ التقييم</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('batchCancelBtn').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('batchStartBtn').addEventListener('click', ()=>{
+    const redoExisting = document.getElementById('batch_redo_existing').checked;
+    modal.classList.remove('show');
+    restoreConfirmModal();
+    const finalTargets = redoExisting ? targets : targets.filter(r=>!evaluatedFormIds.has(r.form_id));
+    if(!finalTargets.length){ showToast('لا توجد طلبات جديدة تحتاج تقييمًا'); return; }
+    runBatchEvaluation(finalTargets);
+  });
+}
+
+function showBatchProgressModal(total){
+  batchCancelled = false;
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '440px';
+  box.innerHTML = `
+    <h3>${icon('sparkles',{size:15})} جارٍ التقييم الدفعي…</h3>
+    <p id="batchProgressText">جارٍ تقييم 0 من ${total}…</p>
+    <div style="background:var(--paper);border-radius:8px;height:10px;overflow:hidden;margin:14px 0">
+      <div id="batchProgressBar" style="background:var(--teal-600);height:100%;width:0%;transition:width .3s"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="batchStopBtn">إيقاف</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('batchStopBtn').addEventListener('click', ()=>{ batchCancelled = true; });
+}
+function updateBatchProgress(done, total, failed){
+  const text = document.getElementById('batchProgressText');
+  const bar = document.getElementById('batchProgressBar');
+  if(text) text.textContent = `جارٍ تقييم ${done} من ${total}… ${failed?`(${failed} فشل)`:''}`;
+  if(bar) bar.style.width = Math.round(done/total*100)+'%';
+}
+function closeBatchProgressModal(){
+  document.getElementById('confirmModal').classList.remove('show');
+  restoreConfirmModal();
+}
+
+async function runBatchEvaluation(targets){
+  showBatchProgressModal(targets.length);
+  let done=0, failed=0, firstErrorMsg=null;
+  for(const r of targets){
+    if(batchCancelled) break;
+    try{
+      const { data: answers, error: ansErr } = await sb.from('form_answers').select('*').eq('form_id', r.form_id);
+      if(ansErr) throw ansErr;
+      const qaText = buildQaTextFromAnswers(answers||[]);
+      if(qaText.trim()){
+        const { data, error } = await sb.functions.invoke('evaluate-submission', { body: { qaText } });
+        if(error){ throw new Error(await extractFunctionErrorDetail(error)); }
+        if(data && data.error) throw new Error(data.error);
+        if(data && data.evaluation){
+          const { error: saveErr } = await sb.from('ai_evaluations').insert({
+            form_id: r.form_id, evaluation: data.evaluation, model:'claude-sonnet-4-6', generated_by: currentAdmin.id,
+          });
+          if(saveErr) throw saveErr;
+        } else failed++;
+      } else failed++;
+    }catch(e){ failed++; if(!firstErrorMsg) firstErrorMsg = e.message; }
+    done++;
+    updateBatchProgress(done, targets.length, failed);
+    if(!batchCancelled) await new Promise(res=>setTimeout(res, 1200));
+  }
+  closeBatchProgressModal();
+  aiEvalCache = {};
+  shortlistEvals = null;
+  showToast(batchCancelled
+    ? `تم إيقاف التقييم — اكتمل ${done-failed} من ${targets.length}`
+    : `اكتمل التقييم الدفعي: ${done-failed} نجح من ${targets.length}` + (failed ? ` — ${failed} فشل. أول سبب: ${firstErrorMsg}` : ''));
 }
 
 function openReviewDetail(projectId){
@@ -2332,8 +2714,8 @@ function ansMap(){
 }
 function fmtAnsValue(v){
   if(v===null||v===undefined||v==='') return '<span style="color:var(--ink-400)">لم تتم الإجابة</span>';
-  if(Array.isArray(v)) return v.join('، ');
-  return String(v);
+  if(Array.isArray(v)) return v.map(escHtml).join('، ');
+  return escHtml(v);
 }
 
 /* ---------------- الحاوية الرئيسة: رأس ثابت + شريط تقييم ثابت + تبويبات ---------------- */
@@ -2354,8 +2736,8 @@ function renderReviewDetail(){
       <div style="display:flex;align-items:center;gap:12px;min-width:0">
         <button class="btn btn-ghost btn-sm" id="backToReviewList">→ القائمة</button>
         <div style="min-width:0">
-          <div style="font-size:15px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${proj.project_name||currentReviewProjectId}</div>
-          <div style="font-size:11.5px;color:var(--ink-400)" class="mono">${currentReviewProjectId} · ${proj.team_leader_name||'—'}</div>
+          <div style="font-size:15px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(proj.project_name)||escHtml(currentReviewProjectId)}</div>
+          <div style="font-size:11.5px;color:var(--ink-400)" class="mono">${escHtml(currentReviewProjectId)} · ${escHtml(proj.team_leader_name)||'—'}</div>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px">
@@ -2519,12 +2901,12 @@ function teamTabHTML(){
   if(!members.length) return `<div class="empty-hint">لا يوجد أعضاء مسجَّلون بعد</div>`;
   return `<div class="member-grid">${members.map(m=>`
     <div class="member-mini-card">
-      <div class="mmc-top"><div class="avatar-sm">${initials(m.full_name||'?')}</div>
-        <div><div class="mmc-name">${m.full_name}${m.is_leader?' '+icon('crown',{size:13,cls:'crown-icon'}):''}</div><div class="mmc-role">${m.role_in_project||'—'}</div></div>
+      <div class="mmc-top"><div class="avatar-sm">${escHtml(initials(m.full_name||'?'))}</div>
+        <div><div class="mmc-name">${escHtml(m.full_name)}${m.is_leader?' '+icon('crown',{size:13,cls:'crown-icon'}):''}</div><div class="mmc-role">${escHtml(m.role_in_project)||'—'}</div></div>
       </div>
-      <div class="mmc-row"><span>التخصص</span><span>${m.specialization||'—'}</span></div>
-      <div class="mmc-row"><span>الجوال</span><span class="mono">${m.phone||'—'}</span></div>
-      <div class="mmc-row"><span>البريد</span><span class="mono">${m.email||'—'}</span></div>
+      <div class="mmc-row"><span>التخصص</span><span>${escHtml(m.specialization)||'—'}</span></div>
+      <div class="mmc-row"><span>الجوال</span><span class="mono">${escHtml(m.phone)||'—'}</span></div>
+      <div class="mmc-row"><span>البريد</span><span class="mono">${escHtml(m.email)||'—'}</span></div>
       <div class="mmc-row"><span>حضر المعسكر</span><span>${m.attended_camp===true?'نعم':m.attended_camp===false?'لا':'—'}</span></div>
     </div>
   `).join('')}</div>`;
@@ -2537,7 +2919,7 @@ function filesTabHTML(){
   return `<div class="file-grid">${files.map((f,i)=>`
     <div class="file-card">
       <div class="fic">${iconFor(f.mime_type)}</div>
-      <div class="fname">${f.file_name}</div>
+      <div class="fname">${escHtml(f.file_name)}</div>
       <div class="ffield">${findFieldLabel(f.field_key)}</div>
       <button class="btn btn-ghost btn-sm" data-viewfile="${i}">فتح الملف</button>
     </div>
@@ -2568,7 +2950,7 @@ function notesTabHTML(){
         <span class="nb-name">${n.is_internal?'ملاحظة داخلية':'ملاحظة ظاهرة للمشارك'}</span>
         <span class="nb-time">${relativeTime(n.created_at)}</span>
       </div>
-      <div class="nb-text">${n.note}</div>
+      <div class="nb-text">${escHtml(n.note)}</div>
     </div>
   `).join('') || `<div class="empty-hint">لا توجد ملاحظات بعد</div>`;
   const composer = canEdit ? `
@@ -2639,6 +3021,8 @@ function renderAiTabContent(){
   }
 
   const ev = existing.evaluation || {};
+  const score = typeof ev.readiness_score === 'number' ? ev.readiness_score : null;
+  const scoreColor = score===null ? 'var(--ink-400)' : score>=71 ? 'var(--success)' : score>=41 ? 'var(--amber)' : 'var(--danger)';
   content.innerHTML = `
     ${disclaimer}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -2649,22 +3033,25 @@ function renderAiTabContent(){
       </div>` : ''}
     </div>
 
-    <div class="analytics-card" style="margin-bottom:14px">
-      <div class="ac-title">الانطباع العام</div>
-      <div style="font-size:13px;color:var(--ink-900);line-height:1.9;margin-top:6px">${ev.overall_impression||'—'}</div>
+    <div class="analytics-card" style="margin-bottom:14px;display:flex;align-items:center;gap:18px">
+      ${score!==null ? `<div style="flex:none;width:64px;height:64px;border-radius:50%;border:4px solid ${scoreColor};display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:800;color:${scoreColor}" class="mono">${score}</div>` : ''}
+      <div style="flex:1">
+        <div class="ac-title">الانطباع العام${score!==null ? ` — درجة الجاهزية ${score}/100` : ''}</div>
+        <div style="font-size:13px;color:var(--ink-900);line-height:1.9;margin-top:6px">${escHtml(ev.overall_impression)||'—'}</div>
+      </div>
     </div>
 
     <div class="member-grid" style="margin-bottom:14px">
       <div class="analytics-card">
         <div class="ac-title" style="color:var(--success)">${icon('check',{size:13})} نقاط القوة</div>
         <ul style="margin:8px 0 0;padding-inline-start:18px;font-size:12.5px;color:var(--ink-900);line-height:1.9">
-          ${(ev.strengths||[]).map(s=>`<li>${s}</li>`).join('') || '<li style="color:var(--ink-400)">لا يوجد</li>'}
+          ${(ev.strengths||[]).map(s=>`<li>${escHtml(s)}</li>`).join('') || '<li style="color:var(--ink-400)">لا يوجد</li>'}
         </ul>
       </div>
       <div class="analytics-card">
         <div class="ac-title" style="color:var(--amber)">${icon('triangle-alert',{size:13})} نقاط تحتاج انتباه</div>
         <ul style="margin:8px 0 0;padding-inline-start:18px;font-size:12.5px;color:var(--ink-900);line-height:1.9">
-          ${(ev.concerns||[]).map(s=>`<li>${s}</li>`).join('') || '<li style="color:var(--ink-400)">لا يوجد</li>'}
+          ${(ev.concerns||[]).map(s=>`<li>${escHtml(s)}</li>`).join('') || '<li style="color:var(--ink-400)">لا يوجد</li>'}
         </ul>
       </div>
     </div>
@@ -2677,7 +3064,7 @@ function renderAiTabContent(){
           if(!note) return '';
           return `<div class="req-row" style="margin-bottom:8px">
             <div class="req-row-head"><div class="req-row-icon" style="background:${r.color}22;color:${r.color}">${icon(r.icon,{size:12})}</div><div class="req-row-label">${r.label}</div></div>
-            <div style="font-size:12.5px;color:var(--ink-600);margin-top:4px">${note}</div>
+            <div style="font-size:12.5px;color:var(--ink-600);margin-top:4px">${escHtml(note)}</div>
           </div>`;
         }).join('') || '<div class="empty-hint">لا توجد ملاحظات</div>'}
       </div>
@@ -2687,7 +3074,7 @@ function renderAiTabContent(){
     <div class="analytics-card">
       <div class="ac-title">${icon('search',{size:13})} يُنصح المراجع بالتركيز على</div>
       <ul style="margin:8px 0 0;padding-inline-start:18px;font-size:12.5px;color:var(--ink-900);line-height:1.9">
-        ${ev.suggested_focus_areas.map(s=>`<li>${s}</li>`).join('')}
+        ${ev.suggested_focus_areas.map(s=>`<li>${escHtml(s)}</li>`).join('')}
       </ul>
     </div>` : ''}
   `;
@@ -2703,8 +3090,12 @@ function bindAiGenerateButtons(){
 
 /* يبني نص الأسئلة والإجابات فقط (بدون تعليمات الذكاء الاصطناعي — هذي محفوظة
    داخل دالة evaluate-submission على الخادم نفسه، مو هنا). */
-function buildQaText(){
-  const av = ansMap();
+/* يبني النص من أي مصفوفة إجابات (صفوف form_answers خام) — لا يعتمد على
+   reviewDetail، فيصلح للطلب المفتوح حاليًا أو لأي طلب آخر أثناء التقييم
+   الدفعي على عشرات الطلبات دفعة واحدة. */
+function buildQaTextFromAnswers(answersRows){
+  const av = {};
+  (answersRows||[]).forEach(a=>{ av[a.field_key] = a.value_json!==null ? a.value_json : a.value_text; });
   let qaText = '';
   sections.forEach(sec=>{
     const rows = sec.questions.filter(q=>q.id in av && av[q.id] !== null && av[q.id] !== '');
@@ -2718,6 +3109,10 @@ function buildQaText(){
   });
   return qaText;
 }
+/* نسخة مختصرة تستخدم إجابات الطلب المفتوح حاليًا بصفحة التفاصيل */
+function buildQaText(){
+  return buildQaTextFromAnswers(reviewDetail.answers);
+}
 
 async function runAutoAiGeneration(){
   const qaText = buildQaText();
@@ -2730,7 +3125,7 @@ async function runAutoAiGeneration(){
 
   try{
     const { data, error } = await sb.functions.invoke('evaluate-submission', { body: { qaText } });
-    if(error) throw error;
+    if(error){ throw new Error(await extractFunctionErrorDetail(error)); }
     if(data && data.error) throw new Error(data.error);
     if(!data || !data.evaluation) throw new Error('رد غير متوقع من الخادم');
 
@@ -2761,6 +3156,7 @@ ${qaText}
 
 أعد ردك بصيغة JSON فقط بدون أي نص أو شرح خارج الكائن، وبدون علامات markdown، بالشكل التالي بالضبط:
 {
+  "readiness_score": 0,
   "overall_impression": "فقرة موجزة من 3 إلى 4 جمل بالعربية عن الانطباع العام على جاهزية المشروع",
   "strengths": ["نقطة قوة محددة 1", "نقطة قوة محددة 2"],
   "concerns": ["نقطة تحتاج انتباه أو توضيح 1", "نقطة تحتاج انتباه أو توضيح 2"],
@@ -2773,7 +3169,9 @@ ${qaText}
     "market_validation": "ملاحظة قصيرة"
   },
   "suggested_focus_areas": ["نقطة يُنصح المراجع البشري يتحقق منها بعناية أثناء المراجعة"]
-}`;
+}
+
+ملاحظة حول readiness_score: رقم صحيح من 0 إلى 100 يعكس مدى جاهزية المشروع للانتقال لمرحلة التحكيم بناءً فقط على وضوح واكتمال إجابات الفريق أعلاه. 0-40 يعني إجابات ناقصة أو ضعيفة الوضوح، 41-70 استيفاء جزئي يحتاج مراجعة دقيقة، 71-100 إجابات واضحة وشبه مكتملة.`;
 }
 
 function openAiPromptModal(){
@@ -2839,6 +3237,7 @@ function renderAll(){
   renderTabs();
   if(activeTab==='dashboard') renderDashboard();
   if(activeTab==='analytics') renderAnalytics();
+  if(activeTab==='shortlist') renderShortlist();
   if(activeTab==='announcements') renderAnnouncements();
   if(activeTab==='review') renderReview();
   if(activeTab==='builder') renderBuilder();
