@@ -2769,6 +2769,51 @@ function renderReviewDetail(){
 }
 
 /* ---------------- لوحة التقييم الثابتة (حلقة الجاهزية + المتطلبات الستة) ---------------- */
+/* يقترح حالة كل متطلب بناءً على إجابات المشارك الفعلية — اقتراح أولي فقط،
+   لا يُسجَّل رسميًا كقرار "تمت مراجعته" إلا بعد تفاعل صريح من المراجع
+   (حتى لا تنكسر مؤشرات الجاهزية بكل مكان بالمنصة لو اعتُمد تلقائيًا بصمت). */
+function computeSuggestedStatus(reqKey){
+  const av = ansMap();
+  const members = reviewDetail.members || [];
+  const files = reviewDetail.files || [];
+
+  if(reqKey==='commercial_registration'){
+    const hasFile = files.some(f=>f.field_key==='f2_8');
+    if(av['f2_1']==='نعم' && hasFile) return 'ok';
+    if(av['f2_1']==='لا') return 'no';
+    return null;
+  }
+  if(reqKey==='camp_attendance'){
+    if(av['f3_2']==='نعم') return 'ok';
+    if(av['f3_2']==='لا') return 'no';
+    return null;
+  }
+  if(reqKey==='team_size'){
+    if(!members.length) return null;
+    return members.length >= 2 ? 'ok' : 'no';
+  }
+  if(reqKey==='prototype'){
+    const stage = av['f5_1'];
+    if(!stage) return null;
+    return ['poc','prototype','mvp','market'].includes(stage) ? 'ok' : 'no';
+  }
+  if(reqKey==='pitch_deck'){
+    const status = av['f6_1'];
+    if(status==='مكتمل وفق النموذج المعتمد') return 'ok';
+    if(status==='مكتمل مع تعديلات محدودة' || status==='مكتمل بصيغة مختلفة') return 'mid';
+    if(status==='غير مكتمل' || status==='لم يبدأ') return 'no';
+    return null;
+  }
+  if(reqKey==='market_validation'){
+    const status = av['f7_1'];
+    if(status==='تحقق مكتمل') return 'ok';
+    if(status==='تحقق جزئي' || status==='تحقق جارٍ') return 'mid';
+    if(status==='لم يبدأ التحقق') return 'no';
+    return null;
+  }
+  return null;
+}
+
 function renderEvalPanel(canEdit){
   const panel = document.getElementById('evalPanel');
   const { form, reqRows } = reviewDetail;
@@ -2779,6 +2824,17 @@ function renderEvalPanel(canEdit){
   const colorMap = {ready_to_advance:'#1E8E5A', needs_completion:'#B4790F', not_ready:'#C0392B', needs_manual_review:'#6B4FA0', pending:'#8790A3'};
   const ringColor = colorMap[overall];
   const rad = 44, circ = 2*Math.PI*rad, dash = circ*(okCount/REQUIREMENTS.length);
+
+  // اقتراحات لكل متطلب بدون قرار مراجعة مسجَّل فعليًا بعد
+  const suggestions = {};
+  REQUIREMENTS.forEach(r=>{
+    const existing = reqRows.find(x=>x.requirement===r.key);
+    if(!existing){
+      const s = computeSuggestedStatus(r.key);
+      if(s) suggestions[r.key] = s;
+    }
+  });
+  const hasSuggestions = canEdit && Object.keys(suggestions).length > 0;
 
   panel.innerHTML = `
     <div class="eval-ring-wrap">
@@ -2792,36 +2848,56 @@ function renderEvalPanel(canEdit){
       </div>
       <div class="eval-overall-text"><span class="badge ${ov[1]}">${ov[0]}</span></div>
     </div>
+    ${hasSuggestions ? `<button class="btn btn-ghost btn-sm" id="acceptAllSuggestBtn" style="width:100%;margin-bottom:10px">${icon('sparkles',{size:12})} قبول كل المقترحات (${Object.keys(suggestions).length})</button>` : ''}
     ${REQUIREMENTS.map(r=>{
       const existing = reqRows.find(x=>x.requirement===r.key);
-      const currentStatus = existing ? existing.status : 'pending';
+      const isSuggested = !existing && suggestions[r.key];
+      const currentStatus = existing ? existing.status : (isSuggested ? suggestions[r.key] : 'pending');
       return `<div class="req-row">
         <div class="req-row-head">
           <div class="req-row-icon" style="background:${r.color}22;color:${r.color}">${icon(r.icon,{size:13})}</div>
           <div class="req-row-label">${r.label}</div>
+          ${isSuggested ? `<span class="badge mid" style="font-size:9.5px;padding:2px 7px">مقترح</span>` : ''}
         </div>
         ${canEdit
-          ? `<select data-reqkey="${r.key}">${REQ_STATUS_OPTIONS.map(o=>`<option value="${o.v}" ${currentStatus===o.v?'selected':''}>${o.l}</option>`).join('')}</select>`
+          ? `<div style="display:flex;gap:6px;align-items:center">
+              <select data-reqkey="${r.key}" style="flex:1">${REQ_STATUS_OPTIONS.map(o=>`<option value="${o.v}" ${currentStatus===o.v?'selected':''}>${o.l}</option>`).join('')}</select>
+              ${isSuggested ? `<button class="icon-btn" data-acceptreq="${r.key}" title="قبول المقترح">${icon('check',{size:13})}</button>` : ''}
+            </div>`
           : reqBadge(currentStatus)}
       </div>`;
     }).join('')}
   `;
   if(canEdit){
+    const saveReq = async (key, newStatus, triggerEl)=>{
+      if(triggerEl) triggerEl.disabled = true;
+      const { error } = await sb.from('requirement_status').upsert(
+        { form_id: form.id, requirement: key, status: newStatus, computed_at: new Date().toISOString() },
+        { onConflict: 'form_id,requirement' }
+      );
+      if(error){ showToast('تعذّر حفظ التقييم: '+error.message); if(triggerEl) triggerEl.disabled=false; return; }
+      const idx = reviewDetail.reqRows.findIndex(x=>x.requirement===key);
+      if(idx>-1) reviewDetail.reqRows[idx].status = newStatus; else reviewDetail.reqRows.push({requirement:key, status:newStatus, form_id:form.id});
+      showToast('تم حفظ التقييم');
+      renderEvalPanel(canEdit); // إعادة رسم اللوحة فقط لتحديث الحلقة والشارة فورًا
+    };
+
     panel.querySelectorAll('[data-reqkey]').forEach(sel=>{
-      sel.addEventListener('change', async ()=>{
-        const key = sel.dataset.reqkey, newStatus = sel.value;
-        sel.disabled = true;
-        const { error } = await sb.from('requirement_status').upsert(
-          { form_id: form.id, requirement: key, status: newStatus, computed_at: new Date().toISOString() },
-          { onConflict: 'form_id,requirement' }
-        );
-        if(error){ showToast('تعذّر حفظ التقييم: '+error.message); sel.disabled=false; return; }
-        const idx = reviewDetail.reqRows.findIndex(x=>x.requirement===key);
-        if(idx>-1) reviewDetail.reqRows[idx].status = newStatus; else reviewDetail.reqRows.push({requirement:key, status:newStatus, form_id:form.id});
-        showToast('تم حفظ التقييم');
-        renderEvalPanel(canEdit); // إعادة رسم اللوحة فقط لتحديث الحلقة والشارة فورًا
-      });
+      sel.addEventListener('change', ()=>{ saveReq(sel.dataset.reqkey, sel.value, sel); });
     });
+    panel.querySelectorAll('[data-acceptreq]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ saveReq(btn.dataset.acceptreq, suggestions[btn.dataset.acceptreq], btn); });
+    });
+    const acceptAllBtn = document.getElementById('acceptAllSuggestBtn');
+    if(acceptAllBtn){
+      acceptAllBtn.addEventListener('click', async ()=>{
+        acceptAllBtn.disabled = true;
+        acceptAllBtn.textContent = 'جارٍ الحفظ…';
+        for(const [key, status] of Object.entries(suggestions)){
+          await saveReq(key, status, null);
+        }
+      });
+    }
   }
 }
 
