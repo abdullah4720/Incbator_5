@@ -420,6 +420,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
   <div class="view" id="view-dashboard"></div>
   <div class="view" id="view-analytics"></div>
   <div class="view" id="view-shortlist"></div>
+  <div class="view" id="view-duplicates"></div>
   <div class="view" id="view-review"></div>
   <div class="view" id="view-builder"></div>
   <div class="view" id="view-eligibility"></div>
@@ -799,6 +800,7 @@ const TABS = [
   {id:"dashboard", l:"لوحة القيادة", adminOnly:false},
   {id:"analytics", l:"تحليل البيانات", adminOnly:false},
   {id:"shortlist", l:"الترشيح المبدئي", adminOnly:false},
+  {id:"duplicates", l:"تكرار الملفات", adminOnly:false},
   {id:"review", l:"مراجعة الطلبات", adminOnly:false},
   {id:"builder", l:"الأسئلة والنموذج", adminOnly:true},
   {id:"eligibility", l:"الفرق المؤهّلة للدخول", adminOnly:true},
@@ -2549,9 +2551,75 @@ async function renderShortlist(){
 }
 
 /* ==========================================================================
-   التقييم الدفعي — يقيّم عشرات الطلبات المُرسَلة تباعًا (لا بالتوازي) لتفادي
-   حدود معدل الاستدعاء، مع شريط تقدّم وإمكانية الإيقاف.
+   تكرار الملفات — يرصد نفس الملف (بصمة SHA-256 مطابقة تمامًا) لو استُخدم في
+   طلبات مختلفة، وهي إشارة أخطر بكثير من التكرار داخل نفس الطلب (مرصود
+   بالفعل داخل تبويب "الملفات" لكل طلب على حدة).
    ========================================================================== */
+async function renderDuplicates(){
+  const el = document.getElementById('view-duplicates');
+  el.innerHTML = `<div class="empty-hint">جارٍ الفحص…</div>`;
+
+  const { data: allFiles, error } = await sb.from('form_files')
+    .select('form_id, field_key, file_name, file_hash')
+    .not('file_hash', 'is', null)
+    .is('deleted_at', null);
+  if(error){ el.innerHTML = `<div class="empty-hint">تعذّر تحميل بيانات الملفات: ${error.message}</div>`; return; }
+
+  const rows = joinedReviewRows();
+  const formIdToProject = {};
+  rows.forEach(r=>{ formIdToProject[r.form_id] = { project_id:r.project_id, project_name:r.project_name }; });
+
+  const byHash = {};
+  (allFiles||[]).forEach(f=>{
+    if(!byHash[f.file_hash]) byHash[f.file_hash] = [];
+    byHash[f.file_hash].push(f);
+  });
+
+  // فقط البصمات المستخدمة في أكثر من طلب مختلف (استبعاد التكرار داخل نفس الطلب — مرصود بمكان آخر)
+  const crossProjectGroups = Object.entries(byHash)
+    .map(([hash, list])=>{
+      const distinctForms = [...new Set(list.map(f=>f.form_id))];
+      return { hash, list, distinctForms };
+    })
+    .filter(g=>g.distinctForms.length > 1);
+
+  el.innerHTML = `
+    <div class="section-title-row">
+      <div><h2>تكرار الملفات</h2><p>يرصد نفس الملف بالضبط (بصمة رقمية مطابقة) لو ظهر في أكثر من طلب مختلف — إشارة تستحق تحقيقًا يدويًا.</p></div>
+      <button class="btn btn-ghost" id="refreshDuplicatesBtn">تحديث</button>
+    </div>
+
+    <div class="grid kpi-row" style="margin-bottom:18px">
+      <div class="card kpi-card"><div class="kicon" style="background:${crossProjectGroups.length?'var(--danger-100)':'var(--success-100)'};color:${crossProjectGroups.length?'var(--danger)':'var(--success)'}">${icon(crossProjectGroups.length?'triangle-alert':'check',{size:18})}</div>
+        <div class="kval mono">${crossProjectGroups.length}</div><div class="klabel">ملف مكرر بين طلبات مختلفة</div></div>
+    </div>
+
+    ${crossProjectGroups.length===0 ? `<div class="empty-hint">لا يوجد أي تكرار مرصود بين الطلبات حاليًا</div>` : crossProjectGroups.map(g=>`
+      <div class="card" style="margin-bottom:14px;border-color:var(--danger)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--danger)">
+          ${icon('triangle-alert',{size:14})}
+          <b style="font-size:13px">نفس الملف موجود في ${g.distinctForms.length} طلبات مختلفة</b>
+        </div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>الحقل</th><th>اسم الملف</th></tr></thead>
+          <tbody>
+            ${g.list.map(f=>{
+              const proj = formIdToProject[f.form_id] || {project_id:'—', project_name:'—'};
+              return `<tr>
+                <td class="mono">${escHtml(proj.project_id)}</td>
+                <td>${escHtml(proj.project_name)}</td>
+                <td>${findFieldLabel(f.field_key)}</td>
+                <td>${escHtml(f.file_name)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table></div>
+      </div>
+    `).join('')}
+  `;
+
+  document.getElementById('refreshDuplicatesBtn').addEventListener('click', ()=>{ renderDuplicates(); });
+}
 let batchCancelled = false;
 
 /* عند فشل استدعاء الدالة الخلفية بخطأ HTTP (non-2xx)، Supabase JS يُرجع خطأ
@@ -2994,14 +3062,22 @@ function filesTabHTML(){
   const { files } = reviewDetail;
   if(!files.length) return `<div class="empty-hint">لا توجد ملفات مرفوعة</div>`;
   const iconFor = (mime)=> (mime||'').includes('video') ? icon('video',{size:22}) : icon('file-text',{size:22});
-  return `<div class="file-grid">${files.map((f,i)=>`
-    <div class="file-card">
+
+  // رصد التكرار داخل نفس الطلب: نفس بصمة الملف مستخدمة لأكثر من حقل
+  const hashCounts = {};
+  files.forEach(f=>{ if(f.file_hash) hashCounts[f.file_hash] = (hashCounts[f.file_hash]||0) + 1; });
+
+  return `<div class="file-grid">${files.map((f,i)=>{
+    const isDup = f.file_hash && hashCounts[f.file_hash] > 1;
+    return `
+    <div class="file-card" style="${isDup?'border-color:var(--danger);background:var(--danger-100)11':''}">
+      ${isDup ? `<div class="badge no" style="margin-bottom:8px">${icon('triangle-alert',{size:11})} ملف مكرر بنفس الطلب</div>` : ''}
       <div class="fic">${iconFor(f.mime_type)}</div>
       <div class="fname">${escHtml(f.file_name)}</div>
       <div class="ffield">${findFieldLabel(f.field_key)}</div>
       <button class="btn btn-ghost btn-sm" data-viewfile="${i}">فتح الملف</button>
     </div>
-  `).join('')}</div>`;
+  `;}).join('')}</div>`;
 }
 function bindFileButtons(){
   const { files } = reviewDetail;
@@ -3316,6 +3392,7 @@ function renderAll(){
   if(activeTab==='dashboard') renderDashboard();
   if(activeTab==='analytics') renderAnalytics();
   if(activeTab==='shortlist') renderShortlist();
+  if(activeTab==='duplicates') renderDuplicates();
   if(activeTab==='announcements') renderAnnouncements();
   if(activeTab==='review') renderReview();
   if(activeTab==='builder') renderBuilder();

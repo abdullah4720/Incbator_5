@@ -575,6 +575,16 @@ function escHtml(str){
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+/* بصمة SHA-256 لمحتوى الملف — تُستخدم لاحقًا لرصد التكرار (نفس الملف
+   بحقلين مختلفين، أو نفس الملف بطلبات مختلفة). لا نمنع الرفع أبدًا لو فشل
+   حسابها لأي سبب — مجرد بيانات إضافية للفحص، مو شرط رفع. */
+async function computeFileHash(file){
+  try{
+    const buf = await file.arrayBuffer();
+    const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(hashBuf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }catch(e){ return null; }
+}
 function fmtSize(bytes){
   if(bytes<1024) return bytes+" B";
   if(bytes<1024*1024) return (bytes/1024).toFixed(0)+" KB";
@@ -968,6 +978,7 @@ function bindSectionEvents(section){
           const ext = (file.name.split('.').pop() || 'dat').replace(/[^a-zA-Z0-9]/g,'').toLowerCase() || 'dat';
           const safeName = `${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
           const storagePath = `${PROJECT_ID}/${id}/${safeName}`;
+          const fileHash = await computeFileHash(file);
           const { error: upErr } = await SB_AUTH.storage.from('form-attachments').upload(storagePath, file, { upsert: false });
           if(upErr) throw upErr;
 
@@ -980,7 +991,7 @@ function bindSectionEvents(section){
 
           const { data: fileRow, error: insErr } = await SB_AUTH.from('form_files').insert({
             form_id: FORM_ID, field_key: id, storage_path: storagePath,
-            file_name: file.name, mime_type: file.type, size_bytes: file.size,
+            file_name: file.name, mime_type: file.type, size_bytes: file.size, file_hash: fileHash,
           }).select().single();
           if(insErr) throw insErr;
 
