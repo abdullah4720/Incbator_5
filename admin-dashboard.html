@@ -2747,9 +2747,10 @@ function classifyDocumentation(av, files){
   const ipKey = findFieldKeyByLabel(['حماية للملكية الفكرية', 'شراكة مع جهات حكومية']);
   const hasIpPartnership = ipKey ? av[ipKey] === 'نعم' : false;
 
-  if(hasCommercial && hasIpPartnership) return 'full';
-  if(hasCommercial || hasIpPartnership) return 'partial';
-  return 'none';
+  if(hasCommercial && hasIpPartnership) return 'plus';          // مستوفٍ ++ (الاثنان معًا)
+  if(hasCommercial) return 'commercial_only';                    // مستوفٍ (سجل تجاري)
+  if(hasIpPartnership) return 'ip_only';                         // مستوفٍ لكن بتاق "عدم وجود سجل تجاري"
+  return 'none';                                                  // غير مستوفٍ (لا على الاثنين)
 }
 
 /* فحص موضوعي: هل قائد الفريق فعليًا صاحب قرار بالمنشأة المسجَّلة (مالك/شريك/
@@ -2777,26 +2778,29 @@ async function renderQualificationTab(showQualifying){
   });
 
   const rows = showQualifying
-    ? classified.filter(r=>r.docStatus==='full' || r.docStatus==='partial')
+    ? classified.filter(r=>r.docStatus==='plus' || r.docStatus==='commercial_only' || r.docStatus==='ip_only')
     : classified.filter(r=>r.docStatus==='none');
 
-  const fullCount = classified.filter(r=>r.docStatus==='full').length;
-  const partialCount = classified.filter(r=>r.docStatus==='partial').length;
+  const plusCount = classified.filter(r=>r.docStatus==='plus').length;
+  const commercialOnlyCount = classified.filter(r=>r.docStatus==='commercial_only').length;
+  const ipOnlyCount = classified.filter(r=>r.docStatus==='ip_only').length;
   const noneCount = classified.filter(r=>r.docStatus==='none').length;
   const weakLinkageCount = rows.filter(r=>r.linkage==='weak').length;
 
   el.innerHTML = `
     <div class="section-title-row">
       <div><h2>${showQualifying?'المشاريع المستوفية':'المشاريع غير المستوفية'}</h2>
-      <p>يُعتبر المشروع مستوفيًا لو أجاب بـ"نعم" على أحد سؤالي: وجود سجل تجاري، أو وجود حماية للملكية الفكرية/شراكة حكومية أو خاصة — منفصل عن درجة الذكاء الاصطناعي.</p></div>
+      <p>يُعتبر المشروع مستوفيًا لو أجاب بـ"نعم" على أي من: وجود سجل تجاري، أو وجود حماية للملكية الفكرية/شراكة حكومية أو خاصة — منفصل عن درجة الذكاء الاصطناعي.</p></div>
       <button class="btn btn-ghost" id="refreshQualBtn">تحديث</button>
     </div>
 
     <div class="grid kpi-row" style="margin-bottom:18px">
+      <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('sparkles',{size:18})}</div>
+        <div class="kval mono">${plusCount}</div><div class="klabel">مستوفٍ ++ (سجل تجاري وشراكة/ملكية فكرية معًا)</div></div>
       <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">${icon('check',{size:18})}</div>
-        <div class="kval mono">${fullCount}</div><div class="klabel">مستوفٍ كامل (أجاب بنعم على الاثنين)</div></div>
+        <div class="kval mono">${commercialOnlyCount}</div><div class="klabel">مستوفٍ (سجل تجاري فقط)</div></div>
       <div class="card kpi-card"><div class="kicon" style="background:var(--amber-100);color:var(--amber)">${icon('triangle-alert',{size:18})}</div>
-        <div class="kval mono">${partialCount}</div><div class="klabel">لم يستكمل جميع المتطلبات (أجاب بنعم على واحد فقط)</div></div>
+        <div class="kval mono">${ipOnlyCount}</div><div class="klabel">مستوفٍ — عدم وجود سجل تجاري (شراكة/ملكية فكرية فقط)</div></div>
       <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">${icon('x',{size:18})}</div>
         <div class="kval mono">${noneCount}</div><div class="klabel">غير مستوفٍ (لا على الاثنين)</div></div>
       ${showQualifying ? `<div class="card kpi-card"><div class="kicon" style="background:var(--purple-100);color:var(--purple)">${icon('users',{size:18})}</div>
@@ -2804,7 +2808,7 @@ async function renderQualificationTab(showQualifying){
     </div>
 
     ${showQualifying ? `<div class="req-banner" style="margin-bottom:16px">
-      <b>ملاحظة:</b>&nbsp;وسم "يحتاج تحقق ارتباط" يظهر لو صفة قائد الفريق بالمنشأة المسجَّلة هي "عضو في فريق المشروع" فقط (لا مالك، لا شريك، لا مدير، لا مفوَّض) — مؤشر موضوعي إن السجل قد يكون لمنشأة غير مرتبطة فعليًا بالفريق، يستدعي تحقق يدوي من ارتباطه الفعلي بمجال ووصف المشروع. مطابقة الاسم بالمجال لغويًا تحتاج حكمًا بشريًا أو تقييمًا بالذكاء الاصطناعي، ولا تُبنى بقاعدة تلقائية بسيطة لتفادي نتائج مضلِّلة.
+      <b>ملاحظة:</b>&nbsp;وسم "يحتاج تحقق ارتباط" يظهر لو صفة قائد الفريق بالمنشأة المسجَّلة هي "عضو في فريق المشروع" فقط (لا مالك، لا شريك، لا مدير، لا مفوَّض) — مؤشر موضوعي إن السجل قد يكون لمنشأة غير مرتبطة فعليًا بالفريق، يستدعي تحقق يدوي من ارتباطه الفعلي بمجال ووصف المشروع.
     </div>` : ''}
 
     ${rows.length===0 ? `<div class="empty-hint">لا توجد طلبات ضمن هذا التصنيف حاليًا</div>` : `
@@ -2812,14 +2816,23 @@ async function renderQualificationTab(showQualifying){
       <div class="table-wrap"><table>
         <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th>${showQualifying?'<th>التصنيف</th><th>ارتباط السجل بالقائد</th>':''}<th></th></tr></thead>
         <tbody>
-          ${rows.map(r=>`<tr>
+          ${rows.map(r=>{
+            const statusInfo = {
+              plus: ['مستوفٍ ++', 'ok'],
+              commercial_only: ['مستوفٍ', 'ok'],
+              ip_only: ['مستوفٍ', 'ok'],
+            }[r.docStatus] || ['—','mid'];
+            return `<tr>
             <td class="mono">${escHtml(r.project_id)}</td>
             <td>${escHtml(r.project_name)}</td>
             <td>${escHtml(r.track)}</td>
-            ${showQualifying?`<td><span class="badge ${r.docStatus==='full'?'ok':'mid'}">${r.docStatus==='full'?'مستوفٍ كامل':'لم يستكمل جميع المتطلبات'}</span></td>
+            ${showQualifying?`<td>
+              <span class="badge ${statusInfo[1]}">${statusInfo[0]}</span>
+              ${r.docStatus==='ip_only' ? `<span class="badge no" style="margin-inline-start:4px">عدم وجود سجل تجاري</span>` : ''}
+            </td>
             <td>${r.linkage==='weak' ? `<span class="badge no">${icon('triangle-alert',{size:10})} يحتاج تحقق ارتباط</span>` : r.linkage==='strong' ? `<span class="badge ok">مرتبط مباشرة</span>` : '—'}</td>`:''}
             <td><button class="btn btn-ghost btn-sm" data-openreview="${r.project_id}">فتح</button></td>
-          </tr>`).join('')}
+          </tr>`;}).join('')}
         </tbody>
       </table></div>
     </div>`}
