@@ -2793,10 +2793,10 @@ async function renderDuplicates(){
   const el = document.getElementById('view-duplicates');
   el.innerHTML = `<div class="empty-hint">جارٍ الفحص…</div>`;
 
-  const { data: allFiles, error } = await sb.from('form_files')
-    .select('form_id, field_key, file_name, file_hash')
-    .not('file_hash', 'is', null)
-    .is('deleted_at', null);
+  const [{ data: allFiles, error }, { count: missingCount, error: mErr }] = await Promise.all([
+    sb.from('form_files').select('form_id, field_key, file_name, file_hash').not('file_hash', 'is', null).is('deleted_at', null),
+    sb.from('form_files').select('id', {count:'exact', head:true}).is('file_hash', null).is('deleted_at', null),
+  ]);
   if(error){ el.innerHTML = `<div class="empty-hint">تعذّر تحميل بيانات الملفات: ${error.message}</div>`; return; }
 
   const rows = joinedReviewRows();
@@ -2823,12 +2823,19 @@ async function renderDuplicates(){
       <button class="btn btn-ghost" id="refreshDuplicatesBtn">تحديث</button>
     </div>
 
+    ${missingCount ? `<div class="req-banner" style="margin-bottom:16px">
+      <b>تنبيه:</b>&nbsp;يوجد ${missingCount} ملفًا بدون بصمة محفوظة (رُفعت قبل تفعيل هذه الميزة) — الفحص أعلاه لا يشملها إطلاقًا حتى لو كانت مكررة فعليًا.
+      <button class="btn btn-primary btn-sm" id="backfillHashBtn" style="margin-top:8px">${icon('rotate-ccw',{size:12})} حساب البصمات لهذه الملفات الآن</button>
+    </div>` : ''}
+
     <div class="grid kpi-row" style="margin-bottom:18px">
       <div class="card kpi-card"><div class="kicon" style="background:${crossProjectGroups.length?'var(--danger-100)':'var(--success-100)'};color:${crossProjectGroups.length?'var(--danger)':'var(--success)'}">${icon(crossProjectGroups.length?'triangle-alert':'check',{size:18})}</div>
         <div class="kval mono">${crossProjectGroups.length}</div><div class="klabel">ملف مكرر بين طلبات مختلفة</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--paper);color:var(--ink-400)">${icon('paperclip',{size:18})}</div>
+        <div class="kval mono">${missingCount ?? '—'}</div><div class="klabel">ملف لم تُحسَب بصمته بعد</div></div>
     </div>
 
-    ${crossProjectGroups.length===0 ? `<div class="empty-hint">لا يوجد أي تكرار مرصود بين الطلبات حاليًا</div>` : crossProjectGroups.map(g=>`
+    ${crossProjectGroups.length===0 ? `<div class="empty-hint">لا يوجد أي تكرار مرصود بين الملفات ذات البصمة المحسوبة حاليًا</div>` : crossProjectGroups.map(g=>`
       <div class="card" style="margin-bottom:14px;border-color:var(--danger)">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--danger)">
           ${icon('triangle-alert',{size:14})}
@@ -2853,6 +2860,71 @@ async function renderDuplicates(){
   `;
 
   document.getElementById('refreshDuplicatesBtn').addEventListener('click', ()=>{ renderDuplicates(); });
+  const backfillBtn = document.getElementById('backfillHashBtn');
+  if(backfillBtn) backfillBtn.addEventListener('click', ()=>runHashBackfill(missingCount));
+}
+
+/* ==========================================================================
+   حساب البصمات رجعيًا للملفات المرفوعة قبل تفعيل ميزة رصد التكرار — يجلب كل
+   ملف بدون بصمة، يحمّله من التخزين، يحسب SHA-256 بالمتصفح، ويحفظها.
+   ========================================================================== */
+async function runHashBackfill(totalKnown){
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '440px';
+  box.innerHTML = `
+    <h3>${icon('rotate-ccw',{size:15})} حساب البصمات رجعيًا</h3>
+    <p id="hbProgressText">جارٍ التحضير…</p>
+    <div style="background:var(--paper);border-radius:8px;height:10px;overflow:hidden;margin:14px 0">
+      <div id="hbProgressBar" style="background:var(--teal-600);height:100%;width:0%;transition:width .3s"></div>
+    </div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="hbStopBtn">إيقاف</button></div>
+  `;
+  modal.classList.add('show');
+  let stopped = false;
+  document.getElementById('hbStopBtn').addEventListener('click', ()=>{ stopped = true; });
+
+  const { data: files, error } = await sb.from('form_files').select('id, storage_path').is('file_hash', null).is('deleted_at', null);
+  if(error){ showToast('تعذّر تحميل قائمة الملفات: '+error.message); modal.classList.remove('show'); restoreConfirmModal(); return; }
+
+  const total = files.length;
+  let done = 0, ok = 0, failed = 0;
+  const setProgress = ()=>{
+    const t = document.getElementById('hbProgressText');
+    const b = document.getElementById('hbProgressBar');
+    if(t) t.textContent = `جارٍ المعالجة… ${done} من ${total} (${failed} فشل)`;
+    if(b) b.style.width = Math.round(done/total*100)+'%';
+  };
+  setProgress();
+
+  // معالجة على دفعات صغيرة بالتوازي (5 كل مرة) لتسريع 300+ ملف بدون إغراق الشبكة
+  const BATCH = 5;
+  for(let i=0; i<files.length && !stopped; i+=BATCH){
+    const batch = files.slice(i, i+BATCH);
+    await Promise.all(batch.map(async f=>{
+      try{
+        const { data: signed, error: sErr } = await sb.storage.from('form-attachments').createSignedUrl(f.storage_path, 120);
+        if(sErr) throw sErr;
+        const res = await fetch(signed.signedUrl);
+        if(!res.ok) throw new Error('فشل تحميل الملف');
+        const buf = await res.arrayBuffer();
+        const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+        const hash = Array.from(new Uint8Array(hashBuf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+        const { error: uErr } = await sb.from('form_files').update({ file_hash: hash }).eq('id', f.id);
+        if(uErr) throw uErr;
+        ok++;
+      }catch(e){ failed++; }
+      done++;
+    }));
+    setProgress();
+  }
+
+  modal.classList.remove('show');
+  restoreConfirmModal();
+  showToast(stopped
+    ? `تم إيقاف المعالجة — اكتمل ${ok} من ${total}`
+    : `تم حساب البصمات: ${ok} نجح من ${total}${failed?` — ${failed} فشل`:''}`);
+  renderDuplicates();
 }
 let batchCancelled = false;
 
