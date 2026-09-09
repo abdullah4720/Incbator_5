@@ -2772,9 +2772,15 @@ async function renderQualificationTab(showQualifying){
     await loadShortlistAutoData(submittedRows.map(r=>r.form_id));
   }
 
+  const otherReqKeys = REQUIREMENTS.filter(r=>r.key!=='commercial_registration').map(r=>r.key);
   const classified = submittedRows.map(r=>{
-    const data = shortlistAutoData[r.form_id] || { av:{}, files:[] };
-    return { ...r, docStatus: classifyDocumentation(data.av, data.files), linkage: checkRegistrationLinkage(data.av) };
+    const data = shortlistAutoData[r.form_id] || { av:{}, members:[], files:[] };
+    const docStatus = classifyDocumentation(data.av, data.files);
+    let candidateWithoutReg = false;
+    if(docStatus==='none'){
+      candidateWithoutReg = otherReqKeys.every(k => computeSuggestedStatusFrom(k, data.av, data.members, data.files) === 'ok');
+    }
+    return { ...r, docStatus, linkage: checkRegistrationLinkage(data.av), candidateWithoutReg };
   });
 
   const rows = showQualifying
@@ -2786,6 +2792,7 @@ async function renderQualificationTab(showQualifying){
   const ipOnlyCount = classified.filter(r=>r.docStatus==='ip_only').length;
   const noneCount = classified.filter(r=>r.docStatus==='none').length;
   const weakLinkageCount = rows.filter(r=>r.linkage==='weak').length;
+  const candidateCount = rows.filter(r=>r.candidateWithoutReg).length;
 
   el.innerHTML = `
     <div class="section-title-row">
@@ -2805,16 +2812,20 @@ async function renderQualificationTab(showQualifying){
         <div class="kval mono">${noneCount}</div><div class="klabel">غير مستوفٍ (لا على الاثنين)</div></div>
       ${showQualifying ? `<div class="card kpi-card"><div class="kicon" style="background:var(--purple-100);color:var(--purple)">${icon('users',{size:18})}</div>
         <div class="kval mono">${weakLinkageCount}</div><div class="klabel">قائد الفريق "عضو" فقط بالمنشأة — يحتاج تحقق ارتباط</div></div>` : ''}
+      ${!showQualifying ? `<div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('sparkles',{size:18})}</div>
+        <div class="kval mono">${candidateCount}</div><div class="klabel">مرشّح للتأهل - بدون سجل (حقق باقي المتطلبات كاملة)</div></div>` : ''}
     </div>
 
     ${showQualifying ? `<div class="req-banner" style="margin-bottom:16px">
       <b>ملاحظة:</b>&nbsp;وسم "يحتاج تحقق ارتباط" يظهر لو صفة قائد الفريق بالمنشأة المسجَّلة هي "عضو في فريق المشروع" فقط (لا مالك، لا شريك، لا مدير، لا مفوَّض) — مؤشر موضوعي إن السجل قد يكون لمنشأة غير مرتبطة فعليًا بالفريق، يستدعي تحقق يدوي من ارتباطه الفعلي بمجال ووصف المشروع.
-    </div>` : ''}
+    </div>` : `<div class="req-banner" style="margin-bottom:16px">
+      <b>ملاحظة:</b>&nbsp;وسم "مرشّح للتأهل - بدون سجل" يظهر للمشروع اللي حقق باقي المتطلبات الخمسة كاملة (حضور المعسكر، عدد الأعضاء، النموذج الأولي، العرض الاستثماري، التحقق من السوق) ولم ينقصه سوى السجل التجاري أو بديله — يستحق أولوية بالمتابعة مقارنة بمشاريع ناقصة بجوانب متعددة.
+    </div>`}
 
     ${rows.length===0 ? `<div class="empty-hint">لا توجد طلبات ضمن هذا التصنيف حاليًا</div>` : `
     <div class="card">
       <div class="table-wrap"><table>
-        <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th>${showQualifying?'<th>التصنيف</th><th>ارتباط السجل بالقائد</th>':''}<th></th></tr></thead>
+        <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th>${showQualifying?'<th>التصنيف</th><th>ارتباط السجل بالقائد</th>':'<th>ملاحظة</th>'}<th></th></tr></thead>
         <tbody>
           ${rows.map(r=>{
             const statusInfo = {
@@ -2830,7 +2841,8 @@ async function renderQualificationTab(showQualifying){
               <span class="badge ${statusInfo[1]}">${statusInfo[0]}</span>
               ${r.docStatus==='ip_only' ? `<span class="badge no" style="margin-inline-start:4px">عدم وجود سجل تجاري</span>` : ''}
             </td>
-            <td>${r.linkage==='weak' ? `<span class="badge no">${icon('triangle-alert',{size:10})} يحتاج تحقق ارتباط</span>` : r.linkage==='strong' ? `<span class="badge ok">مرتبط مباشرة</span>` : '—'}</td>`:''}
+            <td>${r.linkage==='weak' ? `<span class="badge no">${icon('triangle-alert',{size:10})} يحتاج تحقق ارتباط</span>` : r.linkage==='strong' ? `<span class="badge ok">مرتبط مباشرة</span>` : '—'}</td>`
+            :`<td>${r.candidateWithoutReg ? `<span class="badge ok">${icon('sparkles',{size:10})} مرشّح للتأهل - بدون سجل</span>` : '—'}</td>`}
             <td><button class="btn btn-ghost btn-sm" data-openreview="${r.project_id}">فتح</button></td>
           </tr>`;}).join('')}
         </tbody>
