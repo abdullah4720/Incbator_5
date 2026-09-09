@@ -2768,9 +2768,7 @@ async function renderQualificationTab(showQualifying){
   el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
 
   const submittedRows = joinedReviewRows().filter(r=>r.status==='submitted');
-  if(shortlistAutoData === null){
-    await loadShortlistAutoData(submittedRows.map(r=>r.form_id));
-  }
+  await loadShortlistAutoData(submittedRows.map(r=>r.form_id)); // جلب طازج دائمًا — يعكس أي تعديل حديث بالإجابات
 
   const otherReqKeys = REQUIREMENTS.filter(r=>r.key!=='commercial_registration').map(r=>r.key);
   const classified = submittedRows.map(r=>{
@@ -2866,15 +2864,11 @@ async function renderQualificationTab(showQualifying){
 
 async function renderShortlist(){
   const el = document.getElementById('view-shortlist');
-  if(shortlistEvals === null){
-    el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
-    await loadShortlistData();
-  }
+  el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  await loadShortlistData(); // جلب طازج دائمًا — يعكس أي تقييم ذكي جديد أو معاد توليده
   const submittedRows = joinedReviewRows().filter(r=>r.status==='submitted');
-  if(shortlistAutoData === null){
-    el.innerHTML = `<div class="empty-hint">جارٍ حساب الاستيفاء التلقائي لكل الطلبات…</div>`;
-    await loadShortlistAutoData(submittedRows.map(r=>r.form_id));
-  }
+  el.innerHTML = `<div class="empty-hint">جارٍ حساب الاستيفاء التلقائي لكل الطلبات…</div>`;
+  await loadShortlistAutoData(submittedRows.map(r=>r.form_id)); // جلب طازج دائمًا — يعكس أي تعديل حديث بالإجابات
 
   let rows = submittedRows.map(r=>{
     const ev = shortlistEvals[r.form_id];
