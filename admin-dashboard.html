@@ -428,6 +428,8 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
   <div class="view" id="view-report"></div>
   <div class="view" id="view-shortlist"></div>
   <div class="view" id="view-duplicates"></div>
+  <div class="view" id="view-qualifying"></div>
+  <div class="view" id="view-nonqualifying"></div>
   <div class="view" id="view-review"></div>
   <div class="view" id="view-builder"></div>
   <div class="view" id="view-eligibility"></div>
@@ -486,6 +488,7 @@ const LUCIDE_ICONS = {
   "chevron-right": `<path d="m9 18 6-6-6-6" />`,
   "chevron-left": `<path d="m15 18-6-6 6-6" />`,
   "chevron-down": `<path d="m6 9 6 6 6-6" />`,
+  "copy": `<rect width="14" height="14" x="8" y="8" rx="2" ry="2" /> <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />`,
   "sliders": `<path d="M10 5H3" /> <path d="M12 19H3" /> <path d="M14 3v4" /> <path d="M16 17v4" /> <path d="M21 12h-9" /> <path d="M21 19h-5" /> <path d="M21 5h-7" /> <path d="M8 10v4" /> <path d="M8 12H3" />`,
   "download": `<path d="M12 15V3" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /> <path d="m7 10 5 5 5-5" />`,
   "plus": `<path d="M5 12h14" /> <path d="M12 5v14" />`,
@@ -809,6 +812,8 @@ const TABS = [
   {id:"analytics", l:"تحليل البيانات", adminOnly:false},
   {id:"shortlist", l:"الترشيح المبدئي", adminOnly:false},
   {id:"duplicates", l:"تكرار الملفات", adminOnly:false},
+  {id:"qualifying", l:"المشاريع المستوفية", adminOnly:false},
+  {id:"nonqualifying", l:"المشاريع غير المستوفية", adminOnly:false},
   {id:"review", l:"مراجعة الطلبات", adminOnly:false},
   {id:"builder", l:"الأسئلة والنموذج", adminOnly:true},
   {id:"eligibility", l:"الفرق المؤهّلة للدخول", adminOnly:true},
@@ -2694,14 +2699,142 @@ async function runExport(options){
    الجاهزية، متقاطعًا مع حالة المتطلبات الستة المعتمَدة من المراجع البشري.
    استشاري بالكامل — لا يُعتمد عليه وحده لأي قرار نهائي.
    ========================================================================== */
-let shortlistEvals = null; // form_id -> آخر تقييم (يُحمَّل مرة ويُخزَّن هنا)
+let shortlistEvals = null;   // form_id -> آخر تقييم ذكاء اصطناعي
+let shortlistAutoData = null; // form_id -> { av, members, files } لكل الطلبات المُرسَلة
+let shortlistFilter = { track:'', domain:'', camp:'' };
 
 async function loadShortlistData(){
   const { data, error } = await sb.from('ai_evaluations').select('form_id, evaluation, generated_at').order('generated_at', {ascending:false});
   if(error){ showToast('تعذّر تحميل بيانات الترشيح: '+error.message); shortlistEvals = {}; return; }
   shortlistEvals = {};
   (data||[]).forEach(row=>{
-    if(!shortlistEvals[row.form_id]) shortlistEvals[row.form_id] = row; // أول ظهور = الأحدث بسبب الترتيب
+    if(!shortlistEvals[row.form_id]) shortlistEvals[row.form_id] = row;
+  });
+}
+
+/* يجلب إجابات/أعضاء/ملفات كل الطلبات المُرسَلة دفعة واحدة (لا طلب واحد لكل
+   مشروع) — يُستخدم لحساب الاستيفاء التلقائي حسب القواعد الموضوعية، ولاستخراج
+   المجال ومقر المعسكر لأغراض الفلاتر، بدون أي استدعاء ذكاء اصطناعي. */
+async function loadShortlistAutoData(formIds){
+  if(!formIds.length){ shortlistAutoData = {}; return; }
+  const [{data:answers}, {data:members}, {data:files}] = await Promise.all([
+    sb.from('form_answers').select('form_id, field_key, value_text, value_json').in('form_id', formIds),
+    sb.from('team_members').select('form_id').in('form_id', formIds),
+    sb.from('form_files').select('form_id, field_key').in('form_id', formIds).is('deleted_at', null),
+  ]);
+  const byForm = {};
+  formIds.forEach(id=>{ byForm[id] = { av:{}, members:[], files:[] }; });
+  (answers||[]).forEach(a=>{ if(byForm[a.form_id]) byForm[a.form_id].av[a.field_key] = a.value_json!==null ? a.value_json : a.value_text; });
+  (members||[]).forEach(m=>{ if(byForm[m.form_id]) byForm[m.form_id].members.push(m); });
+  (files||[]).forEach(f=>{ if(byForm[f.form_id]) byForm[f.form_id].files.push(f); });
+  shortlistAutoData = byForm;
+}
+
+function classifyPreliminary(autoCount, aiScore){
+  if(autoCount!==null && autoCount<=2) return ['غير مرشّح حاليًا','no'];
+  if(aiScore!==null && aiScore<40) return ['غير مرشّح حاليًا','no'];
+  if(autoCount!==null && autoCount>=5 && (aiScore===null || aiScore>=60)) return ['مرشّح للتأهل','ok'];
+  if(autoCount===null && aiScore===null) return ['بيانات غير كافية','mid'];
+  return ['يحتاج مراجعة دقيقة','mid'];
+}
+
+/* تصنيف مستندي بحت: هل يوجد سجل تجاري، أو بديله (شراكة/ملكية فكرية)؟
+   "مستوفٍ كامل" = سجل تجاري فعلي مرفوع. "مستوفٍ جزئيًا" = بديل فقط بدون سجل
+   تجاري. لا علاقة له بدرجة الذكاء الاصطناعي أو الاستيفاء التلقائي العام —
+   مرتبط حصرًا بوجود هذه المستندات بالذات. */
+function classifyDocumentation(av, files){
+  const hasRegFile = (files||[]).some(f=>f.field_key==='f2_8');
+  if(hasRegFile) return 'full';
+  const altKey = findFieldKeyByLabel(['شراكة', 'ملكية فكرية']);
+  const hasAltFile = altKey && (files||[]).some(f=>f.field_key===altKey);
+  if(hasAltFile) return 'partial';
+  return 'none';
+}
+
+/* فحص موضوعي: هل قائد الفريق فعليًا صاحب قرار بالمنشأة المسجَّلة (مالك/شريك/
+   مدير/مفوَّض)، أو مجرد "عضو في فريق المشروع" لا علاقة مباشرة له بها؟ الحالة
+   الثانية مؤشر حقيقي يستدعي تحققًا يدويًا من ارتباط السجل التجاري بالمشروع. */
+function checkRegistrationLinkage(av){
+  const role = av['f2_7'];
+  if(!role) return null;
+  return role === 'عضو في فريق المشروع' ? 'weak' : 'strong';
+}
+
+async function renderQualificationTab(showQualifying){
+  const elId = showQualifying ? 'view-qualifying' : 'view-nonqualifying';
+  const el = document.getElementById(elId);
+  el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+
+  const submittedRows = joinedReviewRows().filter(r=>r.status==='submitted');
+  if(shortlistAutoData === null){
+    await loadShortlistAutoData(submittedRows.map(r=>r.form_id));
+  }
+
+  const classified = submittedRows.map(r=>{
+    const data = shortlistAutoData[r.form_id] || { av:{}, files:[] };
+    return { ...r, docStatus: classifyDocumentation(data.av, data.files), linkage: checkRegistrationLinkage(data.av) };
+  });
+
+  const rows = showQualifying
+    ? classified.filter(r=>r.docStatus==='full' || r.docStatus==='partial')
+    : classified.filter(r=>r.docStatus==='none');
+
+  const fullCount = classified.filter(r=>r.docStatus==='full').length;
+  const partialCount = classified.filter(r=>r.docStatus==='partial').length;
+  const noneCount = classified.filter(r=>r.docStatus==='none').length;
+  const weakLinkageCount = rows.filter(r=>r.linkage==='weak').length;
+
+  el.innerHTML = `
+    <div class="section-title-row">
+      <div><h2>${showQualifying?'المشاريع المستوفية':'المشاريع غير المستوفية'}</h2>
+      <p>تصنيف مستندي مباشر بناءً على وجود السجل التجاري أو بديله (إثبات شراكة أو ملكية فكرية) — منفصل عن درجة الذكاء الاصطناعي.</p></div>
+      <button class="btn btn-ghost" id="refreshQualBtn">تحديث</button>
+    </div>
+
+    <div class="grid kpi-row" style="margin-bottom:18px">
+      <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">${icon('check',{size:18})}</div>
+        <div class="kval mono">${fullCount}</div><div class="klabel">مستوفٍ كامل (سجل تجاري)</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--amber-100);color:var(--amber)">${icon('triangle-alert',{size:18})}</div>
+        <div class="kval mono">${partialCount}</div><div class="klabel">مستوفٍ جزئيًا (شراكة/ملكية فكرية)</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">${icon('x',{size:18})}</div>
+        <div class="kval mono">${noneCount}</div><div class="klabel">غير مستوفٍ</div></div>
+      ${showQualifying ? `<div class="card kpi-card"><div class="kicon" style="background:var(--purple-100);color:var(--purple)">${icon('users',{size:18})}</div>
+        <div class="kval mono">${weakLinkageCount}</div><div class="klabel">قائد الفريق "عضو" فقط بالمنشأة — يحتاج تحقق ارتباط</div></div>` : ''}
+    </div>
+
+    ${showQualifying ? `<div class="req-banner" style="margin-bottom:16px">
+      <b>ملاحظة:</b>&nbsp;وسم "يحتاج تحقق ارتباط" يظهر لو صفة قائد الفريق بالمنشأة المسجَّلة هي "عضو في فريق المشروع" فقط (لا مالك، لا شريك، لا مدير، لا مفوَّض) — مؤشر موضوعي إن السجل قد يكون لمنشأة غير مرتبطة فعليًا بالفريق، يستدعي تحقق يدوي من ارتباطه الفعلي بمجال ووصف المشروع. مطابقة الاسم بالمجال لغويًا تحتاج حكمًا بشريًا أو تقييمًا بالذكاء الاصطناعي، ولا تُبنى بقاعدة تلقائية بسيطة لتفادي نتائج مضلِّلة.
+    </div>` : ''}
+
+    ${rows.length===0 ? `<div class="empty-hint">لا توجد طلبات ضمن هذا التصنيف حاليًا</div>` : `
+    <div class="card">
+      <div class="table-wrap"><table>
+        <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th>${showQualifying?'<th>التصنيف</th><th>ارتباط السجل بالقائد</th>':''}<th></th></tr></thead>
+        <tbody>
+          ${rows.map(r=>`<tr>
+            <td class="mono">${escHtml(r.project_id)}</td>
+            <td>${escHtml(r.project_name)}</td>
+            <td>${escHtml(r.track)}</td>
+            ${showQualifying?`<td><span class="badge ${r.docStatus==='full'?'ok':'mid'}">${r.docStatus==='full'?'مستوفٍ كامل':'مستوفٍ جزئيًا'}</span></td>
+            <td>${r.linkage==='weak' ? `<span class="badge no">${icon('triangle-alert',{size:10})} يحتاج تحقق ارتباط</span>` : r.linkage==='strong' ? `<span class="badge ok">مرتبط مباشرة</span>` : '—'}</td>`:''}
+            <td><button class="btn btn-ghost btn-sm" data-openreview="${r.project_id}">فتح</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`}
+  `;
+
+  document.getElementById('refreshQualBtn').addEventListener('click', async ()=>{
+    shortlistAutoData = null;
+    await renderQualificationTab(showQualifying);
+    showToast('تم التحديث');
+  });
+  el.querySelectorAll('[data-openreview]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      activeTab = 'review';
+      renderTabs();
+      openReviewDetail(b.dataset.openreview);
+    });
   });
 }
 
@@ -2711,57 +2844,103 @@ async function renderShortlist(){
     el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
     await loadShortlistData();
   }
+  const submittedRows = joinedReviewRows().filter(r=>r.status==='submitted');
+  if(shortlistAutoData === null){
+    el.innerHTML = `<div class="empty-hint">جارٍ حساب الاستيفاء التلقائي لكل الطلبات…</div>`;
+    await loadShortlistAutoData(submittedRows.map(r=>r.form_id));
+  }
 
-  const rows = joinedReviewRows()
-    .filter(r=>r.status==='submitted')
-    .map(r=>{
-      const ev = shortlistEvals[r.form_id];
-      const score = ev && typeof ev.evaluation.readiness_score === 'number' ? ev.evaluation.readiness_score : null;
-      return { ...r, aiScore: score, aiGeneratedAt: ev ? ev.generated_at : null };
-    })
-    .sort((a,b)=>{
-      if(a.aiScore===null && b.aiScore===null) return 0;
-      if(a.aiScore===null) return 1;
-      if(b.aiScore===null) return -1;
-      return b.aiScore - a.aiScore;
-    });
+  let rows = submittedRows.map(r=>{
+    const ev = shortlistEvals[r.form_id];
+    const score = ev && typeof ev.evaluation.readiness_score === 'number' ? ev.evaluation.readiness_score : null;
+    const auto = shortlistAutoData[r.form_id] || { av:{}, members:[], files:[] };
+    const autoCount = REQUIREMENTS.filter(req => computeSuggestedStatusFrom(req.key, auto.av, auto.members, auto.files) === 'ok').length;
+    const domain = auto.av['f1_4'] || 'غير محدد';
+    const camp = auto.av['f3_1'] || 'غير محدد';
+    const [clsLabel, clsBadge] = classifyPreliminary(autoCount, score);
+    return { ...r, aiScore: score, autoCount, domain, camp, clsLabel, clsBadge };
+  });
+
+  // خيارات الفلاتر مستخرجة من البيانات الفعلية مع عدد كل خيار
+  const buildOptions = (key)=>{
+    const counts = {};
+    rows.forEach(r=>{ counts[r[key]] = (counts[r[key]]||0)+1; });
+    return Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  };
+  const trackOptions = buildOptions('track');
+  const domainOptions = buildOptions('domain');
+  const campOptions = buildOptions('camp');
+
+  if(shortlistFilter.track) rows = rows.filter(r=>r.track===shortlistFilter.track);
+  if(shortlistFilter.domain) rows = rows.filter(r=>r.domain===shortlistFilter.domain);
+  if(shortlistFilter.camp) rows = rows.filter(r=>r.camp===shortlistFilter.camp);
+
+  rows.sort((a,b)=>{
+    if(a.aiScore===null && b.aiScore===null) return b.autoCount-a.autoCount;
+    if(a.aiScore===null) return 1;
+    if(b.aiScore===null) return -1;
+    return b.aiScore - a.aiScore;
+  });
 
   const evaluatedCount = rows.filter(r=>r.aiScore!==null).length;
+  const qualifyingCount = rows.filter(r=>r.clsBadge==='ok').length;
 
   el.innerHTML = `
     <div class="section-title-row">
-      <div><h2>الترشيح المبدئي</h2><p>ترتيب استشاري للطلبات المُرسَلة حسب درجة الجاهزية بالذكاء الاصطناعي، جنبًا إلى جنب مع حالة المتطلبات الستة الموثَّقة من المراجع البشري.</p></div>
+      <div><h2>الترشيح المبدئي</h2><p>ترتيب استشاري للطلبات المُرسَلة حسب درجة الجاهزية بالذكاء الاصطناعي، مع تحديد تلقائي للاستيفاء بناءً على الإجابات الفعلية.</p></div>
       <button class="btn btn-ghost" id="refreshShortlistBtn">تحديث</button>
     </div>
 
     <div class="req-banner" style="margin-bottom:16px">
-      <b>تنبيه مهم:</b>&nbsp;هذا ترتيب أولي استشاري فقط، مبني على تقييم الذكاء الاصطناعي لوضوح واكتمال الإجابات النصية — لا يُغني إطلاقًا عن المراجعة البشرية الكاملة، ولا يشمل تقييم محتوى الملفات المرفوعة. القرار النهائي دائمًا لفريق البرنامج.
+      <b>تنبيه مهم:</b>&nbsp;التصنيف والاستيفاء التلقائي هنا استشاريان فقط — الاستيفاء التلقائي مبني على قواعد موضوعية من إجابات الفريق (مو تقييم بشري)، والدرجة مبنية على تحليل نصي بالذكاء الاصطناعي. لا يغنيان عن المراجعة البشرية الكاملة، ولا يشملان تقييم محتوى الملفات. القرار النهائي دائمًا لفريق البرنامج.
     </div>
 
-    <div class="grid kpi-row" style="margin-bottom:18px">
+    <div class="grid kpi-row" style="margin-bottom:16px">
       <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('sparkles',{size:18})}</div>
-        <div class="kval mono">${evaluatedCount}</div><div class="klabel">طلب مُقيَّم من ${rows.length} مُرسَل</div></div>
+        <div class="kval mono">${evaluatedCount}</div><div class="klabel">طلب مُقيَّم بالذكاء الاصطناعي</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">${icon('check',{size:18})}</div>
+        <div class="kval mono">${qualifyingCount}</div><div class="klabel">مرشّح للتأهل ضمن المعروض حاليًا (${rows.length})</div></div>
     </div>
 
-    ${rows.length===0 ? `<div class="empty-hint">لا توجد طلبات مُرسَلة بعد</div>` : `
+    <div class="card" style="margin-bottom:16px">
+      <div class="filter-row" style="display:flex;gap:10px;flex-wrap:wrap">
+        <select id="filterTrack" style="flex:1;min-width:180px">
+          <option value="">كل المسارات (${submittedRows.length})</option>
+          ${trackOptions.map(([v,c])=>`<option value="${escHtml(v)}" ${shortlistFilter.track===v?'selected':''}>${escHtml(v)} (${c})</option>`).join('')}
+        </select>
+        <select id="filterDomain" style="flex:1;min-width:180px">
+          <option value="">كل المجالات (${submittedRows.length})</option>
+          ${domainOptions.map(([v,c])=>`<option value="${escHtml(v)}" ${shortlistFilter.domain===v?'selected':''}>${escHtml(v)} (${c})</option>`).join('')}
+        </select>
+        <select id="filterCamp" style="flex:1;min-width:180px">
+          <option value="">كل مقرّات المعسكر (${submittedRows.length})</option>
+          ${campOptions.map(([v,c])=>`<option value="${escHtml(v)}" ${shortlistFilter.camp===v?'selected':''}>${escHtml(v)} (${c})</option>`).join('')}
+        </select>
+        ${(shortlistFilter.track||shortlistFilter.domain||shortlistFilter.camp) ? `<button class="btn btn-ghost btn-sm" id="clearFiltersBtn">إزالة الفلاتر</button>` : ''}
+      </div>
+    </div>
+
+    ${rows.length===0 ? `<div class="empty-hint">لا توجد طلبات مطابقة للفلاتر المحددة</div>` : `
     <div class="card">
       <div class="table-wrap"><table>
         <thead><tr>
-          <th>#</th><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th>
-          <th>درجة الجاهزية (AI)</th><th>المتطلبات الموثَّقة</th><th>الحالة العامة</th><th></th>
+          <th>#</th><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th><th>المجال</th><th>مقر المعسكر</th>
+          <th>الاستيفاء التلقائي</th><th>درجة الجاهزية (AI)</th><th>التصنيف الأولي</th><th></th>
         </tr></thead>
         <tbody>
           ${rows.map((r,i)=>{
             const scoreColor = r.aiScore===null ? 'var(--ink-400)' : r.aiScore>=71 ? 'var(--success)' : r.aiScore>=41 ? 'var(--amber)' : 'var(--danger)';
-            const overallInfo = OVERALL_LABELS[r.overall] || ['—','mid'];
+            const autoColor = r.autoCount>=5 ? 'var(--success)' : r.autoCount>=3 ? 'var(--amber)' : 'var(--danger)';
             return `<tr>
               <td class="mono" style="color:var(--ink-400)">${i+1}</td>
               <td class="mono">${escHtml(r.project_id)}</td>
               <td>${escHtml(r.project_name)}</td>
               <td>${escHtml(r.track)}</td>
+              <td>${escHtml(r.domain)}</td>
+              <td>${escHtml(r.camp)}</td>
+              <td class="mono" style="color:${autoColor};font-weight:700">${r.autoCount}/${REQUIREMENTS.length}</td>
               <td><b class="mono" style="color:${scoreColor};font-size:14px">${r.aiScore!==null ? r.aiScore : '—'}</b></td>
-              <td class="mono">${r.reqEvaluatedCount}/${REQUIREMENTS.length}</td>
-              <td><span class="badge ${overallInfo[1]}">${overallInfo[0]}</span></td>
+              <td><span class="badge ${r.clsBadge}">${r.clsLabel}</span></td>
               <td><button class="btn btn-ghost btn-sm" data-openreview="${r.project_id}">فتح</button></td>
             </tr>`;
           }).join('')}
@@ -2771,7 +2950,7 @@ async function renderShortlist(){
   `;
 
   document.getElementById('refreshShortlistBtn').addEventListener('click', async ()=>{
-    shortlistEvals = null;
+    shortlistEvals = null; shortlistAutoData = null;
     await renderShortlist();
     showToast('تم التحديث');
   });
@@ -2782,6 +2961,11 @@ async function renderShortlist(){
       openReviewDetail(b.dataset.openreview);
     });
   });
+  document.getElementById('filterTrack').addEventListener('change', e=>{ shortlistFilter.track = e.target.value; renderShortlist(); });
+  document.getElementById('filterDomain').addEventListener('change', e=>{ shortlistFilter.domain = e.target.value; renderShortlist(); });
+  document.getElementById('filterCamp').addEventListener('change', e=>{ shortlistFilter.camp = e.target.value; renderShortlist(); });
+  const clearBtn = document.getElementById('clearFiltersBtn');
+  if(clearBtn) clearBtn.addEventListener('click', ()=>{ shortlistFilter = {track:'',domain:'',camp:''}; renderShortlist(); });
 }
 
 /* ==========================================================================
@@ -2809,37 +2993,50 @@ async function renderDuplicates(){
     byHash[f.file_hash].push(f);
   });
 
-  // فقط البصمات المستخدمة في أكثر من طلب مختلف (استبعاد التكرار داخل نفس الطلب — مرصود بمكان آخر)
-  const crossProjectGroups = Object.entries(byHash)
-    .map(([hash, list])=>{
-      const distinctForms = [...new Set(list.map(f=>f.form_id))];
-      return { hash, list, distinctForms };
-    })
-    .filter(g=>g.distinctForms.length > 1);
+  const allGroups = Object.entries(byHash).map(([hash, list])=>{
+    const distinctForms = [...new Set(list.map(f=>f.form_id))];
+    return { hash, list, distinctForms };
+  }).filter(g=>g.list.length > 1); // فيه تكرار فعلي (بغض النظر عن كونه داخل نفس الطلب أو بين طلبات)
 
-  el.innerHTML = `
-    <div class="section-title-row">
-      <div><h2>تكرار الملفات</h2><p>يرصد نفس الملف بالضبط (بصمة رقمية مطابقة) لو ظهر في أكثر من طلب مختلف — إشارة تستحق تحقيقًا يدويًا.</p></div>
-      <button class="btn btn-ghost" id="refreshDuplicatesBtn">تحديث</button>
-    </div>
+  const crossProjectGroups = allGroups.filter(g=>g.distinctForms.length > 1);
+  const withinProjectGroups = allGroups.filter(g=>g.distinctForms.length === 1);
 
-    ${missingCount ? `<div class="req-banner" style="margin-bottom:16px">
-      <b>تنبيه:</b>&nbsp;يوجد ${missingCount} ملفًا بدون بصمة محفوظة (رُفعت قبل تفعيل هذه الميزة) — الفحص أعلاه لا يشملها إطلاقًا حتى لو كانت مكررة فعليًا.
-      <button class="btn btn-primary btn-sm" id="backfillHashBtn" style="margin-top:8px">${icon('rotate-ccw',{size:12})} حساب البصمات لهذه الملفات الآن</button>
-    </div>` : ''}
+  // مقارنة أعضاء الفريق بين المشاريع المتشابهة بالملفات — جوال أو بريد مطابق
+  // يُعتبر إشارة أقوى بكثير من مجرد تشابه الملف
+  let memberMatches = {}; // hash -> [{memberA, memberB, matchField, matchValue}]
+  if(crossProjectGroups.length){
+    const allFormIds = [...new Set(crossProjectGroups.flatMap(g=>g.distinctForms))];
+    const { data: allMembers } = await sb.from('team_members').select('form_id, full_name, phone, email').in('form_id', allFormIds);
+    const membersByForm = {};
+    (allMembers||[]).forEach(m=>{ (membersByForm[m.form_id] = membersByForm[m.form_id]||[]).push(m); });
 
-    <div class="grid kpi-row" style="margin-bottom:18px">
-      <div class="card kpi-card"><div class="kicon" style="background:${crossProjectGroups.length?'var(--danger-100)':'var(--success-100)'};color:${crossProjectGroups.length?'var(--danger)':'var(--success)'}">${icon(crossProjectGroups.length?'triangle-alert':'check',{size:18})}</div>
-        <div class="kval mono">${crossProjectGroups.length}</div><div class="klabel">ملف مكرر بين طلبات مختلفة</div></div>
-      <div class="card kpi-card"><div class="kicon" style="background:var(--paper);color:var(--ink-400)">${icon('paperclip',{size:18})}</div>
-        <div class="kval mono">${missingCount ?? '—'}</div><div class="klabel">ملف لم تُحسَب بصمته بعد</div></div>
-    </div>
+    crossProjectGroups.forEach(g=>{
+      const matches = [];
+      for(let i=0; i<g.distinctForms.length; i++){
+        for(let j=i+1; j<g.distinctForms.length; j++){
+          const membersA = membersByForm[g.distinctForms[i]] || [];
+          const membersB = membersByForm[g.distinctForms[j]] || [];
+          membersA.forEach(ma=>{
+            membersB.forEach(mb=>{
+              const phoneA = (ma.phone||'').replace(/\s+/g,''), phoneB = (mb.phone||'').replace(/\s+/g,'');
+              const emailA = (ma.email||'').toLowerCase(), emailB = (mb.email||'').toLowerCase();
+              if(phoneA && phoneA===phoneB) matches.push({a:ma, b:mb, field:'رقم الجوال', value:ma.phone});
+              else if(emailA && emailA===emailB) matches.push({a:ma, b:mb, field:'البريد الإلكتروني', value:ma.email});
+            });
+          });
+        }
+      }
+      if(matches.length) memberMatches[g.hash] = matches;
+    });
+  }
 
-    ${crossProjectGroups.length===0 ? `<div class="empty-hint">لا يوجد أي تكرار مرصود بين الملفات ذات البصمة المحسوبة حاليًا</div>` : crossProjectGroups.map(g=>`
+  const groupCardHTML = (g, isCross)=>{
+    const matches = memberMatches[g.hash];
+    return `
       <div class="card" style="margin-bottom:14px;border-color:var(--danger)">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--danger)">
           ${icon('triangle-alert',{size:14})}
-          <b style="font-size:13px">نفس الملف موجود في ${g.distinctForms.length} طلبات مختلفة</b>
+          <b style="font-size:13px">${isCross ? `نفس الملف موجود في ${g.distinctForms.length} طلبات مختلفة` : `نفس الملف مستخدم مرتين داخل الطلب نفسه`}</b>
         </div>
         <div class="table-wrap"><table>
           <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>الحقل</th><th>اسم الملف</th></tr></thead>
@@ -2855,8 +3052,40 @@ async function renderDuplicates(){
             }).join('')}
           </tbody>
         </table></div>
+        ${matches ? `
+        <div class="req-banner" style="margin-top:12px;background:var(--danger-100);border-color:var(--danger)">
+          <b style="color:var(--danger)">${icon('triangle-alert',{size:12})} إشارة أقوى — نفس عضو الفريق موجود في المشروعين:</b>
+          ${matches.map(m=>`<div style="margin-top:6px">${escHtml(m.a.full_name)} — تطابق ${m.field}: <span class="mono">${escHtml(m.value)}</span></div>`).join('')}
+        </div>` : ''}
       </div>
-    `).join('')}
+    `;
+  };
+
+  el.innerHTML = `
+    <div class="section-title-row">
+      <div><h2>تكرار الملفات</h2><p>يرصد نفس الملف بالضبط (بصمة رقمية مطابقة) — داخل نفس الطلب، أو بين طلبات مختلفة — مع مقارنة أعضاء الفريق عند التكرار بين مشاريع مختلفة.</p></div>
+      <button class="btn btn-ghost" id="refreshDuplicatesBtn">تحديث</button>
+    </div>
+
+    ${missingCount ? `<div class="req-banner" style="margin-bottom:16px">
+      <b>تنبيه:</b>&nbsp;يوجد ${missingCount} ملفًا بدون بصمة محفوظة (رُفعت قبل تفعيل هذه الميزة) — الفحص أعلاه لا يشملها إطلاقًا حتى لو كانت مكررة فعليًا.
+      <button class="btn btn-primary btn-sm" id="backfillHashBtn" style="margin-top:8px">${icon('rotate-ccw',{size:12})} حساب البصمات لهذه الملفات الآن</button>
+    </div>` : ''}
+
+    <div class="grid kpi-row" style="margin-bottom:18px">
+      <div class="card kpi-card"><div class="kicon" style="background:${crossProjectGroups.length?'var(--danger-100)':'var(--success-100)'};color:${crossProjectGroups.length?'var(--danger)':'var(--success)'}">${icon(crossProjectGroups.length?'triangle-alert':'check',{size:18})}</div>
+        <div class="kval mono">${crossProjectGroups.length}</div><div class="klabel">ملف مكرر بين طلبات مختلفة</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:${withinProjectGroups.length?'var(--amber-100)':'var(--success-100)'};color:${withinProjectGroups.length?'var(--amber)':'var(--success)'}">${icon('copy',{size:18})}</div>
+        <div class="kval mono">${withinProjectGroups.length}</div><div class="klabel">ملف مكرر داخل نفس الطلب</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:${Object.keys(memberMatches).length?'var(--danger-100)':'var(--success-100)'};color:${Object.keys(memberMatches).length?'var(--danger)':'var(--success)'}">${icon('users',{size:18})}</div>
+        <div class="kval mono">${Object.keys(memberMatches).length}</div><div class="klabel">حالة تطابق عضو فريق أيضًا</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--paper);color:var(--ink-400)">${icon('paperclip',{size:18})}</div>
+        <div class="kval mono">${missingCount ?? '—'}</div><div class="klabel">ملف لم تُحسَب بصمته بعد</div></div>
+    </div>
+
+    ${crossProjectGroups.length ? `<h3 style="font-size:14px;margin:20px 0 10px">تكرار بين مشاريع مختلفة (${crossProjectGroups.length})</h3>${crossProjectGroups.map(g=>groupCardHTML(g,true)).join('')}` : ''}
+    ${withinProjectGroups.length ? `<h3 style="font-size:14px;margin:20px 0 10px">تكرار داخل نفس الطلب (${withinProjectGroups.length})</h3>${withinProjectGroups.map(g=>groupCardHTML(g,false)).join('')}` : ''}
+    ${allGroups.length===0 ? `<div class="empty-hint">لا يوجد أي تكرار مرصود بين الملفات ذات البصمة المحسوبة حاليًا</div>` : ''}
   `;
 
   document.getElementById('refreshDuplicatesBtn').addEventListener('click', ()=>{ renderDuplicates(); });
@@ -3065,7 +3294,21 @@ async function loadReviewDetail(projectId){
       sb.from('requirement_status').select('*').eq('form_id', form.id),
       sb.from('review_notes').select('*').eq('form_id', form.id).order('created_at', {ascending:false}),
     ]);
-    reviewDetail = { form, answers: answers||[], members: members||[], files: files||[], reqRows: reqRows||[], notes: notes||[] };
+
+    // تحقق من تكرار أي ملف من ملفات هذا الطلب مع طلب مختلف تمامًا (بعد معرفة
+    // بصمات الملفات أعلاه، لذا لا يمكن تضمينه بنفس Promise.all السابق)
+    const fileHashes = [...new Set((files||[]).map(f=>f.file_hash).filter(Boolean))];
+    let crossDupHashes = new Set();
+    if(fileHashes.length){
+      const { data: otherMatches } = await sb.from('form_files')
+        .select('file_hash')
+        .in('file_hash', fileHashes)
+        .neq('form_id', form.id)
+        .is('deleted_at', null);
+      (otherMatches||[]).forEach(m=>crossDupHashes.add(m.file_hash));
+    }
+
+    reviewDetail = { form, answers: answers||[], members: members||[], files: files||[], reqRows: reqRows||[], notes: notes||[], crossDupHashes };
   } catch(e){
     showToast('تعذّر تحميل تفاصيل الطلب: '+(e.message||'خطأ غير معروف'));
     reviewDetail = null;
@@ -3146,15 +3389,30 @@ function renderReviewDetail(){
 /* يقترح حالة كل متطلب بناءً على إجابات المشارك الفعلية — اقتراح أولي فقط،
    لا يُسجَّل رسميًا كقرار "تمت مراجعته" إلا بعد تفاعل صريح من المراجع
    (حتى لا تنكسر مؤشرات الجاهزية بكل مكان بالمنصة لو اعتُمد تلقائيًا بصمت). */
-function computeSuggestedStatus(reqKey){
-  const av = ansMap();
-  const members = reviewDetail.members || [];
-  const files = reviewDetail.files || [];
+/* يبحث عن سؤال بعنوانه أي من الكلمات المعطاة — يُستخدم لإيجاد أسئلة مخصَّصة
+   أضافها الإداري بنفسه عبر لوحة التحكم (مو من الأسئلة الأصلية)، بدون الحاجة
+   لمعرفة اسم الحقل التقني بالضبط. */
+function findFieldKeyByLabel(patterns){
+  for(const sec of sections){
+    for(const q of sec.questions){
+      if(patterns.some(p => (q.label||'').includes(p))) return q.id;
+    }
+  }
+  return null;
+}
 
+function computeSuggestedStatusFrom(reqKey, av, members, files){
   if(reqKey==='commercial_registration'){
-    const hasFile = files.some(f=>f.field_key==='f2_8');
-    if(av['f2_1']==='نعم' && hasFile) return 'ok';
-    if(av['f2_1']==='لا') return 'no';
+    const hasRegFile = (files||[]).some(f=>f.field_key==='f2_8');
+    if(av['f2_1']==='نعم' && hasRegFile) return 'ok';
+    if(av['f2_1']==='لا'){
+      // بدائل مقبولة كتحقق (مو رفض مباشر): إثبات شراكة أو ملكية فكرية —
+      // حقل مخصَّص أضافه الإداري، نبحث عنه بعنوانه لا برمزه التقني
+      const altKey = findFieldKeyByLabel(['شراكة', 'ملكية فكرية']);
+      const hasAltFile = altKey && (files||[]).some(f=>f.field_key===altKey);
+      if(hasAltFile) return 'mid'; // يحتاج تحقق من المعلومة، مو غير مستوفٍ مباشرة
+      return 'no';
+    }
     return null;
   }
   if(reqKey==='camp_attendance'){
@@ -3163,7 +3421,7 @@ function computeSuggestedStatus(reqKey){
     return null;
   }
   if(reqKey==='team_size'){
-    if(!members.length) return null;
+    if(!(members||[]).length) return null;
     return members.length >= 2 ? 'ok' : 'no';
   }
   if(reqKey==='prototype'){
@@ -3173,10 +3431,10 @@ function computeSuggestedStatus(reqKey){
   }
   if(reqKey==='pitch_deck'){
     const status = av['f6_1'];
-    if(status==='مكتمل وفق النموذج المعتمد') return 'ok';
-    if(status==='مكتمل مع تعديلات محدودة' || status==='مكتمل بصيغة مختلفة') return 'mid';
-    if(status==='غير مكتمل' || status==='لم يبدأ') return 'no';
-    return null;
+    const hasFile = (files||[]).some(f=>f.field_key==='f6_2');
+    if(!status) return null;
+    if(status==='غير مكتمل' || status==='لم يبدأ' || !hasFile) return 'no';
+    return 'ok'; // أي حالة "مكتمل" (وفق النموذج / تعديلات محدودة / صيغة مختلفة) تُعتبر مستوفية
   }
   if(reqKey==='market_validation'){
     const status = av['f7_1'];
@@ -3186,6 +3444,10 @@ function computeSuggestedStatus(reqKey){
     return null;
   }
   return null;
+}
+/* نسخة مختصرة تعمل على الطلب المفتوح حاليًا بلوحة التقييم */
+function computeSuggestedStatus(reqKey){
+  return computeSuggestedStatusFrom(reqKey, ansMap(), reviewDetail.members||[], reviewDetail.files||[]);
 }
 
 function renderEvalPanel(canEdit){
@@ -3365,7 +3627,7 @@ function teamTabHTML(){
 }
 
 function filesTabHTML(){
-  const { files } = reviewDetail;
+  const { files, crossDupHashes } = reviewDetail;
   if(!files.length) return `<div class="empty-hint">لا توجد ملفات مرفوعة</div>`;
   const iconFor = (mime)=> (mime||'').includes('video') ? icon('video',{size:22}) : icon('file-text',{size:22});
 
@@ -3374,14 +3636,18 @@ function filesTabHTML(){
   files.forEach(f=>{ if(f.file_hash) hashCounts[f.file_hash] = (hashCounts[f.file_hash]||0) + 1; });
 
   return `<div class="file-grid">${files.map((f,i)=>{
-    const isDup = f.file_hash && hashCounts[f.file_hash] > 1;
+    const isDupSameForm = f.file_hash && hashCounts[f.file_hash] > 1;
+    const isDupOtherForm = f.file_hash && crossDupHashes && crossDupHashes.has(f.file_hash);
+    const flagged = isDupSameForm || isDupOtherForm;
     return `
-    <div class="file-card" style="${isDup?'border-color:var(--danger);background:var(--danger-100)11':''}">
-      ${isDup ? `<div class="badge no" style="margin-bottom:8px">${icon('triangle-alert',{size:11})} ملف مكرر بنفس الطلب</div>` : ''}
+    <div class="file-card" style="${flagged?'border-color:var(--danger);background:var(--danger-100)11':''}">
+      ${isDupSameForm ? `<div class="badge no" style="margin-bottom:6px">${icon('triangle-alert',{size:11})} ملف مكرر بنفس الطلب</div>` : ''}
+      ${isDupOtherForm ? `<div class="badge no" style="margin-bottom:6px;background:var(--purple);color:#fff">${icon('triangle-alert',{size:11})} نفس الملف بطلب مشروع آخر</div>` : ''}
       <div class="fic">${iconFor(f.mime_type)}</div>
       <div class="fname">${escHtml(f.file_name)}</div>
       <div class="ffield">${findFieldLabel(f.field_key)}</div>
       <button class="btn btn-ghost btn-sm" data-viewfile="${i}">فتح الملف</button>
+      ${isDupOtherForm ? `<button class="btn btn-ghost btn-sm" data-viewdup="${f.file_hash}" style="margin-top:4px">عرض تفاصيل التكرار</button>` : ''}
     </div>
   `;}).join('')}</div>`;
 }
@@ -3396,6 +3662,13 @@ function bindFileButtons(){
       b.disabled = false; b.textContent = original;
       if(error || !data){ showToast('تعذّر فتح الملف: '+(error?.message||'')); return; }
       window.open(data.signedUrl, '_blank');
+    });
+  });
+  document.querySelectorAll('[data-viewdup]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      activeTab = 'duplicates';
+      renderTabs();
+      renderDuplicates();
     });
   });
 }
@@ -3700,6 +3973,8 @@ function renderAll(){
   if(activeTab==='analytics') renderAnalytics();
   if(activeTab==='shortlist') renderShortlist();
   if(activeTab==='duplicates') renderDuplicates();
+  if(activeTab==='qualifying') renderQualificationTab(true);
+  if(activeTab==='nonqualifying') renderQualificationTab(false);
   if(activeTab==='announcements') renderAnnouncements();
   if(activeTab==='review') renderReview();
   if(activeTab==='builder') renderBuilder();
