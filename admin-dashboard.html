@@ -2767,6 +2767,7 @@ async function renderQualificationTab(showQualifying){
   const el = document.getElementById(elId);
   el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
 
+  await loadReviewList(); // جلب طازج لحالات المراجعة البشرية أولًا — قبل أي استخدام لـjoinedReviewRows
   const submittedRows = joinedReviewRows().filter(r=>r.status==='submitted');
   await loadShortlistAutoData(submittedRows.map(r=>r.form_id)); // جلب طازج دائمًا — يعكس أي تعديل حديث بالإجابات
 
@@ -2776,7 +2777,13 @@ async function renderQualificationTab(showQualifying){
     const docStatus = classifyDocumentation(data.av, data.files);
     let candidateWithoutReg = false;
     if(docStatus==='none'){
-      candidateWithoutReg = otherReqKeys.every(k => computeSuggestedStatusFrom(k, data.av, data.members, data.files) === 'ok');
+      // نعطي الأولوية لتقييم المراجع البشري (لو موجود) على الاستيفاء التلقائي
+      // المحسوب من الإجابات الخام — لأن تقييم المراجع هو الحكم الفعلي الأحدث
+      candidateWithoutReg = otherReqKeys.every(k => {
+        const humanRow = reviewReqStatusAll.find(x=>x.form_id===r.form_id && x.requirement===k);
+        const effectiveStatus = humanRow ? humanRow.status : computeSuggestedStatusFrom(k, data.av, data.members, data.files);
+        return effectiveStatus === 'ok';
+      });
     }
     return { ...r, docStatus, linkage: checkRegistrationLinkage(data.av), candidateWithoutReg };
   });
@@ -2866,6 +2873,7 @@ async function renderShortlist(){
   const el = document.getElementById('view-shortlist');
   el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
   await loadShortlistData(); // جلب طازج دائمًا — يعكس أي تقييم ذكي جديد أو معاد توليده
+  await loadReviewList(); // جلب طازج لحالات المراجعة البشرية — يعكس أي تقييم يدوي جديد
   const submittedRows = joinedReviewRows().filter(r=>r.status==='submitted');
   el.innerHTML = `<div class="empty-hint">جارٍ حساب الاستيفاء التلقائي لكل الطلبات…</div>`;
   await loadShortlistAutoData(submittedRows.map(r=>r.form_id)); // جلب طازج دائمًا — يعكس أي تعديل حديث بالإجابات
