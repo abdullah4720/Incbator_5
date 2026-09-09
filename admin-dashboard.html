@@ -3267,9 +3267,34 @@ function closeBatchProgressModal(){
   restoreConfirmModal();
 }
 
+function showBatchSummary(done, failed, targets, errorCounts, wasCancelled){
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '520px';
+  const errorRows = Object.entries(errorCounts).sort((a,b)=>b[1]-a[1]);
+  box.innerHTML = `
+    <h3>${icon(failed?'triangle-alert':'check',{size:15})} ${wasCancelled?'تم إيقاف التقييم الدفعي':'اكتمل التقييم الدفعي'}</h3>
+    <p>${done-failed} نجح من ${targets.length}${failed?` — ${failed} فشل`:''}</p>
+    ${errorRows.length ? `
+    <div style="max-height:260px;overflow-y:auto;margin-top:10px">
+      ${errorRows.map(([msg,count])=>`
+        <div class="req-banner" style="margin-bottom:8px;word-break:break-word">
+          <b>(${count})</b>&nbsp;${escHtml(msg)}
+        </div>
+      `).join('')}
+    </div>` : ''}
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="batchSummaryClose">إغلاق</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('batchSummaryClose').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+}
+
 async function runBatchEvaluation(targets){
   showBatchProgressModal(targets.length);
-  let done=0, failed=0, firstErrorMsg=null;
+  let done=0, failed=0;
+  const errorCounts = {};
   for(const r of targets){
     if(batchCancelled) break;
     try{
@@ -3285,19 +3310,20 @@ async function runBatchEvaluation(targets){
             form_id: r.form_id, evaluation: data.evaluation, model:'claude-sonnet-4-6', generated_by: currentAdmin.id,
           });
           if(saveErr) throw saveErr;
-        } else failed++;
-      } else failed++;
-    }catch(e){ failed++; if(!firstErrorMsg) firstErrorMsg = e.message; }
+        } else throw new Error('رد غير متوقع من الخادم (بدون evaluation)');
+      } else throw new Error('لا توجد إجابات كافية لهذا الطلب');
+    }catch(e){
+      failed++;
+      const msg = e.message || 'خطأ غير معروف';
+      errorCounts[msg] = (errorCounts[msg]||0) + 1;
+    }
     done++;
     updateBatchProgress(done, targets.length, failed);
     if(!batchCancelled) await new Promise(res=>setTimeout(res, 1200));
   }
-  closeBatchProgressModal();
   aiEvalCache = {};
   shortlistEvals = null;
-  showToast(batchCancelled
-    ? `تم إيقاف التقييم — اكتمل ${done-failed} من ${targets.length}`
-    : `اكتمل التقييم الدفعي: ${done-failed} نجح من ${targets.length}` + (failed ? ` — ${failed} فشل. أول سبب: ${firstErrorMsg}` : ''));
+  showBatchSummary(done, failed, targets, errorCounts, batchCancelled);
 }
 
 function openReviewDetail(projectId){
