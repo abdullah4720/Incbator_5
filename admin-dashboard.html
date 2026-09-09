@@ -2743,11 +2743,12 @@ function classifyPreliminary(autoCount, aiScore){
    تجاري. لا علاقة له بدرجة الذكاء الاصطناعي أو الاستيفاء التلقائي العام —
    مرتبط حصرًا بوجود هذه المستندات بالذات. */
 function classifyDocumentation(av, files){
-  const hasRegFile = (files||[]).some(f=>f.field_key==='f2_8');
-  if(hasRegFile) return 'full';
-  const altKey = findFieldKeyByLabel(['شراكة', 'ملكية فكرية']);
-  const hasAltFile = altKey && (files||[]).some(f=>f.field_key===altKey);
-  if(hasAltFile) return 'partial';
+  const hasCommercial = av['f2_1'] === 'نعم';
+  const ipKey = findFieldKeyByLabel(['حماية للملكية الفكرية', 'شراكة مع جهات حكومية']);
+  const hasIpPartnership = ipKey ? av[ipKey] === 'نعم' : false;
+
+  if(hasCommercial && hasIpPartnership) return 'full';
+  if(hasCommercial || hasIpPartnership) return 'partial';
   return 'none';
 }
 
@@ -2787,17 +2788,17 @@ async function renderQualificationTab(showQualifying){
   el.innerHTML = `
     <div class="section-title-row">
       <div><h2>${showQualifying?'المشاريع المستوفية':'المشاريع غير المستوفية'}</h2>
-      <p>تصنيف مستندي مباشر بناءً على وجود السجل التجاري أو بديله (إثبات شراكة أو ملكية فكرية) — منفصل عن درجة الذكاء الاصطناعي.</p></div>
+      <p>يُعتبر المشروع مستوفيًا لو أجاب بـ"نعم" على أحد سؤالي: وجود سجل تجاري، أو وجود حماية للملكية الفكرية/شراكة حكومية أو خاصة — منفصل عن درجة الذكاء الاصطناعي.</p></div>
       <button class="btn btn-ghost" id="refreshQualBtn">تحديث</button>
     </div>
 
     <div class="grid kpi-row" style="margin-bottom:18px">
       <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">${icon('check',{size:18})}</div>
-        <div class="kval mono">${fullCount}</div><div class="klabel">مستوفٍ كامل (سجل تجاري)</div></div>
+        <div class="kval mono">${fullCount}</div><div class="klabel">مستوفٍ كامل (أجاب بنعم على الاثنين)</div></div>
       <div class="card kpi-card"><div class="kicon" style="background:var(--amber-100);color:var(--amber)">${icon('triangle-alert',{size:18})}</div>
-        <div class="kval mono">${partialCount}</div><div class="klabel">مستوفٍ جزئيًا (شراكة/ملكية فكرية)</div></div>
+        <div class="kval mono">${partialCount}</div><div class="klabel">لم يستكمل جميع المتطلبات (أجاب بنعم على واحد فقط)</div></div>
       <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">${icon('x',{size:18})}</div>
-        <div class="kval mono">${noneCount}</div><div class="klabel">غير مستوفٍ</div></div>
+        <div class="kval mono">${noneCount}</div><div class="klabel">غير مستوفٍ (لا على الاثنين)</div></div>
       ${showQualifying ? `<div class="card kpi-card"><div class="kicon" style="background:var(--purple-100);color:var(--purple)">${icon('users',{size:18})}</div>
         <div class="kval mono">${weakLinkageCount}</div><div class="klabel">قائد الفريق "عضو" فقط بالمنشأة — يحتاج تحقق ارتباط</div></div>` : ''}
     </div>
@@ -2815,7 +2816,7 @@ async function renderQualificationTab(showQualifying){
             <td class="mono">${escHtml(r.project_id)}</td>
             <td>${escHtml(r.project_name)}</td>
             <td>${escHtml(r.track)}</td>
-            ${showQualifying?`<td><span class="badge ${r.docStatus==='full'?'ok':'mid'}">${r.docStatus==='full'?'مستوفٍ كامل':'مستوفٍ جزئيًا'}</span></td>
+            ${showQualifying?`<td><span class="badge ${r.docStatus==='full'?'ok':'mid'}">${r.docStatus==='full'?'مستوفٍ كامل':'لم يستكمل جميع المتطلبات'}</span></td>
             <td>${r.linkage==='weak' ? `<span class="badge no">${icon('triangle-alert',{size:10})} يحتاج تحقق ارتباط</span>` : r.linkage==='strong' ? `<span class="badge ok">مرتبط مباشرة</span>` : '—'}</td>`:''}
             <td><button class="btn btn-ghost btn-sm" data-openreview="${r.project_id}">فتح</button></td>
           </tr>`).join('')}
