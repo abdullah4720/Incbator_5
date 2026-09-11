@@ -777,7 +777,8 @@ function applyJdFilters(rows){
 /* يجلب المجال (f1_4) لكل نموذج دفعة واحدة — يُستخدم بكلا القائمتين لأغراض الفلترة */
 async function fetchDomainsForForms(formIds){
   if(!formIds.length) return {};
-  const { data } = await sb.from('form_answers').select('form_id, value_text').eq('field_key','f1_4').in('form_id', formIds);
+  const { data, error } = await sb.from('form_answers').select('form_id, value_text').eq('field_key','f1_4').in('form_id', formIds);
+  if(error){ console.error('[بوابة المحكّم] تعذّر جلب المجالات للفلترة:', error.message, error); }
   const map = {}; (data||[]).forEach(a=>{ map[a.form_id] = a.value_text; });
   return map;
 }

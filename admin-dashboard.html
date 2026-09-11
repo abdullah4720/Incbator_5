@@ -40,9 +40,17 @@ button,select,input,textarea{font-family:inherit;}
 .admin-chip{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:6px 14px;font-size:12px;display:flex;align-items:center;gap:8px;flex:none;}
 .admin-chip .av{width:22px;height:22px;border-radius:50%;background:var(--teal-500);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;}
 
-.tabs{max-width:1320px;margin:0 auto;display:flex;gap:4px;margin-top:14px;overflow-x:auto;}
+.tabs{max-width:1320px;margin:0 auto;display:flex;gap:4px;margin-top:14px;flex-wrap:wrap;}
 .tab-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.65);border-radius:10px 10px 0 0;padding:10px 18px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;}
 .tab-btn.active{background:var(--paper);color:var(--navy-800);border-color:var(--paper);}
+
+.tab-dropdown{position:relative;}
+.tab-group-btn{display:flex;align-items:center;gap:5px;}
+.tab-dropdown-menu{display:none;position:absolute;top:100%;right:0;z-index:50;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px rgba(18,16,60,.16);padding:6px;min-width:180px;margin-top:4px;}
+.tab-dropdown-menu.open{display:block;}
+.tab-dropdown-item{display:block;width:100%;text-align:right;background:none;border:none;border-radius:7px;padding:9px 12px;font-size:13px;color:var(--ink-900);cursor:pointer;font-family:inherit;white-space:nowrap;}
+.tab-dropdown-item:hover{background:var(--paper);}
+.tab-dropdown-item.active{background:var(--teal-100);color:var(--teal-700);font-weight:700;}
 
 /* ===== layout ===== */
 .wrap{max-width:1320px;margin:0 auto;padding:26px;}
@@ -460,6 +468,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
 const LUCIDE_ICONS = {
   "chevron-up": `<path d="m18 15-6-6-6 6" />`,
   "folder": `<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />`,
+  "repeat": `<path d="m17 2 4 4-4 4" /> <path d="M3 11v-1a4 4 0 0 1 4-4h14" /> <path d="m7 22-4-4 4-4" /> <path d="M21 13v1a4 4 0 0 1-4 4H3" />`,
   "sparkles": `<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" /> <path d="M20 2v4" /> <path d="M22 4h-4" /> <circle cx="4" cy="20" r="2" />`,
   "megaphone": `<path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" /> <path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14" /> <path d="M8 6v8" />`,
   "bar-chart-3": `<path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" />`,
@@ -827,15 +836,56 @@ const TABS = [
 function visibleTabs(){
   return TABS.filter(t => !t.adminOnly || (currentAdmin && currentAdmin.role === 'admin'));
 }
+
+/* تجميع منطقي للتبويبات — العناصر الأساسية تظهر دائمًا بالشريط، والباقي
+   يُصنَّف بقوائم منسدلة قصيرة بدل شريط طويل يحتاج تمريرًا أفقيًا */
+const TAB_GROUPS = [
+  { primary: true, tabs: ['dashboard','review','judging'] },
+  { id:'verify', label:'التحقق والفرز', tabs: ['shortlist','duplicates','qualifying','nonqualifying'] },
+  { id:'reports', label:'التقارير', tabs: ['report','analytics'] },
+  { id:'admin', label:'الإدارة', tabs: ['builder','eligibility','users','announcements','settings'] },
+];
+
 function renderTabs(){
   const tabs = visibleTabs();
   if(!tabs.find(t=>t.id===activeTab)) activeTab = tabs[0].id;
-  document.getElementById('tabs').innerHTML = tabs.map(t=>`
-    <button class="tab-btn ${activeTab===t.id?'active':''}" data-tab="${t.id}">${t.l}</button>
-  `).join('');
+  const tabById = {}; tabs.forEach(t=>{ tabById[t.id] = t; });
+
+  let html = '';
+  TAB_GROUPS.forEach(group=>{
+    const groupTabs = group.tabs.map(id=>tabById[id]).filter(Boolean);
+    if(!groupTabs.length) return;
+    if(group.primary){
+      html += groupTabs.map(t=>`<button class="tab-btn ${activeTab===t.id?'active':''}" data-tab="${t.id}">${t.l}</button>`).join('');
+    } else {
+      const isActiveGroup = groupTabs.some(t=>t.id===activeTab);
+      html += `<div class="tab-dropdown">
+        <button class="tab-btn tab-group-btn ${isActiveGroup?'active':''}" data-groupbtn="${group.id}">${group.label} ${icon('chevron-down',{size:13})}</button>
+        <div class="tab-dropdown-menu" id="tabgroup-${group.id}">
+          ${groupTabs.map(t=>`<button class="tab-dropdown-item ${activeTab===t.id?'active':''}" data-tab="${t.id}">${t.l}</button>`).join('')}
+        </div>
+      </div>`;
+    }
+  });
+  document.getElementById('tabs').innerHTML = html;
+
   document.querySelectorAll('[data-tab]').forEach(b=>{
     b.addEventListener('click',()=>{ activeTab=b.dataset.tab; renderAll(); });
   });
+  document.querySelectorAll('[data-groupbtn]').forEach(b=>{
+    b.addEventListener('click', e=>{
+      e.stopPropagation();
+      const menu = document.getElementById('tabgroup-'+b.dataset.groupbtn);
+      const wasOpen = menu.classList.contains('open');
+      document.querySelectorAll('.tab-dropdown-menu').forEach(m=>m.classList.remove('open'));
+      if(!wasOpen) menu.classList.add('open');
+    });
+  });
+  if(!window.__tabDropdownOutsideBound){
+    window.__tabDropdownOutsideBound = true;
+    document.addEventListener('click', ()=>{ document.querySelectorAll('.tab-dropdown-menu').forEach(m=>m.classList.remove('open')); });
+  }
+
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+activeTab).classList.add('active');
 }
@@ -1848,29 +1898,52 @@ function openCriterionModal(existing){
 /* ---------------- المحكّمون ---------------- */
 async function renderJudgingJudges(){
   const content = document.getElementById('judgingSubContent');
+  content.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  await ensureRoundsLoaded();
+
   const { data, error } = await sb.from('judges').select('*').order('created_at');
   if(error){ content.innerHTML = `<div class="empty-hint">تعذّر التحميل: ${error.message}</div>`; return; }
   JUDGES_CACHE = data || [];
 
+  // إحصاءات لكل محكّم بالجولة الحالية (لو محدَّدة) — فرق/لجان معيَّنة ودرجات مسجَّلة
+  let assignCountByJudge = {}, evalCountByJudge = {};
+  if(CURRENT_ADMIN_ROUND_ID){
+    const [{data: assignments}, {data: evals}] = await Promise.all([
+      sb.from('judge_assignments').select('judge_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+      sb.from('judge_evaluations').select('judge_id').eq('round_id', CURRENT_ADMIN_ROUND_ID).eq('is_submitted', true),
+    ]);
+    (assignments||[]).forEach(a=>{ assignCountByJudge[a.judge_id] = (assignCountByJudge[a.judge_id]||0)+1; });
+    (evals||[]).forEach(e=>{ evalCountByJudge[e.judge_id] = (evalCountByJudge[e.judge_id]||0)+1; });
+  }
+
   content.innerHTML = `
+    ${roundSelectorHTML()}
     <div style="text-align:left;margin-bottom:14px"><button class="btn btn-primary btn-sm" id="addJudgeBtn">+ إضافة محكّم</button></div>
     ${JUDGES_CACHE.length===0 ? `<div class="empty-hint">لا يوجد محكّمون بعد</div>` : `
     <div class="card"><div class="table-wrap"><table>
-      <thead><tr><th>الاسم</th><th>البريد</th><th>الجوال</th><th>كلمة المرور</th><th>الحالة</th><th></th></tr></thead>
+      <thead><tr><th>المحكّم</th><th>المسمى الوظيفي/التخصص</th><th>فرق معيَّنة</th><th>درجات مسجَّلة</th><th>كلمة المرور</th><th>الحالة</th><th></th></tr></thead>
       <tbody>${JUDGES_CACHE.map(j=>`<tr>
-        <td><b>${escHtml(j.full_name)}</b></td>
-        <td class="mono">${escHtml(j.email)}</td>
-        <td class="mono">${escHtml(j.phone)}</td>
+        <td><b>${escHtml(j.full_name)}</b><div style="font-size:11px;color:var(--ink-400)" class="mono">${escHtml(j.email)}</div></td>
+        <td style="font-size:12.5px;color:var(--ink-600)">${escHtml(j.job_title)||'—'}</td>
+        <td class="mono">${assignCountByJudge[j.id]||0}</td>
+        <td class="mono">${evalCountByJudge[j.id]||0}</td>
         <td>${j.password_hash ? `<span class="badge ok">أنشأها</span>` : `<span class="badge mid">لم يُنشئها بعد</span>`}</td>
         <td><span class="badge ${j.is_active?'ok':'no'}">${j.is_active?'نشط':'موقوف'}</span></td>
-        <td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-ghost btn-sm" data-editjudge="${j.id}">تعديل</button>
+          <button class="btn btn-ghost btn-sm" data-swapjudgeglobal="${j.id}">${icon('repeat',{size:12})} استبدال</button>
+          <button class="btn btn-ghost btn-sm" data-manageassign="${j.id}">إدارة الإسناد</button>
           <button class="btn btn-ghost btn-sm" data-resetjudge="${j.id}">تصفير كلمة المرور</button>
           <button class="btn btn-ghost btn-sm" data-togglejudge="${j.id}">${j.is_active?'إيقاف':'تفعيل'}</button>
         </td>
       </tr>`).join('')}</tbody>
     </table></div></div>`}
   `;
-  document.getElementById('addJudgeBtn').addEventListener('click', openJudgeModal);
+  bindRoundSelector(renderJudgingJudges);
+  document.getElementById('addJudgeBtn').addEventListener('click', ()=>openJudgeModal(null));
+  content.querySelectorAll('[data-editjudge]').forEach(b=>{
+    b.addEventListener('click', ()=>openJudgeModal(JUDGES_CACHE.find(j=>j.id===b.dataset.editjudge)));
+  });
   content.querySelectorAll('[data-resetjudge]').forEach(b=>{
     b.addEventListener('click', ()=>{
       openConfirm('سيُصفَّر هذا الإجراء كلمة مرور المحكّم — يحتاج ينشئ كلمة مرور جديدة عند دخوله التالي. متابعة؟', async ()=>{
@@ -1888,18 +1961,118 @@ async function renderJudgingJudges(){
       showToast('تم التحديث'); renderJudgingJudges();
     });
   });
+  content.querySelectorAll('[data-swapjudgeglobal]').forEach(b=>{
+    b.addEventListener('click', ()=>openGlobalSwapJudgeModal(JUDGES_CACHE.find(j=>j.id===b.dataset.swapjudgeglobal), JUDGES_CACHE));
+  });
+  content.querySelectorAll('[data-manageassign]').forEach(b=>{
+    b.addEventListener('click', ()=>openManageJudgeAssignmentsModal(JUDGES_CACHE.find(j=>j.id===b.dataset.manageassign)));
+  });
 }
 
-function openJudgeModal(){
+/* استبدال شامل — ينقل كل شيء (عضوية اللجان + التكليفات الفردية) من محكّم
+   لآخر بالجولة الحالية، بدون حذف أي تقييم سابق أرسله المحكّم القديم فعليًا */
+function openGlobalSwapJudgeModal(oldJudge, allJudges){
+  if(!CURRENT_ADMIN_ROUND_ID){ showToast('اختر جولة أولًا'); return; }
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '420px';
+  const candidates = allJudges.filter(j=>j.id!==oldJudge.id);
+  box.innerHTML = `
+    <h3>${icon('repeat',{size:15})} استبدال "${escHtml(oldJudge.full_name)}"</h3>
+    <p>ينقل كل عضوية لجان وتكليفات هذا المحكّم بالجولة الحالية للمحكّم البديل. التقييمات اللي أرسلها فعليًا تبقى محفوظة كسجل تاريخي.</p>
+    <select id="globalSwapSelect" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;margin:10px 0">
+      ${candidates.map(j=>`<option value="${j.id}">${escHtml(j.full_name)}</option>`).join('')}
+    </select>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="globalSwapCancel">إلغاء</button>
+      <button class="btn btn-primary" id="globalSwapConfirm">استبدال</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('globalSwapCancel').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('globalSwapConfirm').addEventListener('click', async ()=>{
+    const newJudgeId = document.getElementById('globalSwapSelect').value;
+    if(!newJudgeId){ showToast('اختر محكّمًا بديلًا'); return; }
+    const btn = document.getElementById('globalSwapConfirm');
+    btn.disabled = true; btn.textContent = 'جارٍ الاستبدال…';
+
+    // 1) عضوية اللجان بهذه الجولة
+    const { data: myCommittees } = await sb.from('judging_committees').select('id').eq('round_id', CURRENT_ADMIN_ROUND_ID);
+    const committeeIds = (myCommittees||[]).map(c=>c.id);
+    if(committeeIds.length){
+      const { data: myMemberships } = await sb.from('committee_members').select('committee_id').eq('judge_id', oldJudge.id).in('committee_id', committeeIds);
+      for(const m of (myMemberships||[])){
+        await sb.from('committee_members').delete().eq('committee_id', m.committee_id).eq('judge_id', oldJudge.id);
+        await sb.from('committee_members').insert({ committee_id: m.committee_id, judge_id: newJudgeId });
+      }
+    }
+    // 2) التكليفات الفردية بهذه الجولة
+    const { data: myAssignments } = await sb.from('judge_assignments').select('form_id').eq('judge_id', oldJudge.id).eq('round_id', CURRENT_ADMIN_ROUND_ID);
+    const formIds = (myAssignments||[]).map(a=>a.form_id);
+    if(formIds.length){
+      await sb.from('judge_assignments').delete().eq('judge_id', oldJudge.id).eq('round_id', CURRENT_ADMIN_ROUND_ID);
+      await sb.from('judge_assignments').upsert(formIds.map(fid=>({ judge_id: newJudgeId, form_id: fid, round_id: CURRENT_ADMIN_ROUND_ID, assigned_by: currentAdmin.id })), { onConflict: 'judge_id,form_id,round_id' });
+    }
+
+    modal.classList.remove('show'); restoreConfirmModal();
+    showToast('تم الاستبدال بنجاح'); renderJudgingJudges();
+  });
+}
+
+/* إدارة إسناد فردية — يعرض كل المشاريع المُسندة لهذا المحكّم بالجولة الحالية
+   مع إمكانية إزالة أي مشروع بعينه بدون التأثير على باقي إسناداته */
+async function openManageJudgeAssignmentsModal(judge){
+  if(!CURRENT_ADMIN_ROUND_ID){ showToast('اختر جولة أولًا'); return; }
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '460px';
+  box.innerHTML = `<h3>إسناد "${escHtml(judge.full_name)}"</h3><div class="empty-hint">جارٍ التحميل…</div>`;
+  modal.classList.add('show');
+
+  const { data: assignments } = await sb.from('judge_assignments').select('form_id').eq('judge_id', judge.id).eq('round_id', CURRENT_ADMIN_ROUND_ID);
+  const formIds = (assignments||[]).map(a=>a.form_id);
+  const rows = joinedReviewRows();
+  const rowsMap = {}; rows.forEach(r=>{ rowsMap[r.form_id] = r; });
+
+  box.innerHTML = `
+    <h3>إسناد "${escHtml(judge.full_name)}" (${formIds.length} مشروعًا)</h3>
+    ${formIds.length===0 ? `<div class="empty-hint">لا توجد مشاريع مُسندة لهذا المحكّم بهذه الجولة</div>` : `
+    <div style="max-height:300px;overflow-y:auto;margin:12px 0">
+      ${formIds.map(fid=>{
+        const r = rowsMap[fid];
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px">
+          <span>${r?escHtml(r.project_id)+' — '+escHtml(r.project_name):fid}</span>
+          <button class="btn btn-ghost btn-sm" data-removeassign="${fid}">إزالة</button>
+        </div>`;
+      }).join('')}
+    </div>`}
+    <div class="modal-actions"><button class="btn btn-primary" id="manageAssignClose">إغلاق</button></div>
+  `;
+  document.getElementById('manageAssignClose').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  box.querySelectorAll('[data-removeassign]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      openConfirm('إزالة هذا المشروع من إسناد المحكّم؟ لا يمس أي تقييم سبق وأرسله.', async ()=>{
+        const { error } = await sb.from('judge_assignments').delete().eq('judge_id', judge.id).eq('round_id', CURRENT_ADMIN_ROUND_ID).eq('form_id', b.dataset.removeassign);
+        if(error){ showToast('تعذّر الإزالة: '+error.message); return; }
+        showToast('تمت الإزالة');
+        modal.classList.remove('show'); restoreConfirmModal();
+        renderJudgingJudges();
+      });
+    });
+  });
+}
+
+function openJudgeModal(existing){
   const modal = document.getElementById('confirmModal');
   const box = modal.querySelector('.modal-box');
   box.style.maxWidth = '440px';
   box.innerHTML = `
-    <h3>إضافة محكّم جديد</h3>
-    <div class="field-inline"><label class="flabel">الاسم الكامل</label><input type="text" id="jName"></div>
-    <div class="field-inline"><label class="flabel">البريد الإلكتروني</label><input type="email" id="jEmail"></div>
-    <div class="field-inline"><label class="flabel">رقم الجوال</label><input type="text" id="jPhone" placeholder="05xxxxxxxx"></div>
-    <div class="req-banner">المحكّم يُنشئ كلمة مروره بنفسه عند أول دخول لبوابة المحكّمين (judge-portal.html) باستخدام هذا البريد والجوال بالضبط.</div>
+    <h3>${existing?'تعديل محكّم':'إضافة محكّم جديد'}</h3>
+    <div class="field-inline"><label class="flabel">الاسم الكامل</label><input type="text" id="jName" value="${existing?escHtml(existing.full_name):''}"></div>
+    <div class="field-inline"><label class="flabel">البريد الإلكتروني</label><input type="email" id="jEmail" value="${existing?escHtml(existing.email):''}"></div>
+    <div class="field-inline"><label class="flabel">رقم الجوال</label><input type="text" id="jPhone" placeholder="05xxxxxxxx" value="${existing?escHtml(existing.phone):''}"></div>
+    <div class="field-inline"><label class="flabel">المسمى الوظيفي / التخصص (اختياري)</label><input type="text" id="jJobTitle" placeholder="مثال: مدير أول تطوير أعمال" value="${existing?escHtml(existing.job_title||''):''}"></div>
+    ${!existing ? `<div class="req-banner">المحكّم يُنشئ كلمة مروره بنفسه عند أول دخول لبوابة المحكّمين (judge-portal.html) باستخدام هذا البريد والجوال بالضبط.</div>` : ''}
     <div class="modal-actions">
       <button class="btn btn-ghost" id="jCancel">إلغاء</button>
       <button class="btn btn-primary" id="jSave">حفظ</button>
@@ -1911,11 +2084,14 @@ function openJudgeModal(){
     const full_name = document.getElementById('jName').value.trim();
     const email = document.getElementById('jEmail').value.trim().toLowerCase();
     const phone = document.getElementById('jPhone').value.trim();
+    const job_title = document.getElementById('jJobTitle').value.trim();
     if(!full_name || !email || !phone){ showToast('عبّئ كل الحقول'); return; }
-    const { error } = await sb.from('judges').insert({ full_name, email, phone }).select().single();
+    let error;
+    if(existing){ ({ error } = await sb.from('judges').update({ full_name, email, phone, job_title: job_title||null }).eq('id', existing.id)); }
+    else { ({ error } = await sb.from('judges').insert({ full_name, email, phone, job_title: job_title||null }).select().single()); }
     if(error){ showToast('تعذّر الحفظ: '+error.message); return; }
     modal.classList.remove('show'); restoreConfirmModal();
-    showToast('تمت إضافة المحكّم'); renderJudgingJudges();
+    showToast(existing?'تم التحديث':'تمت إضافة المحكّم'); renderJudgingJudges();
   });
 }
 
