@@ -4006,6 +4006,10 @@ async function renderQualificationTab(showQualifying){
       <button class="btn btn-ghost" id="refreshQualBtn">تحديث</button>
     </div>
 
+    <div class="req-banner" style="margin-bottom:16px;font-family:monospace;font-size:11.5px;direction:ltr;text-align:left">
+      🔍 DEBUG — submittedRows: ${submittedRows.length} | reviewReqStatusAll (all): ${reviewReqStatusAll.length} | reviewReqStatusAll (commercial_registration): ${reviewReqStatusAll.filter(x=>x.requirement==='commercial_registration').length} | reviewReqStatusAll (commercial_registration, status=ok): ${reviewReqStatusAll.filter(x=>x.requirement==='commercial_registration' && x.status==='ok').length} | classified: ${classified.length} | plus+commercial_only+ip_only: ${plusCount+commercialOnlyCount+ipOnlyCount}
+    </div>
+
     <div class="grid kpi-row" style="margin-bottom:18px">
       <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('sparkles',{size:18})}</div>
         <div class="kval mono">${plusCount}</div><div class="klabel">مستوفٍ ++ (سجل تجاري وشراكة/ملكية فكرية معًا)</div></div>
