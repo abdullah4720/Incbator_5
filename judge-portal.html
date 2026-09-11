@@ -743,6 +743,20 @@ function renderCriteriaSummary(){
   document.getElementById('jdCritSummaryToggle').addEventListener('click', toggle);
 }
 
+/* ينفّذ استعلامًا يحتوي .in() على دفعات صغيرة (افتراضيًا 40) بدل رابط واحد
+   ضخم يحتوي كل المعرّفات دفعة وحدة — روابط طويلة جدًا قد تُقصّ صمتًا من قبل
+   خادم أو وسيط شبكة، فتضيع بيانات بعض الصفوف دون أي خطأ ظاهر. queryFn يأخذ
+   جزءًا من المعرّفات ويرجع Promise لنتيجة Supabase. */
+async function chunkedInQuery(ids, queryFn, chunkSize){
+  chunkSize = chunkSize || 40;
+  if(!ids.length) return [];
+  const chunks = [];
+  for(let i=0; i<ids.length; i+=chunkSize) chunks.push(ids.slice(i, i+chunkSize));
+  const results = await Promise.all(chunks.map(queryFn));
+  results.forEach(r=>{ if(r && r.error) console.error('[بوابة المحكّم] خطأ باستعلام مُقسَّم:', r.error.message, r.error); });
+  return results.flatMap(r=>(r && r.data) || []);
+}
+
 let JD_FILTERS = { track:'', domain:'', status:'', search:'' };
 
 function buildFilterBarHTML(rows, showStatusFilter, matchedCount){
@@ -810,12 +824,17 @@ function applyJdFilters(rows){
     return true;
   });
 }
-/* يجلب المجال (f1_4) لكل نموذج دفعة واحدة — يُستخدم بكلا القائمتين لأغراض الفلترة */
+/* يجلب المجال (f1_4) لكل نموذج — على دفعات صغيرة بدل رابط واحد ضخم قد
+   يُقصّ صمتًا من قبل خادم أو وسيط شبكة لو كان عدد المشاريع كبيرًا */
 async function fetchDomainsForForms(formIds){
   if(!formIds.length) return {};
-  const { data, error } = await sb.from('form_answers').select('form_id, value_text').eq('field_key','f1_4').in('form_id', formIds);
-  if(error){ console.error('[بوابة المحكّم] تعذّر جلب المجالات للفلترة:', error.message, error); }
-  const map = {}; (data||[]).forEach(a=>{ map[a.form_id] = a.value_text; });
+  const CHUNK_SIZE = 40;
+  const chunks = [];
+  for(let i=0; i<formIds.length; i+=CHUNK_SIZE) chunks.push(formIds.slice(i, i+CHUNK_SIZE));
+  const results = await Promise.all(chunks.map(c=>sb.from('form_answers').select('form_id, value_text').eq('field_key','f1_4').in('form_id', c)));
+  results.forEach(r=>{ if(r.error) console.error('[بوابة المحكّم] تعذّر جلب المجالات للفلترة:', r.error.message, r.error); });
+  const data = results.flatMap(r=>r.data||[]);
+  const map = {}; data.forEach(a=>{ map[a.form_id] = a.value_text; });
   return map;
 }
 
@@ -890,10 +909,10 @@ async function loadProjectLists(){
     return;
   }
 
-  const { data: forms } = await sb.from('verification_forms').select('id, project_id, status').in('id', allFormIds);
+  const forms = await chunkedInQuery(allFormIds, c=>sb.from('verification_forms').select('id, project_id, status').in('id', c));
   const projectIds = [...new Set((forms||[]).map(f=>f.project_id))];
-  const [{data: projects}, domainMap, {data: myEvals}] = await Promise.all([
-    sb.from('eligible_projects').select('project_id, project_name, track').in('project_id', projectIds),
+  const [projects, domainMap, {data: myEvals}] = await Promise.all([
+    chunkedInQuery(projectIds, c=>sb.from('eligible_projects').select('project_id, project_name, track').in('project_id', c)),
     fetchDomainsForForms(allFormIds),
     sb.from('judge_evaluations').select('form_id, is_submitted').eq('judge_id', CURRENT_JUDGE_ID).eq('round_id', CURRENT_ROUND_ID),
   ]);
@@ -955,12 +974,17 @@ async function fetchQualifyingFormIds(formIds, questions){
   if(!formIds.length) return new Set();
   const ipKey = findFieldKeyByLabelJD(questions, ['حماية للملكية الفكرية', 'شراكة مع جهات حكومية']);
   const fieldKeys = ipKey ? ['f2_1', ipKey] : ['f2_1'];
-  const [{ data, error }, { data: reqStatus, error: reqError }] = await Promise.all([
-    sb.from('form_answers').select('form_id, field_key, value_text').in('field_key', fieldKeys).in('form_id', formIds),
-    sb.from('requirement_status').select('form_id, status').eq('requirement', 'commercial_registration').in('form_id', formIds),
-  ]);
-  if(error){ console.error('[بوابة المحكّم] تعذّر جلب حالة الاستيفاء:', error.message, error); }
-  if(reqError){ console.error('[بوابة المحكّم] تعذّر جلب مراجعة السجل التجاري اليدوية:', reqError.message, reqError); }
+  const CHUNK_SIZE = 40;
+  const chunks = [];
+  for(let i=0; i<formIds.length; i+=CHUNK_SIZE) chunks.push(formIds.slice(i, i+CHUNK_SIZE));
+
+  const answerResults = await Promise.all(chunks.map(c=>sb.from('form_answers').select('form_id, field_key, value_text').in('field_key', fieldKeys).in('form_id', c)));
+  const reqResults = await Promise.all(chunks.map(c=>sb.from('requirement_status').select('form_id, status').eq('requirement', 'commercial_registration').in('form_id', c)));
+  answerResults.forEach(r=>{ if(r.error) console.error('[بوابة المحكّم] تعذّر جلب حالة الاستيفاء:', r.error.message, r.error); });
+  reqResults.forEach(r=>{ if(r.error) console.error('[بوابة المحكّم] تعذّر جلب مراجعة السجل التجاري اليدوية:', r.error.message, r.error); });
+  const data = answerResults.flatMap(r=>r.data||[]);
+  const reqStatus = reqResults.flatMap(r=>r.data||[]);
+
   const byForm = {};
   (data||[]).forEach(a=>{ (byForm[a.form_id] = byForm[a.form_id]||{})[a.field_key] = a.value_text; });
   // مراجعة المدقق اليدوية على "السجل التجاري" لها الأولوية على الإجابة الخام —
@@ -993,8 +1017,8 @@ async function loadAllProjectsView(){
 
   const projectIds = [...new Set(forms.map(f=>f.project_id))];
   const formIds = forms.map(f=>f.id);
-  const [{data: projects}, domainMap] = await Promise.all([
-    sb.from('eligible_projects').select('project_id, project_name, track').in('project_id', projectIds),
+  const [projects, domainMap] = await Promise.all([
+    chunkedInQuery(projectIds, c=>sb.from('eligible_projects').select('project_id, project_name, track').in('project_id', c)),
     fetchDomainsForForms(formIds),
   ]);
   const projMap = {}; (projects||[]).forEach(p=>{ projMap[p.project_id] = p; });
