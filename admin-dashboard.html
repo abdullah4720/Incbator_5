@@ -3903,11 +3903,21 @@ async function loadShortlistData(){
    المجال ومقر المعسكر لأغراض الفلاتر، بدون أي استدعاء ذكاء اصطناعي. */
 async function loadShortlistAutoData(formIds){
   if(!formIds.length){ shortlistAutoData = {}; return; }
-  const [{data:answers}, {data:members}, {data:files}] = await Promise.all([
-    sb.from('form_answers').select('form_id, field_key, value_text, value_json').in('form_id', formIds),
-    sb.from('team_members').select('form_id').in('form_id', formIds),
-    sb.from('form_files').select('form_id, field_key').in('form_id', formIds).is('deleted_at', null),
-  ]);
+  // نرسل الطلب على دفعات صغيرة بدل رابط واحد ضخم يحتوي كل المعرّفات — روابط
+  // طويلة جدًا (مئات المعرّفات) قد تُقصّ صمتًا من قبل خادم أو وسيط شبكة،
+  // فيضيع جزء من البيانات دون أي خطأ ظاهر
+  const CHUNK_SIZE = 40;
+  const chunks = [];
+  for(let i=0; i<formIds.length; i+=CHUNK_SIZE) chunks.push(formIds.slice(i, i+CHUNK_SIZE));
+
+  const answerChunks = await Promise.all(chunks.map(c=>sb.from('form_answers').select('form_id, field_key, value_text, value_json').in('form_id', c)));
+  const memberChunks = await Promise.all(chunks.map(c=>sb.from('team_members').select('form_id').in('form_id', c)));
+  const fileChunks = await Promise.all(chunks.map(c=>sb.from('form_files').select('form_id, field_key').in('form_id', c).is('deleted_at', null)));
+
+  const answers = answerChunks.flatMap(r=>r.data||[]);
+  const members = memberChunks.flatMap(r=>r.data||[]);
+  const files = fileChunks.flatMap(r=>r.data||[]);
+
   const byForm = {};
   formIds.forEach(id=>{ byForm[id] = { av:{}, members:[], files:[] }; });
   (answers||[]).forEach(a=>{ if(byForm[a.form_id]) byForm[a.form_id].av[a.field_key] = (a.value_text!==null && a.value_text!=='') ? a.value_text : a.value_json; });
@@ -4004,6 +4014,10 @@ async function renderQualificationTab(showQualifying){
       <div><h2>${showQualifying?'المشاريع المستوفية':'المشاريع غير المستوفية'}</h2>
       <p>يُعتبر المشروع مستوفيًا لو أجاب بـ"نعم" على أي من: وجود سجل تجاري، أو وجود حماية للملكية الفكرية/شراكة حكومية أو خاصة — منفصل عن درجة الذكاء الاصطناعي.</p></div>
       <button class="btn btn-ghost" id="refreshQualBtn">تحديث</button>
+    </div>
+
+    <div class="req-banner" style="margin-bottom:16px;font-family:monospace;font-size:11px;direction:ltr;text-align:left">
+      🔍 DEBUG v3 (بعد إصلاح التقسيم بدفعات) — qualifying total: ${plusCount+commercialOnlyCount+ipOnlyCount} | commercial_only: ${commercialOnlyCount} | plus: ${plusCount} | ip_only: ${ipOnlyCount} | none: ${noneCount} | forms with empty av: ${submittedRows.filter(r=>Object.keys(shortlistAutoData[r.form_id]?.av||{}).length===0).length}
     </div>
 
     <div class="req-banner" style="margin-bottom:16px;font-family:monospace;font-size:11px;direction:ltr;text-align:left;line-height:1.8">
