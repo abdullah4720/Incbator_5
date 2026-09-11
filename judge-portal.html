@@ -367,16 +367,17 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
     <div id="jdFellowJudgesCard" class="jd-section-card" style="display:none"></div>
     <div id="jdCriteriaSummaryCard" class="jd-section-card" style="display:none"></div>
     <div id="jdTeamsFilterBar"></div>
-    <div class="jd-section-title">المشاريع المُسندة إليك رسميًا</div>
+    <div class="jd-section-title" id="jdAssignedTitle">المشاريع المُسندة إليك رسميًا</div>
+    <div id="jdStatusPills" class="jd-tabs-row" style="padding:0;margin-bottom:14px"></div>
     <div class="jd-project-grid" id="jdAssignedGrid"><div class="jd-empty">جارٍ التحميل…</div></div>
 
-    <div class="jd-section-title">باقي مشاريع جولة التحكيم</div>
+    <div class="jd-section-title" id="jdOtherTitle">باقي مشاريع جولة التحكيم</div>
     <div class="jd-project-grid" id="jdOtherGrid"></div>
   </div>
 
   <div id="jdAllProjectsView" style="display:none">
     <div id="jdAllProjectsFilterBar"></div>
-    <div class="jd-section-title">كل المشاريع المُرسَلة</div>
+    <div class="jd-section-title" id="jdAllProjectsTitle">كل المشاريع المُرسَلة</div>
     <div class="jd-project-grid" id="jdAllProjectsGrid"><div class="jd-empty">جارٍ التحميل…</div></div>
   </div>
 
@@ -824,6 +825,8 @@ async function loadFellowJudges(){
     </div>`;
 }
 
+let JD_STATUS_TAB = 'all';
+
 async function loadProjectLists(){
   const assignedGrid = document.getElementById('jdAssignedGrid');
   const otherGrid = document.getElementById('jdOtherGrid');
@@ -842,6 +845,9 @@ async function loadProjectLists(){
 
   if(!allFormIds.length){
     filterSlot.innerHTML = '';
+    document.getElementById('jdStatusPills').innerHTML = '';
+    document.getElementById('jdAssignedTitle').textContent = 'المشاريع المُسندة إليك رسميًا (0)';
+    document.getElementById('jdOtherTitle').textContent = 'باقي مشاريع جولة التحكيم (0)';
     assignedGrid.innerHTML = `<div class="jd-empty">لا توجد مشاريع بهذه الجولة بعد — تواصل مع فريق البرنامج.</div>`;
     otherGrid.innerHTML = '';
     return;
@@ -858,11 +864,33 @@ async function loadProjectLists(){
   const evalMap = {}; (myEvals||[]).forEach(e=>{ evalMap[e.form_id] = e.is_submitted; });
   const formMap = {}; (forms||[]).forEach(f=>{ formMap[f.id] = { ...f, ...(projMap[f.project_id]||{}), domain: domainMap[f.id], evaluated: !!evalMap[f.id] }; });
 
-  const filteredMyIds = applyJdFilters(myFormIds.map(id=>formMap[id]).filter(Boolean)).map(p=>p.id);
+  // فلاتر المسار/المجال أولًا، ثم تبويب الحالة (الكل/بانتظار/تم) فوقها كطبقة إضافية
+  const filteredMyAll = applyJdFilters(myFormIds.map(id=>formMap[id]).filter(Boolean));
   const filteredOtherIds = applyJdFilters(otherFormIds.map(id=>formMap[id]).filter(Boolean)).map(p=>p.id);
 
-  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), true, filteredMyIds.length + filteredOtherIds.length);
+  const pendingCount = filteredMyAll.filter(p=>!p.evaluated).length;
+  const evaluatedCount = filteredMyAll.filter(p=>p.evaluated).length;
+
+  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), true, filteredMyAll.length + filteredOtherIds.length);
   bindFilterBar(loadProjectLists);
+
+  document.getElementById('jdStatusPills').innerHTML = `
+    <button class="jd-tab-pill ${JD_STATUS_TAB==='all'?'active':''}" data-jstatus="all">الكل (${filteredMyAll.length})</button>
+    <button class="jd-tab-pill ${JD_STATUS_TAB==='pending'?'active':''}" data-jstatus="pending">بانتظار التقييم (${pendingCount})</button>
+    <button class="jd-tab-pill ${JD_STATUS_TAB==='evaluated'?'active':''}" data-jstatus="evaluated">تم التقييم (${evaluatedCount})</button>
+  `;
+  document.querySelectorAll('[data-jstatus]').forEach(b=>{
+    b.addEventListener('click', ()=>{ JD_STATUS_TAB = b.dataset.jstatus; loadProjectLists(); });
+  });
+
+  const statusFiltered = filteredMyAll.filter(p=>{
+    if(JD_STATUS_TAB==='pending') return !p.evaluated;
+    if(JD_STATUS_TAB==='evaluated') return p.evaluated;
+    return true;
+  });
+
+  document.getElementById('jdAssignedTitle').textContent = `المشاريع المُسندة إليك رسميًا (${myFormIds.length})`;
+  document.getElementById('jdOtherTitle').textContent = `باقي مشاريع جولة التحكيم (${otherFormIds.length})`;
 
   const cardHTML = (formId)=>{
     const p = formMap[formId];
@@ -874,7 +902,7 @@ async function loadProjectLists(){
     </div>`;
   };
 
-  assignedGrid.innerHTML = filteredMyIds.length ? filteredMyIds.map(cardHTML).join('') : `<div class="jd-empty">لا توجد مشاريع مطابقة ضمن المُسندة إليك.</div>`;
+  assignedGrid.innerHTML = statusFiltered.length ? statusFiltered.map(p=>cardHTML(p.id)).join('') : `<div class="jd-empty">لا توجد مشاريع مطابقة ضمن هذا التصنيف.</div>`;
   otherGrid.innerHTML = filteredOtherIds.length ? filteredOtherIds.map(cardHTML).join('') : `<div class="jd-empty">لا توجد مشاريع أخرى مطابقة.</div>`;
 
   document.querySelectorAll('[data-openproject]').forEach(el=>{
@@ -900,6 +928,7 @@ async function loadAllProjectsView(){
 
   const filtered = applyJdFilters(Object.values(formMap));
 
+  document.getElementById('jdAllProjectsTitle').textContent = `كل المشاريع المُرسَلة (${forms.length})`;
   filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), false, filtered.length);
   bindFilterBar(loadAllProjectsView);
 
