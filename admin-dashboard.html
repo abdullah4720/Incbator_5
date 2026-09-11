@@ -4016,26 +4016,6 @@ async function renderQualificationTab(showQualifying){
       <button class="btn btn-ghost" id="refreshQualBtn">تحديث</button>
     </div>
 
-    <div class="req-banner" style="margin-bottom:16px;font-family:monospace;font-size:11px;direction:ltr;text-align:left">
-      🔍 DEBUG v3 (بعد إصلاح التقسيم بدفعات) — qualifying total: ${plusCount+commercialOnlyCount+ipOnlyCount} | commercial_only: ${commercialOnlyCount} | plus: ${plusCount} | ip_only: ${ipOnlyCount} | none: ${noneCount} | forms with empty av: ${submittedRows.filter(r=>Object.keys(shortlistAutoData[r.form_id]?.av||{}).length===0).length}
-    </div>
-
-    <div class="req-banner" style="margin-bottom:16px;font-family:monospace;font-size:11px;direction:ltr;text-align:left;line-height:1.8">
-      🔍 DEBUG v2 (بعد الإصلاح)<br>
-      submittedRows: ${submittedRows.length}<br>
-      raw av['f2_1'] value for first 5 forms: ${submittedRows.slice(0,5).map(r=>{
-        const raw = shortlistAutoData[r.form_id];
-        return `[${r.project_id}: ${JSON.stringify(raw ? raw.av['f2_1'] : 'MISSING')}]`;
-      }).join(' ')}<br>
-      count where av['f2_1']==='نعم': ${submittedRows.filter(r=>(shortlistAutoData[r.form_id]?.av?.['f2_1'])==='نعم').length}<br>
-      hasCommercial total (via override-or-raw logic): ${submittedRows.filter(r=>{
-        const data = shortlistAutoData[r.form_id] || { av:{} };
-        const humanRow = reviewReqStatusAll.find(x=>x.form_id===r.form_id && x.requirement==='commercial_registration');
-        return humanRow ? humanRow.status==='ok' : data.av['f2_1']==='نعم';
-      }).length}<br>
-      commercial_only+plus (current render): ${commercialOnlyCount+plusCount} | qualifying total: ${plusCount+commercialOnlyCount+ipOnlyCount}
-    </div>
-
     <div class="grid kpi-row" style="margin-bottom:18px">
       <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('sparkles',{size:18})}</div>
         <div class="kval mono">${plusCount}</div><div class="klabel">مستوفٍ ++ (سجل تجاري وشراكة/ملكية فكرية معًا)</div></div>
