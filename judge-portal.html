@@ -127,6 +127,15 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
 .jd-qa:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0;}
 .jd-qa .ql{font-size:12px;color:var(--ink-400);margin-bottom:3px;}
 .jd-qa .qv{font-size:13.5px;color:var(--ink-900);line-height:1.8;white-space:pre-wrap;}
+.jd-section-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:14px;}
+.jd-section-head{display:flex;align-items:center;gap:9px;margin-bottom:14px;}
+.jd-section-icon{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none;}
+.jd-section-head-title{font-weight:700;color:var(--navy-800);font-size:14.5px;}
+.jd-team-pills{display:flex;flex-wrap:wrap;gap:8px;}
+.jd-team-pill{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-size:12.5px;}
+.jd-team-pill b{color:var(--navy-800);font-size:13px;}
+.jd-team-pill .spec{color:var(--teal-600);margin-top:2px;}
+.jd-ip-note{background:var(--gold-100);border:1px solid rgba(201,162,75,.4);border-radius:10px;padding:10px 14px;font-size:12.5px;color:#7A5C1E;margin-top:10px;}
 .jd-crit-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);}
 .jd-crit-row:last-child{border-bottom:none;}
 .jd-crit-label{font-size:13.5px;font-weight:600;color:var(--navy-800);}
@@ -340,6 +349,7 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
 
   <div style="max-width:920px;margin:0 auto;padding:0 20px">
   <div id="jdListView">
+    <div id="jdTeamsFilterBar"></div>
     <div class="jd-section-title">المشاريع المُسندة إليك رسميًا</div>
     <div class="jd-project-grid" id="jdAssignedGrid"><div class="jd-empty">جارٍ التحميل…</div></div>
 
@@ -348,6 +358,7 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
   </div>
 
   <div id="jdAllProjectsView" style="display:none">
+    <div id="jdAllProjectsFilterBar"></div>
     <div class="jd-section-title">كل المشاريع المُرسَلة</div>
     <div class="jd-project-grid" id="jdAllProjectsGrid"><div class="jd-empty">جارٍ التحميل…</div></div>
   </div>
@@ -368,15 +379,7 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
       </div>
     </div>
 
-    <div class="jd-card">
-      <div style="font-weight:700;color:var(--navy-800);margin-bottom:10px;font-size:14px">إجابات الفريق</div>
-      <div id="jdAnswersList"><div class="jd-empty">جارٍ التحميل…</div></div>
-    </div>
-
-    <div class="jd-card">
-      <div style="font-weight:700;color:var(--navy-800);margin-bottom:10px;font-size:14px">الملفات المرفوعة</div>
-      <div id="jdFilesList"><div class="jd-empty">لا توجد ملفات</div></div>
-    </div>
+    <div id="jdInfoSections"><div class="jd-empty">جارٍ التحميل…</div></div>
 
     <div class="jd-card" id="jdScoringCard">
       <div style="font-weight:700;color:var(--navy-800);margin-bottom:4px;font-size:14px">تسجيل الدرجات</div>
@@ -689,10 +692,60 @@ async function loadJudgingCriteria(){
   JD_CRITERIA = data || [];
 }
 
+let JD_FILTERS = { track:'', domain:'', status:'' };
+
+function buildFilterBarHTML(rows, showStatusFilter){
+  const tracks = [...new Set(rows.map(r=>r.track).filter(Boolean))].sort();
+  const domains = [...new Set(rows.map(r=>r.domain).filter(Boolean))].sort();
+  return `<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+    <select id="jdFilterTrack" class="jd-round-select">
+      <option value="">كل المسارات</option>
+      ${tracks.map(t=>`<option value="${escHtmlJD(t)}" ${JD_FILTERS.track===t?'selected':''}>${escHtmlJD(t)}</option>`).join('')}
+    </select>
+    <select id="jdFilterDomain" class="jd-round-select">
+      <option value="">كل المجالات</option>
+      ${domains.map(d=>`<option value="${escHtmlJD(d)}" ${JD_FILTERS.domain===d?'selected':''}>${escHtmlJD(d)}</option>`).join('')}
+    </select>
+    ${showStatusFilter ? `<select id="jdFilterStatus" class="jd-round-select">
+      <option value="">كل الحالات</option>
+      <option value="evaluated" ${JD_FILTERS.status==='evaluated'?'selected':''}>تم تقييمه</option>
+      <option value="notEvaluated" ${JD_FILTERS.status==='notEvaluated'?'selected':''}>لم يُقيَّم بعد</option>
+    </select>` : ''}
+    ${(JD_FILTERS.track||JD_FILTERS.domain||JD_FILTERS.status) ? `<button class="jd-back" id="jdClearFiltersBtn" style="margin:0">إزالة الفلاتر</button>` : ''}
+  </div>`;
+}
+function bindFilterBar(onChange){
+  const t = document.getElementById('jdFilterTrack');
+  const d = document.getElementById('jdFilterDomain');
+  const s = document.getElementById('jdFilterStatus');
+  const c = document.getElementById('jdClearFiltersBtn');
+  if(t) t.addEventListener('change', ()=>{ JD_FILTERS.track = t.value; onChange(); });
+  if(d) d.addEventListener('change', ()=>{ JD_FILTERS.domain = d.value; onChange(); });
+  if(s) s.addEventListener('change', ()=>{ JD_FILTERS.status = s.value; onChange(); });
+  if(c) c.addEventListener('click', ()=>{ JD_FILTERS = {track:'',domain:'',status:''}; onChange(); });
+}
+function applyJdFilters(rows){
+  return rows.filter(r=>{
+    if(JD_FILTERS.track && r.track!==JD_FILTERS.track) return false;
+    if(JD_FILTERS.domain && r.domain!==JD_FILTERS.domain) return false;
+    if(JD_FILTERS.status==='evaluated' && !r.evaluated) return false;
+    if(JD_FILTERS.status==='notEvaluated' && r.evaluated) return false;
+    return true;
+  });
+}
+/* يجلب المجال (f1_4) لكل نموذج دفعة واحدة — يُستخدم بكلا القائمتين لأغراض الفلترة */
+async function fetchDomainsForForms(formIds){
+  if(!formIds.length) return {};
+  const { data } = await sb.from('form_answers').select('form_id, value_text').eq('field_key','f1_4').in('form_id', formIds);
+  const map = {}; (data||[]).forEach(a=>{ map[a.form_id] = a.value_text; });
+  return map;
+}
+
 async function loadProjectLists(){
   const assignedGrid = document.getElementById('jdAssignedGrid');
   const otherGrid = document.getElementById('jdOtherGrid');
-  if(!CURRENT_ROUND_ID){ assignedGrid.innerHTML = `<div class="jd-empty">لا توجد جولات تحكيم مُعدَّة بعد.</div>`; otherGrid.innerHTML=''; return; }
+  const filterSlot = document.getElementById('jdTeamsFilterBar');
+  if(!CURRENT_ROUND_ID){ assignedGrid.innerHTML = `<div class="jd-empty">لا توجد جولات تحكيم مُعدَّة بعد.</div>`; otherGrid.innerHTML=''; filterSlot.innerHTML=''; return; }
 
   const { data: myAssignments } = await sb.from('judge_assignments').select('form_id').eq('judge_id', CURRENT_JUDGE_ID).eq('round_id', CURRENT_ROUND_ID);
   const { data: allAssignments } = await sb.from('judge_assignments').select('form_id').eq('round_id', CURRENT_ROUND_ID);
@@ -703,6 +756,7 @@ async function loadProjectLists(){
   const otherFormIds = allFormIds.filter(id=>!JD_ASSIGNED_FORM_IDS.has(id));
 
   if(!allFormIds.length){
+    filterSlot.innerHTML = '';
     assignedGrid.innerHTML = `<div class="jd-empty">لا توجد مشاريع بهذه الجولة بعد — تواصل مع فريق البرنامج.</div>`;
     otherGrid.innerHTML = '';
     return;
@@ -710,27 +764,33 @@ async function loadProjectLists(){
 
   const { data: forms } = await sb.from('verification_forms').select('id, project_id, status').in('id', allFormIds);
   const projectIds = [...new Set((forms||[]).map(f=>f.project_id))];
-  const { data: projects } = await sb.from('eligible_projects').select('project_id, project_name, track').in('project_id', projectIds);
+  const [{data: projects}, domainMap, {data: myEvals}] = await Promise.all([
+    sb.from('eligible_projects').select('project_id, project_name, track').in('project_id', projectIds),
+    fetchDomainsForForms(allFormIds),
+    sb.from('judge_evaluations').select('form_id, is_submitted').eq('judge_id', CURRENT_JUDGE_ID).eq('round_id', CURRENT_ROUND_ID),
+  ]);
   const projMap = {}; (projects||[]).forEach(p=>{ projMap[p.project_id] = p; });
-  const formMap = {}; (forms||[]).forEach(f=>{ formMap[f.id] = { ...f, ...(projMap[f.project_id]||{}) }; });
-
-  // درجات المحكّم الحالي بهذه الجولة لمعرفة أي المشاريع أُرسل تقييمها فعليًا
-  const { data: myEvals } = await sb.from('judge_evaluations').select('form_id, is_submitted').eq('judge_id', CURRENT_JUDGE_ID).eq('round_id', CURRENT_ROUND_ID);
   const evalMap = {}; (myEvals||[]).forEach(e=>{ evalMap[e.form_id] = e.is_submitted; });
+  const formMap = {}; (forms||[]).forEach(f=>{ formMap[f.id] = { ...f, ...(projMap[f.project_id]||{}), domain: domainMap[f.id], evaluated: !!evalMap[f.id] }; });
+
+  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), true);
+  bindFilterBar(loadProjectLists);
+
+  const filteredMyIds = applyJdFilters(myFormIds.map(id=>formMap[id]).filter(Boolean)).map(p=>p.id);
+  const filteredOtherIds = applyJdFilters(otherFormIds.map(id=>formMap[id]).filter(Boolean)).map(p=>p.id);
 
   const cardHTML = (formId)=>{
     const p = formMap[formId];
     if(!p) return '';
-    const submitted = evalMap[formId];
     return `<div class="jd-pcard" data-openproject="${formId}">
       <div class="pname">${escHtmlJD(p.project_name||p.project_id)}</div>
       <div class="pmeta mono">${escHtmlJD(p.project_id)} — ${escHtmlJD(p.track||'')}</div>
-      ${submitted ? `<span class="jd-badge submitted">✓ تم تقييمه</span>` : `<span class="jd-badge draft">لم يُقيَّم بعد</span>`}
+      ${p.evaluated ? `<span class="jd-badge submitted">✓ تم تقييمه</span>` : `<span class="jd-badge draft">لم يُقيَّم بعد</span>`}
     </div>`;
   };
 
-  assignedGrid.innerHTML = myFormIds.length ? myFormIds.map(cardHTML).join('') : `<div class="jd-empty">لا توجد مشاريع مُسندة إليك بهذه الجولة.</div>`;
-  otherGrid.innerHTML = otherFormIds.length ? otherFormIds.map(cardHTML).join('') : `<div class="jd-empty">لا توجد مشاريع أخرى بهذه الجولة حاليًا.</div>`;
+  assignedGrid.innerHTML = filteredMyIds.length ? filteredMyIds.map(cardHTML).join('') : `<div class="jd-empty">لا توجد مشاريع مطابقة ضمن المُسندة إليك.</div>`;
+  otherGrid.innerHTML = filteredOtherIds.length ? filteredOtherIds.map(cardHTML).join('') : `<div class="jd-empty">لا توجد مشاريع أخرى مطابقة.</div>`;
 
   document.querySelectorAll('[data-openproject]').forEach(el=>{
     el.addEventListener('click', ()=>openProjectDetail(el.dataset.openproject, formMap[el.dataset.openproject]));
@@ -740,21 +800,28 @@ async function loadProjectLists(){
 /* ---------------- كل المشاريع (استعراض فقط، بدون تسجيل درجات) ---------------- */
 async function loadAllProjectsView(){
   const el = document.getElementById('jdAllProjectsGrid');
+  const filterSlot = document.getElementById('jdAllProjectsFilterBar');
   el.innerHTML = `<div class="jd-empty">جارٍ التحميل…</div>`;
   const { data: forms } = await sb.from('verification_forms').select('id, project_id, status').eq('status', 'submitted');
-  if(!forms || !forms.length){ el.innerHTML = `<div class="jd-empty">لا توجد طلبات مُرسَلة بعد.</div>`; return; }
+  if(!forms || !forms.length){ filterSlot.innerHTML=''; el.innerHTML = `<div class="jd-empty">لا توجد طلبات مُرسَلة بعد.</div>`; return; }
   const projectIds = [...new Set(forms.map(f=>f.project_id))];
-  const { data: projects } = await sb.from('eligible_projects').select('project_id, project_name, track').in('project_id', projectIds);
+  const formIds = forms.map(f=>f.id);
+  const [{data: projects}, domainMap] = await Promise.all([
+    sb.from('eligible_projects').select('project_id, project_name, track').in('project_id', projectIds),
+    fetchDomainsForForms(formIds),
+  ]);
   const projMap = {}; (projects||[]).forEach(p=>{ projMap[p.project_id] = p; });
-  const formMap = {}; forms.forEach(f=>{ formMap[f.id] = { ...f, ...(projMap[f.project_id]||{}) }; });
+  const formMap = {}; forms.forEach(f=>{ formMap[f.id] = { ...f, ...(projMap[f.project_id]||{}), domain: domainMap[f.id] }; });
 
-  el.innerHTML = forms.map(f=>{
-    const p = formMap[f.id];
-    return `<div class="jd-pcard" data-openproject="${f.id}">
+  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), false);
+  bindFilterBar(loadAllProjectsView);
+
+  const filtered = applyJdFilters(Object.values(formMap));
+  el.innerHTML = filtered.length ? filtered.map(p=>`<div class="jd-pcard" data-openproject="${p.id}">
       <div class="pname">${escHtmlJD(p.project_name||p.project_id)}</div>
       <div class="pmeta mono">${escHtmlJD(p.project_id)} — ${escHtmlJD(p.track||'')}</div>
-    </div>`;
-  }).join('');
+    </div>`).join('') : `<div class="jd-empty">لا توجد مشاريع مطابقة للفلاتر المحددة.</div>`;
+
   document.querySelectorAll('#jdAllProjectsGrid [data-openproject]').forEach(el2=>{
     el2.addEventListener('click', ()=>openProjectDetail(el2.dataset.openproject, formMap[el2.dataset.openproject]));
   });
@@ -793,52 +860,100 @@ function showListView(){
   document.getElementById(JD_ACTIVE_TAB==='allprojects' ? 'jdAllProjectsView' : 'jdListView').style.display = 'block';
 }
 
+/* الأقسام المسموح عرضها للمحكّم — فقط ما يخدم قرار التقييم، لا الجوانب
+   الإدارية (السجل التجاري، حضور المعسكر، الإقرار والتعهد، التقييم الذاتي) */
+const JD_ALLOWED_SECTIONS = {
+  'بيانات المشروع': {icon:'file-text', color:'var(--teal-600)'},
+  'النموذج الأولي': {icon:'rocket', color:'var(--purple-500)'},
+  'العرض الاستثماري': {icon:'briefcase', color:'var(--teal-600)'},
+  'التحقق من احتياج السوق': {icon:'search', color:'var(--gold-500)'},
+};
+
+function findFieldKeyByLabelJD(questions, patterns){
+  const q = (questions||[]).find(qq => patterns.some(p => (qq.label||'').includes(p)));
+  return q ? q.field_key : null;
+}
+
 async function openProjectDetail(formId, projInfo){
   JD_CURRENT_FORM = { id: formId, ...projInfo };
   document.getElementById('jdListView').style.display = 'none';
+  document.getElementById('jdAllProjectsView').style.display = 'none';
   document.getElementById('jdDetailView').style.display = 'block';
   document.getElementById('jdDetailName').textContent = projInfo.project_name || projInfo.project_id;
   document.getElementById('jdDetailMeta').textContent = `${projInfo.project_id} — ${projInfo.track||''}`;
   document.getElementById('jdDetailAssignedBadge').style.display = JD_ASSIGNED_FORM_IDS.has(formId) ? 'inline-flex' : 'none';
-  document.getElementById('jdAnswersList').innerHTML = `<div class="jd-empty">جارٍ التحميل…</div>`;
-  document.getElementById('jdFilesList').innerHTML = `<div class="jd-empty">جارٍ التحميل…</div>`;
+  document.getElementById('jdInfoSections').innerHTML = `<div class="jd-empty">جارٍ التحميل…</div>`;
   document.getElementById('jdSubmittedNote').style.display = 'none';
   document.getElementById('jdScoreErr').classList.remove('show');
 
-  const [{data: answers}, {data: questions}, {data: sections}, {data: files}, {data: existingEval}] = await Promise.all([
+  const [{data: answers}, {data: questions}, {data: sections}, {data: files}, {data: members}, {data: existingEval}] = await Promise.all([
     sb.from('form_answers').select('field_key, value_text, value_json').eq('form_id', formId),
     sb.from('form_questions').select('field_key, label, type, section_id, order_index').eq('is_active', true).order('order_index'),
     sb.from('form_sections').select('id, title, order_index').order('order_index'),
     sb.from('form_files').select('field_key, file_name, storage_path').eq('form_id', formId).is('deleted_at', null),
+    sb.from('team_members').select('full_name, specialization, is_leader').eq('form_id', formId).order('order_index'),
     sb.from('judge_evaluations').select('*').eq('judge_id', CURRENT_JUDGE_ID).eq('form_id', formId).eq('round_id', CURRENT_ROUND_ID).maybeSingle(),
   ]);
 
   const avMap = {}; (answers||[]).forEach(a=>{ avMap[a.field_key] = a.value_json!==null ? a.value_json : a.value_text; });
   const secMap = {}; (sections||[]).forEach(s=>{ secMap[s.id] = s.title; });
+  const fileFieldKeys = new Set((files||[]).map(f=>f.field_key));
 
-  const qaRows = (questions||[])
-    .filter(q=>q.type!=='file' && q.type!=='video' && avMap[q.field_key]!==undefined && avMap[q.field_key]!==null && avMap[q.field_key]!=='')
-    .map(q=>{
-      let v = avMap[q.field_key];
-      if(Array.isArray(v)) v = v.join('، ');
-      return `<div class="jd-qa"><div class="ql">${escHtmlJD(secMap[q.section_id]||'')} — ${escHtmlJD(q.label)}</div><div class="qv">${escHtmlJD(v)}</div></div>`;
-    });
-  document.getElementById('jdAnswersList').innerHTML = qaRows.length ? qaRows.join('') : `<div class="jd-empty">لا توجد إجابات مسجَّلة</div>`;
+  // سؤال الشراكة/الملكية الفكرية — نعرضه رغم إنه تقنيًا داخل قسم السجل
+  // التجاري المستبعد، لأنه إثبات خارجي قد يفيد المحكّم
+  const ipKey = findFieldKeyByLabelJD(questions, ['حماية للملكية الفكرية', 'شراكة مع جهات حكومية']);
+  const ipValue = ipKey ? avMap[ipKey] : null;
 
-  if(files && files.length){
-    document.getElementById('jdFilesList').innerHTML = files.map(f=>
-      `<a href="#" class="jd-filelink" data-viewfile="${escHtmlJD(f.storage_path)}">${escHtmlJD(f.file_name)}</a>`
-    ).join('');
-    document.querySelectorAll('[data-viewfile]').forEach(a=>{
-      a.addEventListener('click', async e=>{
-        e.preventDefault();
-        const { data } = await sb.storage.from('form-attachments').createSignedUrl(a.dataset.viewfile, 300);
-        if(data) window.open(data.signedUrl, '_blank');
-      });
-    });
-  } else {
-    document.getElementById('jdFilesList').innerHTML = `<div class="jd-empty">لا توجد ملفات مرفقة</div>`;
+  let sectionsHTML = '';
+
+  // 1) الفريق — أسماء وتخصصات فقط
+  if(members && members.length){
+    sectionsHTML += `
+      <div class="jd-section-card">
+        <div class="jd-section-head"><div class="jd-section-icon" style="background:var(--teal-100);color:var(--teal-600)">${icon('users',{size:15})}</div><div class="jd-section-head-title">الفريق</div></div>
+        <div class="jd-team-pills">
+          ${members.map(m=>`<div class="jd-team-pill"><b>${escHtmlJD(m.full_name)}</b>${m.is_leader?' <span style="color:var(--gold-500)">(القائد)</span>':''}<div class="spec">${escHtmlJD(m.specialization)}</div></div>`).join('')}
+        </div>
+      </div>`;
   }
+
+  // 2) الأقسام المسموحة بترتيبها الطبيعي بالنموذج
+  Object.entries(JD_ALLOWED_SECTIONS).forEach(([sectionTitle, meta])=>{
+    const sectionId = (sections||[]).find(s=>s.title===sectionTitle)?.id;
+    if(sectionId===undefined) return;
+    const qaRows = (questions||[])
+      .filter(q=>q.section_id===sectionId && q.type!=='file' && q.type!=='video' && avMap[q.field_key]!==undefined && avMap[q.field_key]!==null && avMap[q.field_key]!=='')
+      .map(q=>{
+        let v = avMap[q.field_key];
+        if(Array.isArray(v)) v = v.join('، ');
+        return `<div class="jd-qa"><div class="ql">${escHtmlJD(q.label)}</div><div class="qv">${escHtmlJD(v)}</div></div>`;
+      });
+    if(!qaRows.length) return;
+    sectionsHTML += `
+      <div class="jd-section-card">
+        <div class="jd-section-head"><div class="jd-section-icon" style="background:${meta.color}22;color:${meta.color}">${icon(meta.icon,{size:15})}</div><div class="jd-section-head-title">${escHtmlJD(sectionTitle)}</div></div>
+        ${qaRows.join('')}
+        ${sectionTitle==='بيانات المشروع' && ipValue ? `<div class="jd-ip-note">${icon('award',{size:12})} إثبات شراكة أو ملكية فكرية: <b>${escHtmlJD(ipValue)}</b></div>` : ''}
+      </div>`;
+  });
+
+  // 3) الملفات المرفوعة (فقط ملفات الأقسام المسموحة + العرض الاستثماري)
+  if(files && files.length){
+    sectionsHTML += `
+      <div class="jd-section-card">
+        <div class="jd-section-head"><div class="jd-section-icon" style="background:var(--paper);color:var(--ink-600)">${icon('paperclip',{size:15})}</div><div class="jd-section-head-title">الملفات المرفوعة</div></div>
+        <div>${files.map(f=>`<a href="#" class="jd-filelink" data-viewfile="${escHtmlJD(f.storage_path)}">${escHtmlJD(f.file_name)}</a>`).join('')}</div>
+      </div>`;
+  }
+
+  document.getElementById('jdInfoSections').innerHTML = sectionsHTML || `<div class="jd-empty">لا توجد معلومات كافية لهذا المشروع بعد</div>`;
+  document.querySelectorAll('[data-viewfile]').forEach(a=>{
+    a.addEventListener('click', async e=>{
+      e.preventDefault();
+      const { data } = await sb.storage.from('form-attachments').createSignedUrl(a.dataset.viewfile, 300);
+      if(data) window.open(data.signedUrl, '_blank');
+    });
+  });
 
   renderScoringForm(existingEval);
 }
