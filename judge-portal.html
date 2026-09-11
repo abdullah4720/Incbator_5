@@ -927,7 +927,8 @@ async function loadProjectLists(){
   const pendingCount = filteredMyAll.filter(p=>!p.evaluated).length;
   const evaluatedCount = filteredMyAll.filter(p=>p.evaluated).length;
 
-  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), true, filteredMyAll.length + filteredOtherIds.length);
+  const debugLine = `<div style="background:var(--danger-100);color:var(--danger);border-radius:8px;padding:8px 12px;font-size:11px;margin-bottom:10px;font-family:monospace;direction:ltr;text-align:left">DEBUG(teams): JD_FILTERS=${JSON.stringify(JD_FILTERS)} | myFormIds=${myFormIds.length} | filteredMyAll=${filteredMyAll.length} | otherFormIds=${otherFormIds.length} | filteredOther=${filteredOtherIds.length} | sample tracks=${[...new Set(Object.values(formMap).map(p=>p.track))].join(', ')}</div>`;
+  filterSlot.innerHTML = debugLine + buildFilterBarHTML(Object.values(formMap), true, filteredMyAll.length + filteredOtherIds.length);
   bindFilterBar(loadProjectLists);
 
   document.getElementById('jdStatusPills').innerHTML = `
@@ -1027,7 +1028,8 @@ async function loadAllProjectsView(){
   const filtered = applyJdFilters(Object.values(formMap));
 
   document.getElementById('jdAllProjectsTitle').textContent = `كل المشاريع المستوفية (${forms.length})`;
-  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), false, filtered.length);
+  const debugLine2 = `<div style="background:var(--danger-100);color:var(--danger);border-radius:8px;padding:8px 12px;font-size:11px;margin-bottom:10px;font-family:monospace;direction:ltr;text-align:left">DEBUG(all): JD_FILTERS=${JSON.stringify(JD_FILTERS)} | total=${Object.keys(formMap).length} | filtered=${filtered.length}</div>`;
+  filterSlot.innerHTML = debugLine2 + buildFilterBarHTML(Object.values(formMap), false, filtered.length);
   bindFilterBar(loadAllProjectsView);
 
   el.innerHTML = filtered.length ? filtered.map(p=>`<div class="jd-pcard" data-openproject="${p.id}">
