@@ -144,6 +144,13 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
 .jd-file-card:hover{border-color:var(--teal-500);}
 .jd-file-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;}
 .jd-file-name{font-size:11.5px;color:var(--ink-900);word-break:break-word;line-height:1.5;}
+.jd-score-btns{display:flex;gap:8px;flex-wrap:wrap;}
+.jd-score-btn{width:42px;height:42px;border-radius:10px;border:1.5px solid var(--line);background:#fff;font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;color:var(--ink-600);cursor:pointer;transition:all .12s;}
+.jd-score-btn:hover{border-color:var(--teal-500);}
+.jd-score-btn.selected{background:var(--navy-800);border-color:var(--navy-800);color:#fff;}
+.jd-fellow-judges{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.jd-avatar-chip{display:inline-flex;align-items:center;gap:6px;background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:5px 12px 5px 5px;font-size:12.5px;}
+.jd-avatar-circle{width:22px;height:22px;border-radius:50%;background:var(--teal-600);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex:none;}
 .jd-crit-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);}
 .jd-crit-row:last-child{border-bottom:none;}
 .jd-crit-label{font-size:13.5px;font-weight:600;color:var(--navy-800);}
@@ -357,6 +364,7 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
 
   <div style="max-width:920px;margin:0 auto;padding:0 20px">
   <div id="jdListView">
+    <div id="jdFellowJudgesCard" class="jd-section-card" style="display:none"></div>
     <div id="jdTeamsFilterBar"></div>
     <div class="jd-section-title">المشاريع المُسندة إليك رسميًا</div>
     <div class="jd-project-grid" id="jdAssignedGrid"><div class="jd-empty">جارٍ التحميل…</div></div>
@@ -389,21 +397,7 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
 
     <div id="jdInfoSections"><div class="jd-empty">جارٍ التحميل…</div></div>
 
-    <div class="jd-card" id="jdScoringCard">
-      <div style="font-weight:700;color:var(--navy-800);margin-bottom:4px;font-size:14px">تسجيل الدرجات</div>
-      <div style="font-size:12px;color:var(--ink-400);margin-bottom:6px" id="jdScoringHint"></div>
-      <div id="jdCriteriaList"></div>
-      <div class="field" style="margin-top:16px">
-        <label for="jdOverallNote">ملاحظة عامة (اختياري)</label>
-        <textarea id="jdOverallNote" rows="4" style="width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:13.5px;resize:vertical"></textarea>
-      </div>
-      <div class="err-box" id="jdScoreErr"></div>
-      <div style="display:flex;gap:10px;margin-top:14px">
-        <button class="btn btn-ghost" id="jdSaveDraftBtn" style="width:auto;padding:11px 20px">حفظ كمسودة</button>
-        <button class="btn btn-primary" id="jdSubmitBtn" style="width:auto;padding:11px 20px">إرسال التقييم النهائي</button>
-      </div>
-      <div id="jdSubmittedNote" style="display:none;margin-top:10px" class="jd-badge submitted">✓ تم إرسال تقييمك النهائي لهذا المشروع</div>
-    </div>
+    <div class="jd-card" id="jdScoringCard"></div>
   </div>
   </div>
   <div class="jd-build-footer">build: 2026-09-11</div>
@@ -424,6 +418,7 @@ const LUCIDE_ICONS = {
   "file-text": `<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" /> <path d="M14 2v5a1 1 0 0 0 1 1h5" /> <path d="M10 9H8" /> <path d="M16 13H8" /> <path d="M16 17H8" />`,
   "video": `<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" /> <rect x="2" y="6" width="14" height="12" rx="2" />`,
   "image": `<rect width="18" height="18" x="3" y="3" rx="2" ry="2" /> <circle cx="9" cy="9" r="2" /> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />`,
+  "info": `<circle cx="12" cy="12" r="10" /> <path d="M12 16v-4" /> <path d="M12 8h.01" />`,
   "log-out": `<path d="m16 17 5-5-5-5" /> <path d="M21 12H9" /> <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />`,
   "trash-2": `<path d="M10 11v6" /> <path d="M14 11v6" /> <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /> <path d="M3 6h18" /> <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />`,
   "pencil": `<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /> <path d="m15 5 4 4" />`,
@@ -750,11 +745,34 @@ async function fetchDomainsForForms(formIds){
   return map;
 }
 
+/* يعرض قائمة المحكّمين النشطين — شفافية بسيطة لمن يشارك بنفس الجولة، بدون
+   الحاجة لبناء نظام "لجان" رسمي كامل بهذه المرحلة */
+async function loadFellowJudges(){
+  const card = document.getElementById('jdFellowJudgesCard');
+  const { data: judges } = await sb.from('judges').select('id, full_name').eq('is_active', true).order('full_name');
+  if(!judges || judges.length < 2){ card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  card.innerHTML = `
+    <div class="jd-section-head" style="margin-bottom:10px"><div class="jd-section-icon" style="background:var(--teal-100);color:var(--teal-600)">${icon('users',{size:15})}</div><div class="jd-section-head-title">أعضاء لجنة التحكيم (${judges.length})</div></div>
+    <div class="jd-fellow-judges">
+      ${judges.map(j=>{
+        const initials = (j.full_name||'').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('');
+        const isMe = j.id === CURRENT_JUDGE_ID;
+        return `<div class="jd-avatar-chip">
+          <div class="jd-avatar-circle">${escHtmlJD(initials)}</div>
+          ${escHtmlJD(j.full_name)}${isMe ? ' <b>(أنت)</b>' : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
 async function loadProjectLists(){
   const assignedGrid = document.getElementById('jdAssignedGrid');
   const otherGrid = document.getElementById('jdOtherGrid');
   const filterSlot = document.getElementById('jdTeamsFilterBar');
   if(!CURRENT_ROUND_ID){ assignedGrid.innerHTML = `<div class="jd-empty">لا توجد جولات تحكيم مُعدَّة بعد.</div>`; otherGrid.innerHTML=''; filterSlot.innerHTML=''; return; }
+
+  loadFellowJudges();
 
   const { data: myAssignments } = await sb.from('judge_assignments').select('form_id').eq('judge_id', CURRENT_JUDGE_ID).eq('round_id', CURRENT_ROUND_ID);
   const { data: allAssignments } = await sb.from('judge_assignments').select('form_id').eq('round_id', CURRENT_ROUND_ID);
@@ -859,17 +877,19 @@ async function loadCertificateView(){
   document.getElementById('jdPrintCertBtn').addEventListener('click', ()=>window.print());
 }
 
-/* يحدد أيقونة ولون بطاقة الملف حسب امتداده — PDF أحمر، فيديو بنفسجي،
-   صورة كهرماني، وأي نوع آخر رمادي عام */
-function fileCardHTML(f){
+/* يحدد أيقونة ولون بطاقة الملف حسب امتداده، ويعرض عنوان السؤال (مثل "السجل
+   التجاري"، "العرض الاستثماري") بدل اسم الملف الخام اللي رفعه المشارك */
+function fileCardHTML(f, questions){
   const ext = (f.file_name||'').split('.').pop().toLowerCase();
   let iconName = 'file-text', bg = 'var(--paper)', fg = 'var(--ink-600)';
   if(ext==='pdf'){ iconName='file-text'; bg='var(--danger-100)'; fg='var(--danger)'; }
   else if(['mp4','mov','avi','webm'].includes(ext)){ iconName='video'; bg='rgba(107,79,160,.14)'; fg='var(--purple-500)'; }
   else if(['jpg','jpeg','png','gif','webp'].includes(ext)){ iconName='image'; bg='var(--gold-100)'; fg='var(--gold-500)'; }
+  const q = (questions||[]).find(qq=>qq.field_key===f.field_key);
+  const displayLabel = q ? q.label : f.file_name;
   return `<a href="#" class="jd-file-card" data-viewfile="${escHtmlJD(f.storage_path)}">
     <div class="jd-file-icon" style="background:${bg};color:${fg}">${icon(iconName,{size:18})}</div>
-    <div class="jd-file-name">${escHtmlJD(f.file_name)}</div>
+    <div class="jd-file-name">${escHtmlJD(displayLabel)}</div>
   </a>`;
 }
 
@@ -984,7 +1004,7 @@ async function openProjectDetail(formId, projInfo){
     sectionsHTML += `
       <div class="jd-section-card">
         <div class="jd-section-head"><div class="jd-section-icon" style="background:var(--paper);color:var(--ink-600)">${icon('paperclip',{size:15})}</div><div class="jd-section-head-title">الملفات المرفوعة</div></div>
-        <div class="jd-file-grid">${files.map(f=>fileCardHTML(f)).join('')}</div>
+        <div class="jd-file-grid">${files.map(f=>fileCardHTML(f, questions)).join('')}</div>
       </div>`;
   }
 
@@ -997,28 +1017,66 @@ async function openProjectDetail(formId, projInfo){
     });
   });
 
-  renderScoringForm(existingEval);
+  const isAssigned = JD_ASSIGNED_FORM_IDS.has(formId);
+  renderScoringForm(existingEval, isAssigned);
 }
 
-function renderScoringForm(existingEval){
+function renderScoringForm(existingEval, isAssigned){
+  const scoringCard = document.getElementById('jdScoringCard');
+  if(!isAssigned){
+    scoringCard.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;color:var(--ink-600)">
+        ${icon('info',{size:16})}
+        <div style="font-size:13px">هذا المشروع للاطلاع فقط — غير مُسند إليك للتقييم بهذه الجولة.</div>
+      </div>`;
+    return;
+  }
+  const totalMax = JD_CRITERIA.reduce((s,c)=>s+parseFloat(c.max_score),0) || 1;
   const scores = existingEval ? (existingEval.scores||{}) : {};
-  document.getElementById('jdScoringHint').textContent = JD_CRITERIA.length
-    ? `أدخل درجة لكل معيار (من 0 إلى الحد الأقصى الموضح).`
-    : 'لم يتم إعداد معايير تحكيم بعد — تواصل مع فريق البرنامج.';
-  document.getElementById('jdCriteriaList').innerHTML = JD_CRITERIA.map(c=>`
-    <div class="jd-crit-row">
-      <div><div class="jd-crit-label">${escHtmlJD(c.label)}</div>${c.description?`<div class="jd-crit-desc">${escHtmlJD(c.description)}</div>`:''}</div>
-      <div style="text-align:left;flex:none">
-        <input type="number" class="jd-score-input" data-critid="${c.id}" min="0" max="${c.max_score}" step="0.5" value="${scores[c.id]!==undefined?scores[c.id]:''}">
-        <div class="jd-score-max">من ${c.max_score}</div>
-      </div>
+  scoringCard.innerHTML = `
+    <div style="font-weight:700;color:var(--navy-800);margin-bottom:4px;font-size:14px">تسجيل الدرجات</div>
+    <div style="font-size:12px;color:var(--ink-400);margin-bottom:14px">${JD_CRITERIA.length ? `${JD_CRITERIA.length} معايير — اختر درجة من 1 إلى الحد الأقصى لكل معيار` : 'لم يتم إعداد معايير تحكيم بعد — تواصل مع فريق البرنامج.'}</div>
+    <div id="jdCriteriaList"></div>
+    <div class="field" style="margin-top:16px">
+      <label for="jdOverallNote">ملاحظة عامة (اختياري)</label>
+      <textarea id="jdOverallNote" rows="4" style="width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:13.5px;resize:vertical">${existingEval ? escHtmlJD(existingEval.overall_note||'') : ''}</textarea>
     </div>
-  `).join('');
-  document.getElementById('jdOverallNote').value = existingEval ? (existingEval.overall_note||'') : '';
-  document.getElementById('jdSubmittedNote').style.display = existingEval && existingEval.is_submitted ? 'inline-flex' : 'none';
+    <div class="err-box" id="jdScoreErr"></div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn btn-ghost" id="jdSaveDraftBtn" style="width:auto;padding:11px 20px">حفظ كمسودة</button>
+      <button class="btn btn-primary" id="jdSubmitBtn" style="width:auto;padding:11px 20px">إرسال التقييم النهائي</button>
+    </div>
+    <div id="jdSubmittedNote" style="display:${existingEval && existingEval.is_submitted ? 'inline-flex' : 'none'};margin-top:10px" class="jd-badge submitted">✓ تم إرسال تقييمك النهائي لهذا المشروع</div>
+  `;
 
-  document.getElementById('jdSaveDraftBtn').onclick = ()=>saveEvaluation(false);
-  document.getElementById('jdSubmitBtn').onclick = ()=>saveEvaluation(true);
+  document.getElementById('jdCriteriaList').innerHTML = JD_CRITERIA.map(c=>{
+    const weight = Math.round(parseFloat(c.max_score)/totalMax*100);
+    const current = scores[c.id]!==undefined ? scores[c.id] : null;
+    const btns = [];
+    for(let i=1;i<=c.max_score;i++) btns.push(i);
+    return `
+    <div class="jd-crit-row" style="flex-direction:column;align-items:stretch;gap:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div><div class="jd-crit-label">${escHtmlJD(c.label)}</div>${c.description?`<div class="jd-crit-desc">${escHtmlJD(c.description)}</div>`:''}</div>
+        <div class="jd-score-max" style="white-space:nowrap">الوزن ${weight}% · من ${c.max_score}</div>
+      </div>
+      <div class="jd-score-btns" data-critid="${c.id}" data-max="${c.max_score}">
+        ${btns.map(n=>`<button type="button" class="jd-score-btn ${current===n?'selected':''}" data-val="${n}">${n}</button>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.querySelectorAll('.jd-score-btns').forEach(wrap=>{
+    wrap.querySelectorAll('.jd-score-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        wrap.querySelectorAll('.jd-score-btn').forEach(b=>b.classList.remove('selected'));
+        btn.classList.add('selected');
+      });
+    });
+  });
+
+  document.getElementById('jdSaveDraftBtn').addEventListener('click', ()=>saveEvaluation(false));
+  document.getElementById('jdSubmitBtn').addEventListener('click', ()=>saveEvaluation(true));
 }
 
 async function saveEvaluation(isSubmit){
@@ -1026,13 +1084,13 @@ async function saveEvaluation(isSubmit){
   errBox.classList.remove('show');
   const scores = {};
   let missing = false;
-  document.querySelectorAll('.jd-score-input').forEach(inp=>{
-    const v = inp.value.trim();
-    if(v==='') { if(isSubmit) missing = true; return; }
-    scores[inp.dataset.critid] = parseFloat(v);
+  document.querySelectorAll('.jd-score-btns').forEach(wrap=>{
+    const selected = wrap.querySelector('.jd-score-btn.selected');
+    if(!selected){ if(isSubmit) missing = true; return; }
+    scores[wrap.dataset.critid] = parseInt(selected.dataset.val);
   });
   if(isSubmit && missing){
-    errBox.textContent = 'يرجى تعبئة درجة لكل المعايير قبل الإرسال النهائي.';
+    errBox.textContent = 'يرجى اختيار درجة لكل المعايير قبل الإرسال النهائي.';
     errBox.classList.add('show');
     return;
   }
