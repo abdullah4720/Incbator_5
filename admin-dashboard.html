@@ -1151,22 +1151,21 @@ async function exportReportPpt(d){
 /* ==========================================================================
    التحكيم — إدارة الجولات والمعايير والمحكّمين وتوزيع المشاريع والنتائج.
    ========================================================================== */
-let judgingSubtab = 'summary';
+let judgingSubtab = 'rounds';
 let JUDGING_CRITERIA_CACHE = [];
 let JUDGES_CACHE = [];
 let JUDGING_ROUNDS_CACHE = [];
 let CURRENT_ADMIN_ROUND_ID = null;
 
 const JUDGING_SUBTABS = [
-  {id:'summary', l:'موجز التحكيم'},
   {id:'rounds', l:'الجولات'},
-  {id:'committees', l:'اللجان الرسمية'},
-  {id:'criteria', l:'معايير التحكيم'},
+  {id:'criteria', l:'المعايير'},
+  {id:'committees', l:'اللجان والتعيين'},
   {id:'judges', l:'المحكّمون'},
-  {id:'assignment', l:'توزيع المشاريع'},
+  {id:'results', l:'النتائج المجمّعة'},
   {id:'progress', l:'سير التحكيم'},
+  {id:'summary', l:'موجز التحكيم'},
   {id:'workload', l:'أعباء المحكّمين'},
-  {id:'results', l:'النتائج'},
   {id:'ranking', l:'المراكز والإعلان'},
 ];
 
