@@ -3924,12 +3924,14 @@ function classifyPreliminary(autoCount, aiScore){
   return ['يحتاج مراجعة دقيقة','mid'];
 }
 
-/* تصنيف مستندي بحت: هل يوجد سجل تجاري، أو بديله (شراكة/ملكية فكرية)؟
-   "مستوفٍ كامل" = سجل تجاري فعلي مرفوع. "مستوفٍ جزئيًا" = بديل فقط بدون سجل
-   تجاري. لا علاقة له بدرجة الذكاء الاصطناعي أو الاستيفاء التلقائي العام —
-   مرتبط حصرًا بوجود هذه المستندات بالذات. */
-function classifyDocumentation(av, files){
-  const hasCommercial = av['f2_1'] === 'نعم';
+/* تصنيف مستندي: هل يوجد سجل تجاري، أو بديله (شراكة/ملكية فكرية)؟ يعطي
+   الأولوية لمراجعة المدقق اليدوية على متطلب "السجل التجاري" لو موجودة —
+   لأنها الحكم الفعلي الأحدث، ويرجع للإجابة الخام فقط لو ما فيه مراجعة يدوية
+   بعد. أي تحديث يدوي على هذا المتطلب ينعكس فورًا هنا وبكل الأماكن التي
+   تستخدم هذه الدالة (المستوفية/غير المستوفية، ومرشِّحات التحكيم). */
+function classifyDocumentation(av, files, formId){
+  const humanRow = formId ? reviewReqStatusAll.find(x=>x.form_id===formId && x.requirement==='commercial_registration') : null;
+  const hasCommercial = humanRow ? humanRow.status==='ok' : av['f2_1'] === 'نعم';
   const ipKey = findFieldKeyByLabel(['حماية للملكية الفكرية', 'شراكة مع جهات حكومية']);
   const hasIpPartnership = ipKey ? av[ipKey] === 'نعم' : false;
 
@@ -3947,7 +3949,7 @@ async function getQualifyingSubmittedRows(){
   await loadShortlistAutoData(submittedRows.map(r=>r.form_id));
   return submittedRows.filter(r=>{
     const data = shortlistAutoData[r.form_id] || { av:{}, files:[] };
-    return classifyDocumentation(data.av, data.files) !== 'none';
+    return classifyDocumentation(data.av, data.files, r.form_id) !== 'none';
   });
 }
 
@@ -3972,7 +3974,7 @@ async function renderQualificationTab(showQualifying){
   const otherReqKeys = REQUIREMENTS.filter(r=>r.key!=='commercial_registration').map(r=>r.key);
   const classified = submittedRows.map(r=>{
     const data = shortlistAutoData[r.form_id] || { av:{}, members:[], files:[] };
-    const docStatus = classifyDocumentation(data.av, data.files);
+    const docStatus = classifyDocumentation(data.av, data.files, r.form_id);
     let candidateWithoutReg = false;
     if(docStatus==='none'){
       // نعطي الأولوية لتقييم المراجع البشري (لو موجود) على الاستيفاء التلقائي
@@ -4781,6 +4783,11 @@ function renderEvalPanel(canEdit){
       if(error){ showToast('تعذّر حفظ التقييم: '+error.message); if(triggerEl) triggerEl.disabled=false; return; }
       const idx = reviewDetail.reqRows.findIndex(x=>x.requirement===key);
       if(idx>-1) reviewDetail.reqRows[idx].status = newStatus; else reviewDetail.reqRows.push({requirement:key, status:newStatus, form_id:form.id});
+      // نحدّث الذاكرة المؤقتة العامة كذلك — بدونها تبقى المستوفية/غير
+      // المستوفية ومرشِّحات التحكيم تعرض حالة قديمة حتى إعادة تحميل الصفحة
+      const globalIdx = reviewReqStatusAll.findIndex(x=>x.form_id===form.id && x.requirement===key);
+      if(globalIdx>-1) reviewReqStatusAll[globalIdx].status = newStatus;
+      else reviewReqStatusAll.push({form_id:form.id, requirement:key, status:newStatus});
       showToast('تم حفظ التقييم');
       renderEvalPanel(canEdit); // إعادة رسم اللوحة فقط لتحديث الحلقة والشارة فورًا
     };
