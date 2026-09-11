@@ -459,6 +459,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
    ============================================================ */
 const LUCIDE_ICONS = {
   "chevron-up": `<path d="m18 15-6-6-6 6" />`,
+  "folder": `<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />`,
   "sparkles": `<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" /> <path d="M20 2v4" /> <path d="M22 4h-4" /> <circle cx="4" cy="20" r="2" />`,
   "megaphone": `<path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" /> <path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14" /> <path d="M8 6v8" />`,
   "bar-chart-3": `<path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" />`,
@@ -1150,18 +1151,23 @@ async function exportReportPpt(d){
 /* ==========================================================================
    التحكيم — إدارة الجولات والمعايير والمحكّمين وتوزيع المشاريع والنتائج.
    ========================================================================== */
-let judgingSubtab = 'rounds';
+let judgingSubtab = 'summary';
 let JUDGING_CRITERIA_CACHE = [];
 let JUDGES_CACHE = [];
 let JUDGING_ROUNDS_CACHE = [];
 let CURRENT_ADMIN_ROUND_ID = null;
 
 const JUDGING_SUBTABS = [
+  {id:'summary', l:'موجز التحكيم'},
   {id:'rounds', l:'الجولات'},
+  {id:'committees', l:'اللجان الرسمية'},
   {id:'criteria', l:'معايير التحكيم'},
   {id:'judges', l:'المحكّمون'},
   {id:'assignment', l:'توزيع المشاريع'},
+  {id:'progress', l:'سير التحكيم'},
+  {id:'workload', l:'أعباء المحكّمين'},
   {id:'results', l:'النتائج'},
+  {id:'ranking', l:'المراكز والإعلان'},
 ];
 
 async function renderJudgingTab(){
@@ -1176,11 +1182,16 @@ async function renderJudgingTab(){
   el.querySelectorAll('[data-jsub]').forEach(b=>{
     b.addEventListener('click', ()=>{ judgingSubtab = b.dataset.jsub; renderJudgingTab(); });
   });
-  if(judgingSubtab==='rounds') renderJudgingRounds();
+  if(judgingSubtab==='summary') renderJudgingSummary();
+  else if(judgingSubtab==='rounds') renderJudgingRounds();
+  else if(judgingSubtab==='committees') renderJudgingCommittees();
   else if(judgingSubtab==='criteria') renderJudgingCriteria();
   else if(judgingSubtab==='judges') renderJudgingJudges();
   else if(judgingSubtab==='assignment') renderJudgingAssignment();
+  else if(judgingSubtab==='progress') renderJudgingProgress();
+  else if(judgingSubtab==='workload') renderJudgingWorkload();
   else if(judgingSubtab==='results') renderJudgingResults();
+  else if(judgingSubtab==='ranking') renderJudgingRanking();
 }
 
 /* يبني شريط اختيار الجولة المستخدَم بأعلى تبويبات المعايير/التوزيع/النتائج،
@@ -1210,6 +1221,258 @@ function bindRoundSelector(onChange){
 }
 
 /* ---------------- الجولات ---------------- */
+/* ---------------- موجز التحكيم ---------------- */
+async function renderJudgingSummary(){
+  const content = document.getElementById('judgingSubContent');
+  content.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  await ensureRoundsLoaded();
+  if(!CURRENT_ADMIN_ROUND_ID){ content.innerHTML = roundSelectorHTML(); return; }
+
+  const round = JUDGING_ROUNDS_CACHE.find(r=>r.id===CURRENT_ADMIN_ROUND_ID);
+  const [{data: criteria}, {data: committees}, {data: judges}, {data: assignments}, {data: evals}] = await Promise.all([
+    sb.from('judging_criteria').select('id').eq('round_id', CURRENT_ADMIN_ROUND_ID).eq('is_active', true),
+    sb.from('judging_committees').select('id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+    sb.from('judges').select('id').eq('is_active', true),
+    sb.from('judge_assignments').select('judge_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+    sb.from('judge_evaluations').select('is_submitted').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+  ]);
+
+  const totalAssigned = (assignments||[]).length;
+  const totalSubmitted = (evals||[]).filter(e=>e.is_submitted).length;
+  const uniqueProjects = new Set((assignments||[]).map(a=>a.form_id)).size;
+  const pct = totalAssigned ? Math.round(totalSubmitted/totalAssigned*100) : 0;
+
+  content.innerHTML = `
+    ${roundSelectorHTML()}
+    <div class="req-banner" style="margin-bottom:16px">
+      <b>${escHtml(round?.name||'')}</b>${round?.is_active?' — <span style="color:var(--success)">الجولة النشطة حاليًا</span>':''}${round?.results_published?' — <span style="color:var(--gold-500)">النتائج منشورة للفرق</span>':''}
+      ${round?.description ? `<div style="margin-top:4px">${escHtml(round.description)}</div>` : ''}
+    </div>
+    <div class="grid kpi-row" style="margin-bottom:18px">
+      <div class="card kpi-card"><div class="kicon" style="background:var(--gold-100);color:var(--gold-500)">${icon('clipboard-list',{size:18})}</div><div class="kval mono">${(criteria||[]).length}</div><div class="klabel">معايير تحكيم مفعَّلة</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--purple-100);color:var(--purple)">${icon('users',{size:18})}</div><div class="kval mono">${(judges||[]).length}</div><div class="klabel">محكّم نشط</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('sparkles',{size:18})}</div><div class="kval mono">${(committees||[]).length}</div><div class="klabel">لجنة رسمية</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--paper);color:var(--ink-600)">${icon('folder',{size:18})}</div><div class="kval mono">${uniqueProjects}</div><div class="klabel">مشروع بهذه الجولة</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:${pct===100?'var(--success-100)':'var(--amber-100)'};color:${pct===100?'var(--success)':'var(--amber)'}">${icon('check',{size:18})}</div><div class="kval mono">${pct}%</div><div class="klabel">نسبة إنجاز التحكيم (${totalSubmitted}/${totalAssigned})</div></div>
+    </div>
+    <div class="req-banner">هذا موجز سريع للجولة المختارة — للتفاصيل الكاملة راجع تبويبات "سير التحكيم"، "أعباء المحكّمين"، و"النتائج".</div>
+  `;
+  bindRoundSelector(renderJudgingSummary);
+}
+
+/* ---------------- اللجان الرسمية ---------------- */
+let JUDGING_COMMITTEES_CACHE = [];
+async function renderJudgingCommittees(){
+  const content = document.getElementById('judgingSubContent');
+  content.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  await ensureRoundsLoaded();
+  if(!CURRENT_ADMIN_ROUND_ID){ content.innerHTML = roundSelectorHTML(); return; }
+
+  const [{data: committees}, {data: allMembers}, {data: allJudges}] = await Promise.all([
+    sb.from('judging_committees').select('*').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
+    sb.from('committee_members').select('committee_id, judge_id'),
+    sb.from('judges').select('id, full_name').eq('is_active', true).order('full_name'),
+  ]);
+  JUDGING_COMMITTEES_CACHE = committees || [];
+  const judgeMap = {}; (allJudges||[]).forEach(j=>{ judgeMap[j.id] = j.full_name; });
+  const membersByCommittee = {};
+  (allMembers||[]).forEach(m=>{ (membersByCommittee[m.committee_id] = membersByCommittee[m.committee_id]||[]).push(m.judge_id); });
+
+  content.innerHTML = `
+    ${roundSelectorHTML()}
+    <div class="req-banner" style="margin-bottom:16px">اللجنة تجمع محكّمين معًا (مثال: "لجنة مسار الابتكار") — تظهر للمحكّم كأعضاء لجنته الفعليين بدل كل المحكّمين النشطين. إن لم تُنشئ أي لجنة، تستمر صفحة المحكّم بعرض كل المحكّمين النشطين كما هي الآن.</div>
+    <div style="text-align:left;margin-bottom:14px"><button class="btn btn-primary btn-sm" id="addCommitteeBtn">+ إضافة لجنة</button></div>
+    ${JUDGING_COMMITTEES_CACHE.length===0 ? `<div class="empty-hint">لا توجد لجان لهذه الجولة بعد</div>` : JUDGING_COMMITTEES_CACHE.map(c=>{
+      const memberIds = membersByCommittee[c.id] || [];
+      return `<div class="card" style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+          <div><b>${escHtml(c.name)}</b>${c.description?`<div style="font-size:12px;color:var(--ink-400);margin-top:2px">${escHtml(c.description)}</div>`:''}</div>
+          <div><button class="btn btn-ghost btn-sm" data-editcommittee="${c.id}">إدارة الأعضاء</button> <button class="icon-btn danger" data-delcommittee="${c.id}" title="حذف">${icon('trash-2',{size:13})}</button></div>
+        </div>
+        <div class="jd-team-pills" style="display:flex;flex-wrap:wrap;gap:8px">
+          ${memberIds.length ? memberIds.map(jid=>`<span class="badge ok">${escHtml(judgeMap[jid]||'—')}</span>`).join('') : `<span style="font-size:12px;color:var(--ink-400)">لا يوجد أعضاء بعد</span>`}
+        </div>
+      </div>`;
+    }).join('')}
+  `;
+  bindRoundSelector(renderJudgingCommittees);
+  document.getElementById('addCommitteeBtn').addEventListener('click', ()=>openCommitteeModal(null));
+  content.querySelectorAll('[data-delcommittee]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      openConfirm('هل تريد حذف هذه اللجنة نهائيًا؟', async ()=>{
+        const { error } = await sb.from('judging_committees').delete().eq('id', b.dataset.delcommittee);
+        if(error){ showToast('تعذّر الحذف: '+error.message); return; }
+        showToast('تم الحذف'); renderJudgingCommittees();
+      });
+    });
+  });
+  content.querySelectorAll('[data-editcommittee]').forEach(b=>{
+    b.addEventListener('click', ()=>openCommitteeMembersModal(JUDGING_COMMITTEES_CACHE.find(c=>c.id==b.dataset.editcommittee), membersByCommittee[b.dataset.editcommittee]||[], allJudges||[]));
+  });
+}
+
+function openCommitteeModal(existing){
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '440px';
+  box.innerHTML = `
+    <h3>${existing?'تعديل لجنة':'إضافة لجنة جديدة'}</h3>
+    <div class="field-inline"><label class="flabel">اسم اللجنة</label><input type="text" id="commName" value="${existing?escHtml(existing.name):''}" placeholder="مثال: لجنة مسار الابتكار"></div>
+    <div class="field-inline"><label class="flabel">الوصف (اختياري)</label><textarea id="commDesc" style="min-height:70px">${existing?escHtml(existing.description||''):''}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="commCancel">إلغاء</button>
+      <button class="btn btn-primary" id="commSave">حفظ</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('commCancel').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('commSave').addEventListener('click', async ()=>{
+    const name = document.getElementById('commName').value.trim();
+    const desc = document.getElementById('commDesc').value.trim();
+    if(!name){ showToast('اكتب اسم اللجنة'); return; }
+    const payload = { name, description: desc||null };
+    let error;
+    if(existing){ ({ error } = await sb.from('judging_committees').update(payload).eq('id', existing.id)); }
+    else { ({ error } = await sb.from('judging_committees').insert({ ...payload, round_id: CURRENT_ADMIN_ROUND_ID, order_index: JUDGING_COMMITTEES_CACHE.length }).select().single()); }
+    if(error){ showToast('تعذّر الحفظ: '+error.message); return; }
+    modal.classList.remove('show'); restoreConfirmModal();
+    showToast('تم الحفظ'); renderJudgingCommittees();
+  });
+}
+
+function openCommitteeMembersModal(committee, currentMemberIds, allJudges){
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '440px';
+  box.innerHTML = `
+    <h3>أعضاء لجنة "${escHtml(committee.name)}"</h3>
+    <div style="max-height:280px;overflow-y:auto;margin:12px 0">
+      ${allJudges.map(j=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px">
+        <input type="checkbox" class="committee-member-cb" value="${j.id}" ${currentMemberIds.includes(j.id)?'checked':''}>
+        ${escHtml(j.full_name)}
+      </label>`).join('')}
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="commMembersCancel">إلغاء</button>
+      <button class="btn btn-primary" id="commMembersSave">حفظ</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('commMembersCancel').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('commMembersSave').addEventListener('click', async ()=>{
+    const selectedIds = Array.from(box.querySelectorAll('.committee-member-cb:checked')).map(cb=>cb.value);
+    await sb.from('committee_members').delete().eq('committee_id', committee.id);
+    if(selectedIds.length){
+      const { error } = await sb.from('committee_members').insert(selectedIds.map(jid=>({ committee_id: committee.id, judge_id: jid })));
+      if(error){ showToast('تعذّر الحفظ: '+error.message); return; }
+    }
+    modal.classList.remove('show'); restoreConfirmModal();
+    showToast('تم حفظ أعضاء اللجنة'); renderJudgingCommittees();
+  });
+}
+
+/* ---------------- أعباء المحكّمين (عبر كل الجولات) ---------------- */
+async function renderJudgingWorkload(){
+  const content = document.getElementById('judgingSubContent');
+  content.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+
+  const [{data: judges}, {data: assignments}, {data: evals}, {data: rounds}] = await Promise.all([
+    sb.from('judges').select('id, full_name').eq('is_active', true).order('full_name'),
+    sb.from('judge_assignments').select('judge_id, round_id'),
+    sb.from('judge_evaluations').select('judge_id, round_id, is_submitted'),
+    sb.from('judging_rounds').select('id, name'),
+  ]);
+  const roundMap = {}; (rounds||[]).forEach(r=>{ roundMap[r.id] = r.name; });
+
+  const rows = (judges||[]).map(j=>{
+    const myAssignments = (assignments||[]).filter(a=>a.judge_id===j.id);
+    const mySubmitted = (evals||[]).filter(e=>e.judge_id===j.id && e.is_submitted);
+    const roundsInvolved = [...new Set(myAssignments.map(a=>roundMap[a.round_id]).filter(Boolean))];
+    return { judge:j, totalAssigned: myAssignments.length, totalSubmitted: mySubmitted.length, rounds: roundsInvolved };
+  }).sort((a,b)=>b.totalAssigned-a.totalAssigned);
+
+  content.innerHTML = `
+    <div class="req-banner" style="margin-bottom:16px">إجمالي التكليفات لكل محكّم عبر كل الجولات — يساعدك تتأكد إن التوزيع عادل ولا محكّم محمَّل أكثر من غيره.</div>
+    ${rows.length===0 ? `<div class="empty-hint">لا يوجد محكّمون نشطون</div>` : `
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>المحكّم</th><th>إجمالي المُسند (كل الجولات)</th><th>إجمالي المُكتمل</th><th>الجولات المشارك بها</th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td>${escHtml(r.judge.full_name)}</td>
+        <td class="mono">${r.totalAssigned}</td>
+        <td class="mono">${r.totalSubmitted}</td>
+        <td style="font-size:12px;color:var(--ink-600)">${r.rounds.map(escHtml).join('، ')||'—'}</td>
+      </tr>`).join('')}</tbody>
+    </table></div></div>`}
+  `;
+}
+
+/* ---------------- المراكز والإعلان ---------------- */
+async function renderJudgingRanking(){
+  const content = document.getElementById('judgingSubContent');
+  content.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  await ensureRoundsLoaded();
+  if(!CURRENT_ADMIN_ROUND_ID){ content.innerHTML = roundSelectorHTML(); return; }
+  const round = JUDGING_ROUNDS_CACHE.find(r=>r.id===CURRENT_ADMIN_ROUND_ID);
+
+  const [{data: assignments}, {data: evals}, {data: criteria}] = await Promise.all([
+    sb.from('judge_assignments').select('judge_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+    sb.from('judge_evaluations').select('judge_id, form_id, scores, is_submitted').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+    sb.from('judging_criteria').select('id, max_score').eq('is_active', true).eq('round_id', CURRENT_ADMIN_ROUND_ID),
+  ]);
+  const criteriaMap = {}; (criteria||[]).forEach(c=>{ criteriaMap[c.id] = parseFloat(c.max_score); });
+  const maxTotal = Object.values(criteriaMap).reduce((s,w)=>s+w,0) || 1;
+  const weightedTotal = (scores)=> Object.entries(scores||{}).reduce((s,[cid,val])=>s+(parseFloat(val||0)/5)*(criteriaMap[cid]||0), 0);
+
+  const rows = joinedReviewRows();
+  const formIdToProject = {}; rows.forEach(r=>{ formIdToProject[r.form_id] = r; });
+  const formIds = [...new Set((assignments||[]).map(a=>a.form_id))];
+
+  const ranked = formIds.map(formId=>{
+    const submittedEvals = (evals||[]).filter(e=>e.form_id===formId && e.is_submitted);
+    const assignedCount = (assignments||[]).filter(a=>a.form_id===formId).length;
+    const avgTotal = submittedEvals.length ? submittedEvals.reduce((s,e)=>s+weightedTotal(e.scores),0)/submittedEvals.length : null;
+    const proj = formIdToProject[formId] || {};
+    return { project_id: proj.project_id||'—', project_name: proj.project_name||'—', avgTotal, submittedCount: submittedEvals.length, assignedCount, complete: submittedEvals.length===assignedCount && assignedCount>0 };
+  }).filter(r=>r.avgTotal!==null).sort((a,b)=>b.avgTotal-a.avgTotal);
+
+  const medalIcons = ['🥇','🥈','🥉'];
+  content.innerHTML = `
+    ${roundSelectorHTML()}
+    <div class="card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <b>نشر النتائج للفرق</b>
+        <div style="font-size:12px;color:var(--ink-400);margin-top:2px">${round?.results_published ? `منشورة منذ ${relativeTime(round.published_at)}` : 'غير منشورة حاليًا — الفرق ما تقدر تشوف نتائجها'}</div>
+      </div>
+      <button class="btn ${round?.results_published?'btn-ghost':'btn-primary'} btn-sm" id="togglePublishBtn">${round?.results_published?'إلغاء النشر':'نشر النتائج الآن'}</button>
+    </div>
+
+    ${ranked.length===0 ? `<div class="empty-hint">لا توجد نتائج كافية بعد لعرض المراكز</div>` : `
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>المركز</th><th>رقم المشروع</th><th>اسم المشروع</th><th>الدرجة</th><th>الحالة</th></tr></thead>
+      <tbody>${ranked.map((r,i)=>`<tr style="${i<3?'background:var(--gold-100)33':''}">
+        <td style="font-size:16px">${medalIcons[i]||(i+1)}</td>
+        <td class="mono">${escHtml(r.project_id)}</td>
+        <td><b>${escHtml(r.project_name)}</b></td>
+        <td><b class="mono" style="font-size:14px">${r.avgTotal.toFixed(1)} / ${maxTotal}</b></td>
+        <td>${r.complete ? `<span class="badge ok">اكتمل التحكيم</span>` : `<span class="badge mid">${r.submittedCount}/${r.assignedCount} محكّمين</span>`}</td>
+      </tr>`).join('')}</tbody>
+    </table></div></div>`}
+  `;
+  bindRoundSelector(renderJudgingRanking);
+  document.getElementById('togglePublishBtn').addEventListener('click', async ()=>{
+    const publish = !round?.results_published;
+    const doToggle = async ()=>{
+      const { error } = await sb.from('judging_rounds').update({ results_published: publish, published_at: publish ? new Date().toISOString() : null }).eq('id', CURRENT_ADMIN_ROUND_ID);
+      if(error){ showToast('تعذّر التحديث: '+error.message); return; }
+      showToast(publish ? 'تم نشر النتائج' : 'تم إلغاء النشر');
+      JUDGING_ROUNDS_CACHE = [];
+      renderJudgingRanking();
+    };
+    if(publish){ openConfirm('نشر النتائج يعني الفرق تقدر تشوف نتائج هذه الجولة. متابعة؟', doToggle); }
+    else { doToggle(); }
+  });
+}
+
 async function renderJudgingRounds(){
   const content = document.getElementById('judgingSubContent');
   const { data, error } = await sb.from('judging_rounds').select('*').order('order_index');
@@ -1507,6 +1770,61 @@ async function renderJudgingAssignment(){
 }
 
 /* ---------------- نتائج التحكيم ---------------- */
+/* ---------------- سير التحكيم ---------------- */
+async function renderJudgingProgress(){
+  const content = document.getElementById('judgingSubContent');
+  content.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  await ensureRoundsLoaded();
+  if(!CURRENT_ADMIN_ROUND_ID){ content.innerHTML = roundSelectorHTML(); return; }
+
+  const [{data: judges}, {data: assignments}, {data: evals}] = await Promise.all([
+    sb.from('judges').select('id, full_name').eq('is_active', true).order('full_name'),
+    sb.from('judge_assignments').select('judge_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+    sb.from('judge_evaluations').select('judge_id, form_id, is_submitted').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+  ]);
+
+  const activeJudges = judges || [];
+  const totalAssigned = (assignments||[]).length;
+  const totalSubmitted = (evals||[]).filter(e=>e.is_submitted).length;
+  const overallPct = totalAssigned ? Math.round(totalSubmitted/totalAssigned*100) : 0;
+
+  const judgeRows = activeJudges.map(j=>{
+    const assigned = (assignments||[]).filter(a=>a.judge_id===j.id).length;
+    const submitted = (evals||[]).filter(e=>e.judge_id===j.id && e.is_submitted).length;
+    const pct = assigned ? Math.round(submitted/assigned*100) : 0;
+    return { judge: j, assigned, submitted, pct };
+  }).sort((a,b)=>a.pct-b.pct); // الأبطأ تقدمًا أولًا — يلفت انتباه الإداري لمن يحتاج متابعة
+
+  content.innerHTML = `
+    ${roundSelectorHTML()}
+    <div class="grid kpi-row" style="margin-bottom:18px">
+      <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('clipboard-list',{size:18})}</div>
+        <div class="kval mono">${totalAssigned}</div><div class="klabel">إجمالي التكليفات بهذه الجولة</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:${overallPct===100?'var(--success-100)':'var(--amber-100)'};color:${overallPct===100?'var(--success)':'var(--amber)'}">${icon('check',{size:18})}</div>
+        <div class="kval mono">${overallPct}%</div><div class="klabel">نسبة الإنجاز الكلية (${totalSubmitted}/${totalAssigned})</div></div>
+    </div>
+
+    ${judgeRows.length===0 ? `<div class="empty-hint">لا يوجد محكّمون نشطون أو تكليفات بهذه الجولة بعد</div>` : `
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>المحكّم</th><th>مُسند</th><th>مُكتمل</th><th>التقدّم</th></tr></thead>
+      <tbody>${judgeRows.map(r=>`<tr>
+        <td>${escHtml(r.judge.full_name)}</td>
+        <td class="mono">${r.assigned}</td>
+        <td class="mono">${r.submitted}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;background:var(--paper);border-radius:999px;height:8px;overflow:hidden;min-width:100px">
+              <div style="width:${r.pct}%;height:100%;background:${r.pct===100?'var(--success)':r.pct===0?'var(--danger)':'var(--amber)'}"></div>
+            </div>
+            <span class="mono" style="font-size:12px;white-space:nowrap">${r.pct}%</span>
+          </div>
+        </td>
+      </tr>`).join('')}</tbody>
+    </table></div></div>`}
+  `;
+  bindRoundSelector(renderJudgingProgress);
+}
+
 async function renderJudgingResults(){
   const content = document.getElementById('judgingSubContent');
   content.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
@@ -1519,18 +1837,27 @@ async function renderJudgingResults(){
     sb.from('judging_criteria').select('id, max_score').eq('is_active', true).eq('round_id', CURRENT_ADMIN_ROUND_ID),
   ]);
 
-  const maxTotal = (criteria||[]).reduce((sum,c)=>sum+parseFloat(c.max_score),0) || 1;
+  const criteriaMap = {}; (criteria||[]).forEach(c=>{ criteriaMap[c.id] = parseFloat(c.max_score); });
+  const maxTotal = Object.values(criteriaMap).reduce((sum,w)=>sum+w,0) || 1;
   const rows = joinedReviewRows();
   const formIdToProject = {}; rows.forEach(r=>{ formIdToProject[r.form_id] = r; });
 
   const formIds = [...new Set((assignments||[]).map(a=>a.form_id))];
   if(!formIds.length){ content.innerHTML = roundSelectorHTML() + `<div class="empty-hint">لا توجد مشاريع بهذه الجولة بعد</div>`; bindRoundSelector(renderJudgingResults); return; }
 
+  /* الدرجة النهائية = مجموع (الدرجة المختارة 1-5 ÷ 5 × وزن المعيار) لكل
+     معيار — لا مجموع بسيط، لأن سلّم التقييم ثابت 1-5 بغض النظر عن وزن
+     المعيار (قد يكون 10% أو 25% مثلًا) */
+  const weightedTotal = (scores)=> Object.entries(scores||{}).reduce((s,[critId,val])=>{
+    const weight = criteriaMap[critId] || 0;
+    return s + (parseFloat(val||0)/5)*weight;
+  }, 0);
+
   const resultsRows = formIds.map(formId=>{
     const assignedCount = (assignments||[]).filter(a=>a.form_id===formId).length;
     const submittedEvals = (evals||[]).filter(e=>e.form_id===formId && e.is_submitted);
     const avgTotal = submittedEvals.length
-      ? submittedEvals.reduce((sum,e)=>sum + Object.values(e.scores||{}).reduce((s,v)=>s+parseFloat(v||0),0), 0) / submittedEvals.length
+      ? submittedEvals.reduce((sum,e)=>sum + weightedTotal(e.scores), 0) / submittedEvals.length
       : null;
     const proj = formIdToProject[formId] || {};
     return { formId, project_id: proj.project_id||'—', project_name: proj.project_name||'—', assignedCount, submittedCount: submittedEvals.length, avgTotal };
