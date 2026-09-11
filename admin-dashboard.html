@@ -1266,15 +1266,19 @@ async function renderJudgingCommittees(){
   content.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
   await ensureRoundsLoaded();
   if(!CURRENT_ADMIN_ROUND_ID){ content.innerHTML = roundSelectorHTML(); return; }
+  // تحميل احتياطي — لازم لـjoinedReviewRows()، قد لا يكون محمَّلًا لو هذا أول تبويب يفتحه الإداري
+  if(!reviewFormsRaw.length) await loadReviewList();
+  if(!eligibleProjects.length) await loadEligibleProjects();
 
-  const [{data: committees}, {data: allMembers}, {data: allJudges}, {data: committeeAssignments}, {data: allJudgeAssignments}, {data: submittedRows}] = await Promise.all([
+  const [{data: committees}, {data: allMembers}, {data: allJudges}, {data: committeeAssignments}, {data: allJudgeAssignments}, submittedRowsResult] = await Promise.all([
     sb.from('judging_committees').select('*').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
     sb.from('committee_members').select('committee_id, judge_id'),
     sb.from('judges').select('id, full_name').eq('is_active', true).order('full_name'),
     sb.from('committee_assignments').select('committee_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
     sb.from('judge_assignments').select('judge_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
-    Promise.resolve(joinedReviewRows().filter(r=>r.status==='submitted')),
+    getQualifyingSubmittedRows().catch(err=>{ console.error('تعذّر جلب المشاريع المستوفية:', err); return []; }),
   ]);
+  const submittedRows = submittedRowsResult || [];
   JUDGING_COMMITTEES_CACHE = committees || [];
   const judgeMap = {}; (allJudges||[]).forEach(j=>{ judgeMap[j.id] = j.full_name; });
   const membersByCommittee = {};
@@ -1293,7 +1297,7 @@ async function renderJudgingCommittees(){
 
   content.innerHTML = `
     ${roundSelectorHTML()}
-    <div class="req-banner" style="margin-bottom:16px">ثلاث خطوات: شكّل اللجان، ثم أسند إليها المشاريع، ثم تابع السير.</div>
+    <div class="req-banner" style="margin-bottom:16px">ثلاث خطوات: شكّل اللجان، ثم أسند إليها المشاريع، ثم تابع السير. <b>المشاريع المتاحة للإسناد هنا هي "المستوفية" فقط</b> (لها سجل تجاري أو شراكة/ملكية فكرية) — غير المستوفية لا تدخل مرحلة التحكيم إطلاقًا.</div>
 
     <div class="card" style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -1309,7 +1313,7 @@ async function renderJudgingCommittees(){
     <div class="card" style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
         <b>إسناد المشاريع</b>
-        <span style="color:var(--success);font-size:12.5px">${committeeAssignedFormIds.size ? '✓' : ''} ${committeeAssignedFormIds.size} من ${totalSubmittedProjects} مشروعًا مسنَد</span>
+        <span style="color:var(--success);font-size:12.5px">${committeeAssignedFormIds.size ? '✓' : ''} ${committeeAssignedFormIds.size} من ${totalSubmittedProjects} مشروعًا مستوفيًا مسنَد</span>
       </div>
       <button class="btn btn-primary btn-sm" id="autoAssignProjectsBtn">${icon('sparkles',{size:13})} إسناد تلقائي</button>
     </div>
@@ -3718,6 +3722,18 @@ function classifyDocumentation(av, files){
   if(hasCommercial) return 'commercial_only';                    // مستوفٍ (سجل تجاري)
   if(hasIpPartnership) return 'ip_only';                         // مستوفٍ لكن بتاق "عدم وجود سجل تجاري"
   return 'none';                                                  // غير مستوفٍ (لا على الاثنين)
+}
+
+/* يجلب فقط الطلبات المُرسَلة "المستوفية" (سجل تجاري أو شراكة/ملكية فكرية) —
+   هذه هي مرشِّحات التحكيم فعليًا، لا كل الطلبات المُرسَلة بلا تمييز. تُستخدم
+   من تبويب "اللجان والتعيين" لتحديد المشاريع المتاحة للإسناد. */
+async function getQualifyingSubmittedRows(){
+  const submittedRows = joinedReviewRows().filter(r=>r.status==='submitted');
+  await loadShortlistAutoData(submittedRows.map(r=>r.form_id));
+  return submittedRows.filter(r=>{
+    const data = shortlistAutoData[r.form_id] || { av:{}, files:[] };
+    return classifyDocumentation(data.av, data.files) !== 'none';
+  });
 }
 
 /* فحص موضوعي: هل قائد الفريق فعليًا صاحب قرار بالمنشأة المسجَّلة (مالك/شريك/

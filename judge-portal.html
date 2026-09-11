@@ -911,12 +911,37 @@ async function loadProjectLists(){
 }
 
 /* ---------------- كل المشاريع (استعراض فقط، بدون تسجيل درجات) ---------------- */
+/* نفس منطق الاستيفاء المستندي المستخدم بلوحة التحكم: هل يوجد سجل تجاري أو
+   بديله (شراكة/ملكية فكرية)؟ يُستخدم لقصر "كل المشاريع" على المستوفية فقط —
+   غير المستوفية لا تدخل مرحلة التحكيم إطلاقًا. */
+async function fetchQualifyingFormIds(formIds, questions){
+  if(!formIds.length) return new Set();
+  const ipKey = findFieldKeyByLabelJD(questions, ['حماية للملكية الفكرية', 'شراكة مع جهات حكومية']);
+  const fieldKeys = ipKey ? ['f2_1', ipKey] : ['f2_1'];
+  const { data } = await sb.from('form_answers').select('form_id, field_key, value_text').in('field_key', fieldKeys).in('form_id', formIds);
+  const byForm = {};
+  (data||[]).forEach(a=>{ (byForm[a.form_id] = byForm[a.form_id]||{})[a.field_key] = a.value_text; });
+  const qualifying = new Set();
+  formIds.forEach(id=>{
+    const av = byForm[id] || {};
+    if(av['f2_1']==='نعم' || (ipKey && av[ipKey]==='نعم')) qualifying.add(id);
+  });
+  return qualifying;
+}
+
 async function loadAllProjectsView(){
   const el = document.getElementById('jdAllProjectsGrid');
   const filterSlot = document.getElementById('jdAllProjectsFilterBar');
   el.innerHTML = `<div class="jd-empty">جارٍ التحميل…</div>`;
-  const { data: forms } = await sb.from('verification_forms').select('id, project_id, status').eq('status', 'submitted');
-  if(!forms || !forms.length){ filterSlot.innerHTML=''; el.innerHTML = `<div class="jd-empty">لا توجد طلبات مُرسَلة بعد.</div>`; return; }
+  const { data: allForms } = await sb.from('verification_forms').select('id, project_id, status').eq('status', 'submitted');
+  if(!allForms || !allForms.length){ filterSlot.innerHTML=''; el.innerHTML = `<div class="jd-empty">لا توجد طلبات مُرسَلة بعد.</div>`; return; }
+
+  const { data: questions } = await sb.from('form_questions').select('field_key, label').eq('is_active', true);
+  const qualifyingIds = await fetchQualifyingFormIds(allForms.map(f=>f.id), questions);
+  const forms = allForms.filter(f=>qualifyingIds.has(f.id));
+
+  if(!forms.length){ filterSlot.innerHTML=''; document.getElementById('jdAllProjectsTitle').textContent='كل المشاريع المُرسَلة (0)'; el.innerHTML = `<div class="jd-empty">لا توجد مشاريع مستوفية بعد.</div>`; return; }
+
   const projectIds = [...new Set(forms.map(f=>f.project_id))];
   const formIds = forms.map(f=>f.id);
   const [{data: projects}, domainMap] = await Promise.all([
@@ -928,7 +953,7 @@ async function loadAllProjectsView(){
 
   const filtered = applyJdFilters(Object.values(formMap));
 
-  document.getElementById('jdAllProjectsTitle').textContent = `كل المشاريع المُرسَلة (${forms.length})`;
+  document.getElementById('jdAllProjectsTitle').textContent = `كل المشاريع المستوفية (${forms.length})`;
   filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), false, filtered.length);
   bindFilterBar(loadAllProjectsView);
 
