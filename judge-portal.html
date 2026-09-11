@@ -365,6 +365,7 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
   <div style="max-width:920px;margin:0 auto;padding:0 20px">
   <div id="jdListView">
     <div id="jdFellowJudgesCard" class="jd-section-card" style="display:none"></div>
+    <div id="jdCriteriaSummaryCard" class="jd-section-card" style="display:none"></div>
     <div id="jdTeamsFilterBar"></div>
     <div class="jd-section-title">المشاريع المُسندة إليك رسميًا</div>
     <div class="jd-project-grid" id="jdAssignedGrid"><div class="jd-empty">جارٍ التحميل…</div></div>
@@ -596,7 +597,7 @@ async function completeLogin(){
     const { data: judgeId } = await sb.rpc('verify_judge_login', { p_email: currentEmail, p_phone: currentPhone, p_password: els.newPassword.value });
     CURRENT_JUDGE_ID = judgeId;
   }
-  const { data: judgeRow } = await sb.from('judges').select('full_name').eq('id', CURRENT_JUDGE_ID).maybeSingle();
+  const { data: judgeRow } = await sb.from('judges_public').select('full_name').eq('id', CURRENT_JUDGE_ID).maybeSingle();
   CURRENT_JUDGE_NAME = judgeRow ? judgeRow.full_name : '';
   sessionStorage.setItem('ib5_judge_session', JSON.stringify({
     judge_id: CURRENT_JUDGE_ID, email: currentEmail, phone: currentPhone, entered_at: new Date().toISOString(),
@@ -691,17 +692,51 @@ async function refreshCurrentTab(){
 }
 
 async function loadJudgingCriteria(){
-  if(!CURRENT_ROUND_ID){ JD_CRITERIA = []; return; }
+  if(!CURRENT_ROUND_ID){ JD_CRITERIA = []; renderCriteriaSummary(); return; }
   const { data } = await sb.from('judging_criteria').select('*').eq('is_active', true).eq('round_id', CURRENT_ROUND_ID).order('order_index');
   JD_CRITERIA = data || [];
+  renderCriteriaSummary();
+}
+
+/* بطاقة "معايير التقييم" أعلى القائمة — ملخص بلمحة (العدد + إجمالي الوزن)
+   مع تفاصيل قابلة للتوسيع لكل معيار ووزنه */
+function renderCriteriaSummary(){
+  const card = document.getElementById('jdCriteriaSummaryCard');
+  if(!JD_CRITERIA.length){ card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  const totalMax = JD_CRITERIA.reduce((s,c)=>s+parseFloat(c.max_score),0) || 1;
+  card.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" id="jdCritSummaryToggle">
+      <div class="jd-section-head" style="margin-bottom:0"><div class="jd-section-icon" style="background:var(--gold-100);color:var(--gold-500)">${icon('clipboard-list',{size:15})}</div><div class="jd-section-head-title">معايير التقييم</div></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:12.5px;color:var(--ink-400)">${JD_CRITERIA.length} معايير · 100%</span>
+        <button class="jd-back" style="margin:0" id="jdCritSummaryBtn">عرض التفاصيل</button>
+      </div>
+    </div>
+    <div id="jdCritSummaryDetails" style="display:none;margin-top:14px">
+      ${JD_CRITERIA.map(c=>{
+        const weight = Math.round(parseFloat(c.max_score)/totalMax*100);
+        return `<div class="jd-qa"><div class="ql">${escHtmlJD(c.label)} — الوزن ${weight}%</div>${c.description?`<div class="qv" style="font-size:12px;color:var(--ink-600)">${escHtmlJD(c.description)}</div>`:''}</div>`;
+      }).join('')}
+    </div>
+  `;
+  const toggle = ()=>{
+    const details = document.getElementById('jdCritSummaryDetails');
+    const btn = document.getElementById('jdCritSummaryBtn');
+    const show = details.style.display === 'none';
+    details.style.display = show ? 'block' : 'none';
+    btn.textContent = show ? 'إخفاء التفاصيل' : 'عرض التفاصيل';
+  };
+  document.getElementById('jdCritSummaryToggle').addEventListener('click', toggle);
 }
 
 let JD_FILTERS = { track:'', domain:'', status:'' };
 
-function buildFilterBarHTML(rows, showStatusFilter){
+function buildFilterBarHTML(rows, showStatusFilter, matchedCount){
   const tracks = [...new Set(rows.map(r=>r.track).filter(Boolean))].sort();
   const domains = [...new Set(rows.map(r=>r.domain).filter(Boolean))].sort();
-  return `<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+  const hasActiveFilter = JD_FILTERS.track||JD_FILTERS.domain||JD_FILTERS.status;
+  return `<div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
     <select id="jdFilterTrack" class="jd-round-select">
       <option value="">كل المسارات</option>
       ${tracks.map(t=>`<option value="${escHtmlJD(t)}" ${JD_FILTERS.track===t?'selected':''}>${escHtmlJD(t)}</option>`).join('')}
@@ -715,8 +750,9 @@ function buildFilterBarHTML(rows, showStatusFilter){
       <option value="evaluated" ${JD_FILTERS.status==='evaluated'?'selected':''}>تم تقييمه</option>
       <option value="notEvaluated" ${JD_FILTERS.status==='notEvaluated'?'selected':''}>لم يُقيَّم بعد</option>
     </select>` : ''}
-    ${(JD_FILTERS.track||JD_FILTERS.domain||JD_FILTERS.status) ? `<button class="jd-back" id="jdClearFiltersBtn" style="margin:0">إزالة الفلاتر</button>` : ''}
-  </div>`;
+    ${hasActiveFilter ? `<button class="jd-back" id="jdClearFiltersBtn" style="margin:0">إزالة الفلاتر</button>` : ''}
+  </div>
+  ${hasActiveFilter ? `<div style="font-size:12px;color:var(--ink-400);margin-bottom:14px">${matchedCount} من ${rows.length} مشروعًا مطابق للفلاتر المحددة</div>` : ''}`;
 }
 function bindFilterBar(onChange){
   const t = document.getElementById('jdFilterTrack');
@@ -745,15 +781,37 @@ async function fetchDomainsForForms(formIds){
   return map;
 }
 
-/* يعرض قائمة المحكّمين النشطين — شفافية بسيطة لمن يشارك بنفس الجولة، بدون
-   الحاجة لبناء نظام "لجان" رسمي كامل بهذه المرحلة */
+/* يعرض أعضاء لجنة المحكّم الرسمية إن كان عضوًا بلجنة لهذه الجولة بالذات،
+   وإلا يعرض كل المحكّمين النشطين (سلوك احتياطي لو ما أُنشئت لجان بعد) */
 async function loadFellowJudges(){
   const card = document.getElementById('jdFellowJudgesCard');
-  const { data: judges } = await sb.from('judges').select('id, full_name').eq('is_active', true).order('full_name');
-  if(!judges || judges.length < 2){ card.style.display = 'none'; return; }
+
+  const { data: myMemberships } = await sb.from('committee_members').select('committee_id').eq('judge_id', CURRENT_JUDGE_ID);
+  let committeeJudgeIds = null, committeeName = null;
+  if(myMemberships && myMemberships.length){
+    const committeeIds = myMemberships.map(m=>m.committee_id);
+    const { data: roundCommittees } = await sb.from('judging_committees').select('id, name').eq('round_id', CURRENT_ROUND_ID).in('id', committeeIds);
+    if(roundCommittees && roundCommittees.length){
+      const myCommittee = roundCommittees[0];
+      committeeName = myCommittee.name;
+      const { data: members } = await sb.from('committee_members').select('judge_id').eq('committee_id', myCommittee.id);
+      committeeJudgeIds = (members||[]).map(m=>m.judge_id);
+    }
+  }
+
+  let judges;
+  if(committeeJudgeIds && committeeJudgeIds.length){
+    const { data } = await sb.from('judges_public').select('id, full_name').in('id', committeeJudgeIds).order('full_name');
+    judges = data;
+  } else {
+    const { data } = await sb.from('judges_public').select('id, full_name').eq('is_active', true).order('full_name');
+    judges = data;
+  }
+
+  if(!judges || judges.length < 1){ card.style.display = 'none'; return; }
   card.style.display = 'block';
   card.innerHTML = `
-    <div class="jd-section-head" style="margin-bottom:10px"><div class="jd-section-icon" style="background:var(--teal-100);color:var(--teal-600)">${icon('users',{size:15})}</div><div class="jd-section-head-title">أعضاء لجنة التحكيم (${judges.length})</div></div>
+    <div class="jd-section-head" style="margin-bottom:10px"><div class="jd-section-icon" style="background:var(--teal-100);color:var(--teal-600)">${icon('users',{size:15})}</div><div class="jd-section-head-title">${committeeName ? escHtmlJD(committeeName) : 'أعضاء لجنة التحكيم'} (${judges.length})</div></div>
     <div class="jd-fellow-judges">
       ${judges.map(j=>{
         const initials = (j.full_name||'').trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('');
@@ -800,11 +858,11 @@ async function loadProjectLists(){
   const evalMap = {}; (myEvals||[]).forEach(e=>{ evalMap[e.form_id] = e.is_submitted; });
   const formMap = {}; (forms||[]).forEach(f=>{ formMap[f.id] = { ...f, ...(projMap[f.project_id]||{}), domain: domainMap[f.id], evaluated: !!evalMap[f.id] }; });
 
-  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), true);
-  bindFilterBar(loadProjectLists);
-
   const filteredMyIds = applyJdFilters(myFormIds.map(id=>formMap[id]).filter(Boolean)).map(p=>p.id);
   const filteredOtherIds = applyJdFilters(otherFormIds.map(id=>formMap[id]).filter(Boolean)).map(p=>p.id);
+
+  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), true, filteredMyIds.length + filteredOtherIds.length);
+  bindFilterBar(loadProjectLists);
 
   const cardHTML = (formId)=>{
     const p = formMap[formId];
@@ -840,10 +898,11 @@ async function loadAllProjectsView(){
   const projMap = {}; (projects||[]).forEach(p=>{ projMap[p.project_id] = p; });
   const formMap = {}; forms.forEach(f=>{ formMap[f.id] = { ...f, ...(projMap[f.project_id]||{}), domain: domainMap[f.id] }; });
 
-  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), false);
+  const filtered = applyJdFilters(Object.values(formMap));
+
+  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), false, filtered.length);
   bindFilterBar(loadAllProjectsView);
 
-  const filtered = applyJdFilters(Object.values(formMap));
   el.innerHTML = filtered.length ? filtered.map(p=>`<div class="jd-pcard" data-openproject="${p.id}">
       <div class="pname">${escHtmlJD(p.project_name||p.project_id)}</div>
       <div class="pmeta mono">${escHtmlJD(p.project_id)} — ${escHtmlJD(p.track||'')}</div>
@@ -1033,7 +1092,7 @@ function renderScoringForm(existingEval, isAssigned){
   const scores = existingEval ? (existingEval.scores||{}) : {};
   scoringCard.innerHTML = `
     <div style="font-weight:700;color:var(--navy-800);margin-bottom:4px;font-size:14px">تسجيل الدرجات</div>
-    <div style="font-size:12px;color:var(--ink-400);margin-bottom:14px">${JD_CRITERIA.length ? `${JD_CRITERIA.length} معايير — اختر درجة من 1 إلى الحد الأقصى لكل معيار` : 'لم يتم إعداد معايير تحكيم بعد — تواصل مع فريق البرنامج.'}</div>
+    <div style="font-size:12px;color:var(--ink-400);margin-bottom:14px">${JD_CRITERIA.length ? `${JD_CRITERIA.length} معايير — اختر درجة من 1 إلى 5 لكل معيار حسب وزنه` : 'لم يتم إعداد معايير تحكيم بعد — تواصل مع فريق البرنامج.'}</div>
     <div id="jdCriteriaList"></div>
     <div class="field" style="margin-top:16px">
       <label for="jdOverallNote">ملاحظة عامة (اختياري)</label>
@@ -1050,15 +1109,14 @@ function renderScoringForm(existingEval, isAssigned){
   document.getElementById('jdCriteriaList').innerHTML = JD_CRITERIA.map(c=>{
     const weight = Math.round(parseFloat(c.max_score)/totalMax*100);
     const current = scores[c.id]!==undefined ? scores[c.id] : null;
-    const btns = [];
-    for(let i=1;i<=c.max_score;i++) btns.push(i);
+    const btns = [1,2,3,4,5];
     return `
     <div class="jd-crit-row" style="flex-direction:column;align-items:stretch;gap:10px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div><div class="jd-crit-label">${escHtmlJD(c.label)}</div>${c.description?`<div class="jd-crit-desc">${escHtmlJD(c.description)}</div>`:''}</div>
-        <div class="jd-score-max" style="white-space:nowrap">الوزن ${weight}% · من ${c.max_score}</div>
+        <div class="jd-score-max" style="white-space:nowrap">الوزن ${weight}%</div>
       </div>
-      <div class="jd-score-btns" data-critid="${c.id}" data-max="${c.max_score}">
+      <div class="jd-score-btns" data-critid="${c.id}" data-max="5">
         ${btns.map(n=>`<button type="button" class="jd-score-btn ${current===n?'selected':''}" data-val="${n}">${n}</button>`).join('')}
       </div>
     </div>`;
@@ -1121,7 +1179,7 @@ async function saveEvaluation(isSubmit){
     if(s && s.judge_id){
       CURRENT_JUDGE_ID = s.judge_id;
       currentEmail = s.email; currentPhone = s.phone;
-      const { data: judgeRow } = await sb.from('judges').select('full_name').eq('id', s.judge_id).maybeSingle();
+      const { data: judgeRow } = await sb.from('judges_public').select('full_name').eq('id', s.judge_id).maybeSingle();
       if(judgeRow){ CURRENT_JUDGE_NAME = judgeRow.full_name; enterDashboard(); }
     }
   }catch(e){}
