@@ -136,6 +136,14 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
 .jd-team-pill b{color:var(--navy-800);font-size:13px;}
 .jd-team-pill .spec{color:var(--teal-600);margin-top:2px;}
 .jd-ip-note{background:var(--gold-100);border:1px solid rgba(201,162,75,.4);border-radius:10px;padding:10px 14px;font-size:12.5px;color:#7A5C1E;margin-top:10px;}
+.jd-overview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px;}
+.jd-ov-label{font-size:11px;color:rgba(255,255,255,.6);margin-bottom:3px;}
+.jd-ov-val{font-size:14px;font-weight:700;}
+.jd-file-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;}
+.jd-file-card{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px 10px;text-decoration:none;transition:border-color .15s;}
+.jd-file-card:hover{border-color:var(--teal-500);}
+.jd-file-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;}
+.jd-file-name{font-size:11.5px;color:var(--ink-900);word-break:break-word;line-height:1.5;}
 .jd-crit-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--line);}
 .jd-crit-row:last-child{border-bottom:none;}
 .jd-crit-label{font-size:13.5px;font-weight:600;color:var(--navy-800);}
@@ -415,6 +423,7 @@ const LUCIDE_ICONS = {
   "save": `<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /> <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" /> <path d="M7 3v4a1 1 0 0 0 1 1h7" />`,
   "file-text": `<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" /> <path d="M14 2v5a1 1 0 0 0 1 1h5" /> <path d="M10 9H8" /> <path d="M16 13H8" /> <path d="M16 17H8" />`,
   "video": `<path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" /> <rect x="2" y="6" width="14" height="12" rx="2" />`,
+  "image": `<rect width="18" height="18" x="3" y="3" rx="2" ry="2" /> <circle cx="9" cy="9" r="2" /> <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />`,
   "log-out": `<path d="m16 17 5-5-5-5" /> <path d="M21 12H9" /> <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />`,
   "trash-2": `<path d="M10 11v6" /> <path d="M14 11v6" /> <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /> <path d="M3 6h18" /> <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />`,
   "pencil": `<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /> <path d="m15 5 4 4" />`,
@@ -850,6 +859,20 @@ async function loadCertificateView(){
   document.getElementById('jdPrintCertBtn').addEventListener('click', ()=>window.print());
 }
 
+/* يحدد أيقونة ولون بطاقة الملف حسب امتداده — PDF أحمر، فيديو بنفسجي،
+   صورة كهرماني، وأي نوع آخر رمادي عام */
+function fileCardHTML(f){
+  const ext = (f.file_name||'').split('.').pop().toLowerCase();
+  let iconName = 'file-text', bg = 'var(--paper)', fg = 'var(--ink-600)';
+  if(ext==='pdf'){ iconName='file-text'; bg='var(--danger-100)'; fg='var(--danger)'; }
+  else if(['mp4','mov','avi','webm'].includes(ext)){ iconName='video'; bg='rgba(107,79,160,.14)'; fg='var(--purple-500)'; }
+  else if(['jpg','jpeg','png','gif','webp'].includes(ext)){ iconName='image'; bg='var(--gold-100)'; fg='var(--gold-500)'; }
+  return `<a href="#" class="jd-file-card" data-viewfile="${escHtmlJD(f.storage_path)}">
+    <div class="jd-file-icon" style="background:${bg};color:${fg}">${icon(iconName,{size:18})}</div>
+    <div class="jd-file-name">${escHtmlJD(f.file_name)}</div>
+  </a>`;
+}
+
 function escHtmlJD(str){
   if(str===null||str===undefined) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -903,8 +926,26 @@ async function openProjectDetail(formId, projInfo){
   // التجاري المستبعد، لأنه إثبات خارجي قد يفيد المحكّم
   const ipKey = findFieldKeyByLabelJD(questions, ['حماية للملكية الفكرية', 'شراكة مع جهات حكومية']);
   const ipValue = ipKey ? avMap[ipKey] : null;
+  // حالة السجل التجاري (نعم/لا) — إشارة سريعة فقط، بدون تفاصيل القسم الإداري الكاملة
+  const commercialRegValue = avMap['f2_1'] || null;
+
+  const PROTOTYPE_STAGE_LABELS = { idea:'مرحلة الفكرة', poc:'نموذج إثبات مفهوم (PoC)', prototype:'نموذج أولي (Prototyping)', mvp:'منتج أولي قابل للاستخدام (MVP)', market:'مطروح في السوق' };
+  const stageLabel = PROTOTYPE_STAGE_LABELS[avMap['f5_1']] || null;
+  const domainValue = avMap['f1_4'] || null;
 
   let sectionsHTML = '';
+
+  // 0) نظرة عامة سريعة — ملخص بلمحة قبل التفاصيل الكاملة
+  sectionsHTML += `
+    <div class="jd-section-card" style="background:linear-gradient(135deg,var(--navy-800) 0%,var(--navy-700) 100%);color:#fff">
+      <div class="jd-overview-grid">
+        ${domainValue ? `<div><div class="jd-ov-label">المجال</div><div class="jd-ov-val">${escHtmlJD(domainValue)}</div></div>` : ''}
+        <div><div class="jd-ov-label">المسار</div><div class="jd-ov-val">${escHtmlJD(projInfo.track||'—')}</div></div>
+        ${stageLabel ? `<div><div class="jd-ov-label">مرحلة النموذج</div><div class="jd-ov-val">${escHtmlJD(stageLabel)}</div></div>` : ''}
+        <div><div class="jd-ov-label">عدد أعضاء الفريق</div><div class="jd-ov-val">${members ? members.length : '—'}</div></div>
+        <div><div class="jd-ov-label">الملفات المرفقة</div><div class="jd-ov-val">${files ? files.length : 0}</div></div>
+      </div>
+    </div>`;
 
   // 1) الفريق — أسماء وتخصصات فقط
   if(members && members.length){
@@ -933,16 +974,17 @@ async function openProjectDetail(formId, projInfo){
       <div class="jd-section-card">
         <div class="jd-section-head"><div class="jd-section-icon" style="background:${meta.color}22;color:${meta.color}">${icon(meta.icon,{size:15})}</div><div class="jd-section-head-title">${escHtmlJD(sectionTitle)}</div></div>
         ${qaRows.join('')}
+        ${sectionTitle==='بيانات المشروع' && commercialRegValue ? `<div class="jd-ip-note" style="${commercialRegValue==='نعم'?'':'background:var(--paper);color:var(--ink-600);border-color:var(--line)'}">${icon('clipboard-list',{size:12})} السجل التجاري: <b>${escHtmlJD(commercialRegValue)}</b></div>` : ''}
         ${sectionTitle==='بيانات المشروع' && ipValue ? `<div class="jd-ip-note">${icon('award',{size:12})} إثبات شراكة أو ملكية فكرية: <b>${escHtmlJD(ipValue)}</b></div>` : ''}
       </div>`;
   });
 
-  // 3) الملفات المرفوعة (فقط ملفات الأقسام المسموحة + العرض الاستثماري)
+  // 3) الملفات المرفوعة — بطاقات بأيقونة حسب نوع الملف
   if(files && files.length){
     sectionsHTML += `
       <div class="jd-section-card">
         <div class="jd-section-head"><div class="jd-section-icon" style="background:var(--paper);color:var(--ink-600)">${icon('paperclip',{size:15})}</div><div class="jd-section-head-title">الملفات المرفوعة</div></div>
-        <div>${files.map(f=>`<a href="#" class="jd-filelink" data-viewfile="${escHtmlJD(f.storage_path)}">${escHtmlJD(f.file_name)}</a>`).join('')}</div>
+        <div class="jd-file-grid">${files.map(f=>fileCardHTML(f)).join('')}</div>
       </div>`;
   }
 

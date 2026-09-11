@@ -1485,8 +1485,10 @@ async function renderJudgingAssignment(){
     const btn = document.getElementById('smartDistributeBtn');
     btn.disabled = true; btn.textContent = 'جارٍ التوزيع…';
 
-    // حذف التوزيع الحالي لهذه المشاريع بالذات ضمن هذه الجولة فقط، ثم إعادة التوزيع
-    await sb.from('judge_assignments').delete().in('form_id', selectedFormIds).eq('round_id', CURRENT_ADMIN_ROUND_ID);
+    // نمسح كل التوزيع الحالي لهذه الجولة بالكامل أولًا (مو فقط المشاريع
+    // المختارة) — حتى لو مشروع كان مُسندًا سابقًا وأزلت تحديده الآن، يُزال
+    // تكليفه فعليًا بدل ما يبقى معلَّقًا بقاعدة البيانات
+    await sb.from('judge_assignments').delete().eq('round_id', CURRENT_ADMIN_ROUND_ID);
 
     const judgeLoad = {}; activeJudges.forEach(j=>{ judgeLoad[j.id] = 0; });
     const newRows = [];
