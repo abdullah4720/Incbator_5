@@ -431,6 +431,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
   <div class="view" id="view-qualifying"></div>
   <div class="view" id="view-nonqualifying"></div>
   <div class="view" id="view-review"></div>
+  <div class="view" id="view-judging"></div>
   <div class="view" id="view-builder"></div>
   <div class="view" id="view-eligibility"></div>
   <div class="view" id="view-users"></div>
@@ -815,6 +816,7 @@ const TABS = [
   {id:"qualifying", l:"المشاريع المستوفية", adminOnly:false},
   {id:"nonqualifying", l:"المشاريع غير المستوفية", adminOnly:false},
   {id:"review", l:"مراجعة الطلبات", adminOnly:false},
+  {id:"judging", l:"التحكيم", adminOnly:true},
   {id:"builder", l:"الأسئلة والنموذج", adminOnly:true},
   {id:"eligibility", l:"الفرق المؤهّلة للدخول", adminOnly:true},
   {id:"users", l:"المستخدمون والأدوار", adminOnly:true},
@@ -1143,6 +1145,305 @@ async function exportReportPpt(d){
 
   await pres.writeFile({ fileName: `التقرير_الشامل_${d.generatedAt.toISOString().slice(0,10)}.pptx` });
   showToast('تم تصدير العرض التقديمي بنجاح');
+}
+
+/* ==========================================================================
+   التحكيم — إدارة المعايير والمحكّمين وتوزيع المشاريع ومتابعة النتائج.
+   ========================================================================== */
+let judgingSubtab = 'criteria';
+let JUDGING_CRITERIA_CACHE = [];
+let JUDGES_CACHE = [];
+
+const JUDGING_SUBTABS = [
+  {id:'criteria', l:'معايير التحكيم'},
+  {id:'judges', l:'المحكّمون'},
+  {id:'assignment', l:'توزيع المشاريع'},
+  {id:'results', l:'النتائج'},
+];
+
+async function renderJudgingTab(){
+  const el = document.getElementById('view-judging');
+  el.innerHTML = `
+    <div class="section-title-row"><div><h2>التحكيم</h2><p>إدارة معايير التحكيم، المحكّمين، توزيع المشاريع، ومتابعة النتائج المجمَّعة.</p></div></div>
+    <div class="subtabs" style="display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:2px">
+      ${JUDGING_SUBTABS.map(t=>`<button class="subtab-btn ${judgingSubtab===t.id?'active':''}" data-jsub="${t.id}">${t.l}</button>`).join('')}
+    </div>
+    <div id="judgingSubContent"><div class="empty-hint">جارٍ التحميل…</div></div>
+  `;
+  el.querySelectorAll('[data-jsub]').forEach(b=>{
+    b.addEventListener('click', ()=>{ judgingSubtab = b.dataset.jsub; renderJudgingTab(); });
+  });
+  if(judgingSubtab==='criteria') renderJudgingCriteria();
+  else if(judgingSubtab==='judges') renderJudgingJudges();
+  else if(judgingSubtab==='assignment') renderJudgingAssignment();
+  else if(judgingSubtab==='results') renderJudgingResults();
+}
+
+/* ---------------- معايير التحكيم ---------------- */
+async function renderJudgingCriteria(){
+  const content = document.getElementById('judgingSubContent');
+  const { data, error } = await sb.from('judging_criteria').select('*').order('order_index');
+  if(error){ content.innerHTML = `<div class="empty-hint">تعذّر التحميل: ${error.message}</div>`; return; }
+  JUDGING_CRITERIA_CACHE = data || [];
+
+  content.innerHTML = `
+    <div style="text-align:left;margin-bottom:14px"><button class="btn btn-primary btn-sm" id="addCriterionBtn">+ إضافة معيار</button></div>
+    ${JUDGING_CRITERIA_CACHE.length===0 ? `<div class="empty-hint">لا توجد معايير بعد</div>` : `
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>المعيار</th><th>الوصف</th><th>الدرجة القصوى</th><th>الحالة</th><th></th></tr></thead>
+      <tbody>${JUDGING_CRITERIA_CACHE.map(c=>`<tr>
+        <td><b>${escHtml(c.label)}</b></td>
+        <td style="color:var(--ink-400);font-size:12.5px">${escHtml(c.description)||'—'}</td>
+        <td class="mono">${c.max_score}</td>
+        <td><span class="badge ${c.is_active?'ok':'mid'}">${c.is_active?'مفعَّل':'معطَّل'}</span></td>
+        <td>
+          <button class="icon-btn" data-editcrit="${c.id}" title="تعديل">${icon('pencil',{size:13})}</button>
+          <button class="icon-btn danger" data-delcrit="${c.id}" title="حذف">${icon('trash-2',{size:13})}</button>
+        </td>
+      </tr>`).join('')}</tbody>
+    </table></div></div>`}
+  `;
+  document.getElementById('addCriterionBtn').addEventListener('click', ()=>openCriterionModal(null));
+  content.querySelectorAll('[data-editcrit]').forEach(b=>{
+    b.addEventListener('click', ()=>openCriterionModal(JUDGING_CRITERIA_CACHE.find(c=>c.id==b.dataset.editcrit)));
+  });
+  content.querySelectorAll('[data-delcrit]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      openConfirm('هل تريد حذف هذا المعيار نهائيًا؟ لن يظهر بعدها في نماذج التحكيم الجديدة.', async ()=>{
+        const { error } = await sb.from('judging_criteria').delete().eq('id', b.dataset.delcrit);
+        if(error){ showToast('تعذّر الحذف: '+error.message); return; }
+        showToast('تم الحذف'); renderJudgingCriteria();
+      });
+    });
+  });
+}
+
+function openCriterionModal(existing){
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '460px';
+  box.innerHTML = `
+    <h3>${existing?'تعديل معيار':'إضافة معيار جديد'}</h3>
+    <div class="field-inline"><label class="flabel">اسم المعيار</label><input type="text" id="critLabel" value="${existing?escHtml(existing.label):''}"></div>
+    <div class="field-inline"><label class="flabel">الوصف (اختياري)</label><textarea id="critDesc" style="min-height:70px">${existing?escHtml(existing.description||''):''}</textarea></div>
+    <div class="field-inline"><label class="flabel">الدرجة القصوى</label><input type="number" id="critMax" min="1" value="${existing?existing.max_score:10}"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="critCancel">إلغاء</button>
+      <button class="btn btn-primary" id="critSave">حفظ</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('critCancel').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('critSave').addEventListener('click', async ()=>{
+    const label = document.getElementById('critLabel').value.trim();
+    const desc = document.getElementById('critDesc').value.trim();
+    const max = parseFloat(document.getElementById('critMax').value)||10;
+    if(!label){ showToast('اكتب اسم المعيار'); return; }
+    const payload = { label, description: desc||null, max_score: max };
+    let error;
+    if(existing){ ({ error } = await sb.from('judging_criteria').update(payload).eq('id', existing.id)); }
+    else { ({ error } = await sb.from('judging_criteria').insert({ ...payload, order_index: JUDGING_CRITERIA_CACHE.length }).select().single()); }
+    if(error){ showToast('تعذّر الحفظ: '+error.message); return; }
+    modal.classList.remove('show'); restoreConfirmModal();
+    showToast('تم الحفظ'); renderJudgingCriteria();
+  });
+}
+
+/* ---------------- المحكّمون ---------------- */
+async function renderJudgingJudges(){
+  const content = document.getElementById('judgingSubContent');
+  const { data, error } = await sb.from('judges').select('*').order('created_at');
+  if(error){ content.innerHTML = `<div class="empty-hint">تعذّر التحميل: ${error.message}</div>`; return; }
+  JUDGES_CACHE = data || [];
+
+  content.innerHTML = `
+    <div style="text-align:left;margin-bottom:14px"><button class="btn btn-primary btn-sm" id="addJudgeBtn">+ إضافة محكّم</button></div>
+    ${JUDGES_CACHE.length===0 ? `<div class="empty-hint">لا يوجد محكّمون بعد</div>` : `
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>الاسم</th><th>البريد</th><th>الجوال</th><th>كلمة المرور</th><th>الحالة</th><th></th></tr></thead>
+      <tbody>${JUDGES_CACHE.map(j=>`<tr>
+        <td><b>${escHtml(j.full_name)}</b></td>
+        <td class="mono">${escHtml(j.email)}</td>
+        <td class="mono">${escHtml(j.phone)}</td>
+        <td>${j.password_hash ? `<span class="badge ok">أنشأها</span>` : `<span class="badge mid">لم يُنشئها بعد</span>`}</td>
+        <td><span class="badge ${j.is_active?'ok':'no'}">${j.is_active?'نشط':'موقوف'}</span></td>
+        <td>
+          <button class="btn btn-ghost btn-sm" data-resetjudge="${j.id}">تصفير كلمة المرور</button>
+          <button class="btn btn-ghost btn-sm" data-togglejudge="${j.id}">${j.is_active?'إيقاف':'تفعيل'}</button>
+        </td>
+      </tr>`).join('')}</tbody>
+    </table></div></div>`}
+  `;
+  document.getElementById('addJudgeBtn').addEventListener('click', openJudgeModal);
+  content.querySelectorAll('[data-resetjudge]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      openConfirm('سيُصفَّر هذا الإجراء كلمة مرور المحكّم — يحتاج ينشئ كلمة مرور جديدة عند دخوله التالي. متابعة؟', async ()=>{
+        const { error } = await sb.rpc('admin_reset_judge_password', { p_judge_id: b.dataset.resetjudge });
+        if(error){ showToast('تعذّر التصفير: '+error.message); return; }
+        showToast('تم تصفير كلمة المرور'); renderJudgingJudges();
+      });
+    });
+  });
+  content.querySelectorAll('[data-togglejudge]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const j = JUDGES_CACHE.find(x=>x.id===b.dataset.togglejudge);
+      const { error } = await sb.from('judges').update({ is_active: !j.is_active }).eq('id', j.id);
+      if(error){ showToast('تعذّر التحديث: '+error.message); return; }
+      showToast('تم التحديث'); renderJudgingJudges();
+    });
+  });
+}
+
+function openJudgeModal(){
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '440px';
+  box.innerHTML = `
+    <h3>إضافة محكّم جديد</h3>
+    <div class="field-inline"><label class="flabel">الاسم الكامل</label><input type="text" id="jName"></div>
+    <div class="field-inline"><label class="flabel">البريد الإلكتروني</label><input type="email" id="jEmail"></div>
+    <div class="field-inline"><label class="flabel">رقم الجوال</label><input type="text" id="jPhone" placeholder="05xxxxxxxx"></div>
+    <div class="req-banner">المحكّم يُنشئ كلمة مروره بنفسه عند أول دخول لبوابة المحكّمين (judge-portal.html) باستخدام هذا البريد والجوال بالضبط.</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="jCancel">إلغاء</button>
+      <button class="btn btn-primary" id="jSave">حفظ</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('jCancel').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('jSave').addEventListener('click', async ()=>{
+    const full_name = document.getElementById('jName').value.trim();
+    const email = document.getElementById('jEmail').value.trim().toLowerCase();
+    const phone = document.getElementById('jPhone').value.trim();
+    if(!full_name || !email || !phone){ showToast('عبّئ كل الحقول'); return; }
+    const { error } = await sb.from('judges').insert({ full_name, email, phone }).select().single();
+    if(error){ showToast('تعذّر الحفظ: '+error.message); return; }
+    modal.classList.remove('show'); restoreConfirmModal();
+    showToast('تمت إضافة المحكّم'); renderJudgingJudges();
+  });
+}
+
+/* ---------------- توزيع المشاريع ---------------- */
+async function renderJudgingAssignment(){
+  const content = document.getElementById('judgingSubContent');
+  content.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+
+  const [{data: judges}, {data: assignments}] = await Promise.all([
+    sb.from('judges').select('id, full_name').eq('is_active', true),
+    sb.from('judge_assignments').select('judge_id, form_id'),
+  ]);
+  const activeJudges = judges || [];
+  const rows = joinedReviewRows().filter(r=>r.status==='submitted');
+
+  const assignedFormIds = new Set((assignments||[]).map(a=>a.form_id));
+  const countByJudge = {};
+  activeJudges.forEach(j=>{ countByJudge[j.id] = (assignments||[]).filter(a=>a.judge_id===j.id).length; });
+
+  content.innerHTML = `
+    <div class="req-banner" style="margin-bottom:16px">اختر المشاريع اللي تبي تدخلها جولة التحكيم، وحدّد عدد المحكّمين لكل مشروع، ثم اضغط "توزيع ذكي" — يوزّع المشاريع على المحكّمين النشطين بالتساوي تلقائيًا.</div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">
+        <div class="field-inline" style="margin:0"><label class="flabel">عدد المحكّمين لكل مشروع</label><input type="number" id="judgesPerProject" min="1" max="${activeJudges.length||1}" value="2" style="width:80px"></div>
+        <button class="btn btn-primary" id="smartDistributeBtn">${icon('sparkles',{size:13})} توزيع ذكي الآن</button>
+        <span style="font-size:12px;color:var(--ink-400)">${activeJudges.length} محكّم نشط</span>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="ac-title" style="margin-bottom:10px">عدد المشاريع المُسندة لكل محكّم</div>
+      ${activeJudges.length===0 ? `<div class="empty-hint">لا يوجد محكّمون نشطون — أضفهم من تبويب "المحكّمون" أولًا</div>` : `
+      <div class="table-wrap"><table>
+        <thead><tr><th>المحكّم</th><th>عدد المشاريع المُسندة</th></tr></thead>
+        <tbody>${activeJudges.map(j=>`<tr><td>${escHtml(j.full_name)}</td><td class="mono">${countByJudge[j.id]||0}</td></tr>`).join('')}</tbody>
+      </table></div>`}
+    </div>
+
+    <div class="card">
+      <div class="ac-title" style="margin-bottom:10px">اختر المشاريع (${rows.length} طلب مُرسَل)</div>
+      <div style="max-height:360px;overflow-y:auto">
+        ${rows.map(r=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px">
+          <input type="checkbox" class="assign-project-cb" value="${r.form_id}" ${assignedFormIds.has(r.form_id)?'checked':''}>
+          ${escHtml(r.project_id)} — ${escHtml(r.project_name)} ${assignedFormIds.has(r.form_id)?'<span class="badge ok" style="margin-inline-start:6px">داخل الجولة حاليًا</span>':''}
+        </label>`).join('')}
+      </div>
+    </div>
+  `;
+
+  document.getElementById('smartDistributeBtn').addEventListener('click', async ()=>{
+    if(!activeJudges.length){ showToast('لا يوجد محكّمون نشطون'); return; }
+    const perProject = parseInt(document.getElementById('judgesPerProject').value)||2;
+    const selectedFormIds = Array.from(content.querySelectorAll('.assign-project-cb:checked')).map(cb=>cb.value);
+    if(!selectedFormIds.length){ showToast('اختر مشروعًا واحدًا على الأقل'); return; }
+
+    const btn = document.getElementById('smartDistributeBtn');
+    btn.disabled = true; btn.textContent = 'جارٍ التوزيع…';
+
+    // حذف التوزيع الحالي لهذه المشاريع بالذات فقط، ثم إعادة التوزيع من الصفر
+    await sb.from('judge_assignments').delete().in('form_id', selectedFormIds);
+
+    const judgeLoad = {}; activeJudges.forEach(j=>{ judgeLoad[j.id] = 0; });
+    const newRows = [];
+    selectedFormIds.forEach(formId=>{
+      const sortedJudges = [...activeJudges].sort((a,b)=>judgeLoad[a.id]-judgeLoad[b.id]);
+      const picked = sortedJudges.slice(0, Math.min(perProject, activeJudges.length));
+      picked.forEach(j=>{ judgeLoad[j.id]++; newRows.push({ judge_id:j.id, form_id:formId, assigned_by: currentAdmin.id }); });
+    });
+
+    const { error } = await sb.from('judge_assignments').insert(newRows);
+    btn.disabled = false; btn.innerHTML = `${icon('sparkles',{size:13})} توزيع ذكي الآن`;
+    if(error){ showToast('تعذّر التوزيع: '+error.message); return; }
+    showToast(`تم توزيع ${selectedFormIds.length} مشروعًا على ${activeJudges.length} محكّم`);
+    renderJudgingAssignment();
+  });
+}
+
+/* ---------------- نتائج التحكيم ---------------- */
+async function renderJudgingResults(){
+  const content = document.getElementById('judgingSubContent');
+  content.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+
+  const [{data: assignments}, {data: evals}, {data: criteria}] = await Promise.all([
+    sb.from('judge_assignments').select('judge_id, form_id'),
+    sb.from('judge_evaluations').select('judge_id, form_id, scores, is_submitted'),
+    sb.from('judging_criteria').select('id, max_score').eq('is_active', true),
+  ]);
+
+  const maxTotal = (criteria||[]).reduce((sum,c)=>sum+parseFloat(c.max_score),0) || 1;
+  const rows = joinedReviewRows();
+  const formIdToProject = {}; rows.forEach(r=>{ formIdToProject[r.form_id] = r; });
+
+  const formIds = [...new Set((assignments||[]).map(a=>a.form_id))];
+  if(!formIds.length){ content.innerHTML = `<div class="empty-hint">لا توجد مشاريع بجولة التحكيم بعد</div>`; return; }
+
+  const resultsRows = formIds.map(formId=>{
+    const assignedCount = (assignments||[]).filter(a=>a.form_id===formId).length;
+    const submittedEvals = (evals||[]).filter(e=>e.form_id===formId && e.is_submitted);
+    const avgTotal = submittedEvals.length
+      ? submittedEvals.reduce((sum,e)=>sum + Object.values(e.scores||{}).reduce((s,v)=>s+parseFloat(v||0),0), 0) / submittedEvals.length
+      : null;
+    const proj = formIdToProject[formId] || {};
+    return { formId, project_id: proj.project_id||'—', project_name: proj.project_name||'—', assignedCount, submittedCount: submittedEvals.length, avgTotal };
+  }).sort((a,b)=>{
+    if(a.avgTotal===null && b.avgTotal===null) return 0;
+    if(a.avgTotal===null) return 1;
+    if(b.avgTotal===null) return -1;
+    return b.avgTotal - a.avgTotal;
+  });
+
+  content.innerHTML = `
+    <div class="req-banner" style="margin-bottom:16px">المتوسط محسوب من تقييمات المحكّمين المُرسَلة نهائيًا فقط (لا يشمل المسودات غير المكتملة).</div>
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>رقم المشروع</th><th>اسم المشروع</th><th>محكّمون أرسلوا / مُسندون</th><th>متوسط الدرجة</th></tr></thead>
+      <tbody>${resultsRows.map((r,i)=>`<tr>
+        <td class="mono" style="color:var(--ink-400)">${i+1}</td>
+        <td class="mono">${escHtml(r.project_id)}</td>
+        <td>${escHtml(r.project_name)}</td>
+        <td class="mono">${r.submittedCount} / ${r.assignedCount}</td>
+        <td><b class="mono" style="font-size:14px">${r.avgTotal!==null ? r.avgTotal.toFixed(1)+' / '+maxTotal : '—'}</b></td>
+      </tr>`).join('')}</tbody>
+    </table></div></div>
+  `;
 }
 
 function statusBadge(st){
@@ -4188,6 +4489,7 @@ function renderAll(){
   if(activeTab==='nonqualifying') renderQualificationTab(false);
   if(activeTab==='announcements') renderAnnouncements();
   if(activeTab==='review') renderReview();
+  if(activeTab==='judging') renderJudgingTab();
   if(activeTab==='builder') renderBuilder();
   if(activeTab==='eligibility') renderEligibility();
   if(activeTab==='users') renderUsers();
