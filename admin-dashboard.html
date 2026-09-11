@@ -806,13 +806,14 @@ function showToast(msg){
 }
 function uid(prefix){ return prefix+"_"+Math.random().toString(36).slice(2,8); }
 function openConfirm(text, onOk){
+  restoreConfirmModal();
   document.getElementById('confirmText').textContent = text;
   const modal = document.getElementById('confirmModal');
   modal.classList.add('show');
   const ok = document.getElementById('confirmOk');
   const cancel = document.getElementById('confirmCancel');
   const cleanup = ()=>{ modal.classList.remove('show'); ok.onclick=null; cancel.onclick=null; };
-  ok.onclick = ()=>{ onOk(); cleanup(); };
+  ok.onclick = async ()=>{ await onOk(); cleanup(); };
   cancel.onclick = cleanup;
 }
 
