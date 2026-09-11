@@ -1503,24 +1503,62 @@ async function runAutoAssignProjects(committees, membersByCommittee, submittedRo
   });
 }
 
-function openOrphanedAssignmentsModal(orphanedFormIds, submittedRows){
+async function openOrphanedAssignmentsModal(orphanedFormIds, submittedRows){
   const modal = document.getElementById('confirmModal');
   const box = modal.querySelector('.modal-box');
-  box.style.maxWidth = '460px';
-  const rowsMap = {}; submittedRows.forEach(r=>{ rowsMap[r.form_id] = r; });
-  box.innerHTML = `
-    <h3>مشاريع مسنَدة بالتوزيع الفردي القديم</h3>
-    <p>هذه المشاريع مُكلَّفة لمحكّمين مباشرة (من تبويب "توزيع المشاريع" القديم)، بدون ربطها بأي لجنة. لا تزال تعمل بشكل طبيعي، لكنها لا تظهر بالتنظيم الجديد.</p>
-    <div style="max-height:280px;overflow-y:auto;margin:12px 0">
-      ${orphanedFormIds.map(fid=>{
-        const r = rowsMap[fid];
-        return `<div style="padding:6px 0;font-size:13px;border-bottom:1px solid var(--line)">${r?escHtml(r.project_id)+' — '+escHtml(r.project_name):fid}</div>`;
-      }).join('')}
-    </div>
-    <div class="modal-actions"><button class="btn btn-primary" id="orphanClose">إغلاق</button></div>
-  `;
+  box.style.maxWidth = '480px';
+  box.innerHTML = `<h3>مشاريع مسنَدة بالتوزيع الفردي القديم</h3><div class="empty-hint">جارٍ التحميل…</div>`;
   modal.classList.add('show');
-  document.getElementById('orphanClose').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+
+  const rowsMap = {}; submittedRows.forEach(r=>{ rowsMap[r.form_id] = r; });
+  const [{data: assignments}, {data: judges}] = await Promise.all([
+    sb.from('judge_assignments').select('judge_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID).in('form_id', orphanedFormIds),
+    sb.from('judges').select('id, full_name'),
+  ]);
+  const judgeMap = {}; (judges||[]).forEach(j=>{ judgeMap[j.id] = j.full_name; });
+  const judgesByForm = {};
+  (assignments||[]).forEach(a=>{ (judgesByForm[a.form_id] = judgesByForm[a.form_id]||[]).push(judgeMap[a.judge_id]||'—'); });
+
+  const renderList = ()=>{
+    box.innerHTML = `
+      <h3>مشاريع مسنَدة بالتوزيع الفردي القديم (${orphanedFormIds.length})</h3>
+      <p>هذه المشاريع مُكلَّفة لمحكّمين مباشرة، بدون ربطها بأي لجنة. احذف الإسناد لو تبي تعيد توزيعها عبر لجنة، أو اتركها وتستمر تعمل بشكل طبيعي.</p>
+      ${orphanedFormIds.length ? `<div style="text-align:left;margin-bottom:10px"><button class="btn btn-ghost btn-sm" id="orphanDeleteAll">حذف كل الإسناد القديم (${orphanedFormIds.length})</button></div>` : ''}
+      <div style="max-height:280px;overflow-y:auto;margin:12px 0">
+        ${orphanedFormIds.length ? orphanedFormIds.map(fid=>{
+          const r = rowsMap[fid];
+          const judgeNames = (judgesByForm[fid]||[]).join('، ') || '—';
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;gap:10px">
+            <div><div>${r?escHtml(r.project_id)+' — '+escHtml(r.project_name):fid}</div><div style="font-size:11.5px;color:var(--ink-400)">${escHtml(judgeNames)}</div></div>
+            <button class="btn btn-ghost btn-sm" data-delorphan="${fid}" style="flex:none">حذف</button>
+          </div>`;
+        }).join('') : `<div class="empty-hint">لا يوجد إسناد معلَّق بعد الآن</div>`}
+      </div>
+      <div class="modal-actions"><button class="btn btn-primary" id="orphanClose">إغلاق</button></div>
+    `;
+    document.getElementById('orphanClose').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+    box.querySelectorAll('[data-delorphan]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        openConfirm('حذف إسناد هذا المشروع بالكامل (كل المحكّمين المُكلَّفين به بهذه الجولة)؟', async ()=>{
+          const { error } = await sb.from('judge_assignments').delete().eq('round_id', CURRENT_ADMIN_ROUND_ID).eq('form_id', b.dataset.delorphan);
+          if(error){ showToast('تعذّر الحذف: '+error.message); return; }
+          orphanedFormIds = orphanedFormIds.filter(id=>id!==b.dataset.delorphan);
+          showToast('تم الحذف'); renderList();
+        });
+      });
+    });
+    const deleteAllBtn = document.getElementById('orphanDeleteAll');
+    if(deleteAllBtn) deleteAllBtn.addEventListener('click', ()=>{
+      openConfirm(`حذف إسناد كل الـ${orphanedFormIds.length} مشروعًا المعلَّقة دفعة واحدة؟ لا يمس أي تقييم سبق وأُرسل فعليًا.`, async ()=>{
+        const { error } = await sb.from('judge_assignments').delete().eq('round_id', CURRENT_ADMIN_ROUND_ID).in('form_id', orphanedFormIds);
+        if(error){ showToast('تعذّر الحذف: '+error.message); return; }
+        showToast('تم حذف كل الإسناد القديم');
+        modal.classList.remove('show'); restoreConfirmModal();
+        renderJudgingCommittees();
+      });
+    });
+  };
+  renderList();
 }
 
 function openAssignProjectsToCommitteeModal(committee, currentFormIds, submittedRows, memberIds){
