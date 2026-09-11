@@ -955,14 +955,25 @@ async function fetchQualifyingFormIds(formIds, questions){
   if(!formIds.length) return new Set();
   const ipKey = findFieldKeyByLabelJD(questions, ['حماية للملكية الفكرية', 'شراكة مع جهات حكومية']);
   const fieldKeys = ipKey ? ['f2_1', ipKey] : ['f2_1'];
-  const { data, error } = await sb.from('form_answers').select('form_id, field_key, value_text').in('field_key', fieldKeys).in('form_id', formIds);
+  const [{ data, error }, { data: reqStatus, error: reqError }] = await Promise.all([
+    sb.from('form_answers').select('form_id, field_key, value_text').in('field_key', fieldKeys).in('form_id', formIds),
+    sb.from('requirement_status').select('form_id, status').eq('requirement', 'commercial_registration').in('form_id', formIds),
+  ]);
   if(error){ console.error('[بوابة المحكّم] تعذّر جلب حالة الاستيفاء:', error.message, error); }
+  if(reqError){ console.error('[بوابة المحكّم] تعذّر جلب مراجعة السجل التجاري اليدوية:', reqError.message, reqError); }
   const byForm = {};
   (data||[]).forEach(a=>{ (byForm[a.form_id] = byForm[a.form_id]||{})[a.field_key] = a.value_text; });
+  // مراجعة المدقق اليدوية على "السجل التجاري" لها الأولوية على الإجابة الخام —
+  // نفس منطق لوحة التحكم بالضبط، لضمان تطابق الأعداد بين الصفحتين
+  const humanCommercialByForm = {};
+  (reqStatus||[]).forEach(r=>{ humanCommercialByForm[r.form_id] = r.status; });
   const qualifying = new Set();
   formIds.forEach(id=>{
     const av = byForm[id] || {};
-    if(av['f2_1']==='نعم' || (ipKey && av[ipKey]==='نعم')) qualifying.add(id);
+    const humanStatus = humanCommercialByForm[id];
+    const hasCommercial = humanStatus ? humanStatus==='ok' : av['f2_1']==='نعم';
+    const hasIp = ipKey && av[ipKey]==='نعم';
+    if(hasCommercial || hasIp) qualifying.add(id);
   });
   return qualifying;
 }
