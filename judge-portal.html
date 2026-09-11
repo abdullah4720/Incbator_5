@@ -760,7 +760,7 @@ async function chunkedInQuery(ids, queryFn, chunkSize){
 let JD_FILTERS_TEAMS = { track:'', domain:'', status:'', search:'' };
 let JD_FILTERS_ALL = { track:'', domain:'', status:'', search:'' };
 
-function buildFilterBarHTML(rows, showStatusFilter, matchedCount, filters){
+function buildFilterBarHTML(rows, showStatusFilter, matchedCount, filters, idPrefix){
   const tracks = [...new Set(rows.map(r=>r.track).filter(Boolean))].sort();
   const domains = [...new Set(rows.map(r=>r.domain).filter(Boolean))].sort();
   const hasActiveFilter = filters.track||filters.domain||filters.status||filters.search;
@@ -768,31 +768,31 @@ function buildFilterBarHTML(rows, showStatusFilter, matchedCount, filters){
     ? `<div style="background:var(--danger-100);color:var(--danger);border-radius:8px;padding:8px 12px;font-size:11.5px;margin-bottom:10px">⚠ تشخيص: يوجد ${rows.length} مشروعًا لكن بلا بيانات مسار/مجال قابلة للفلترة — على الأغلب صلاحيات القراءة (RLS) لسه ما انطبقت. افتح Console (F12) وابحث عن سطر يبدأ بـ"[بوابة المحكّم]".</div>`
     : '';
   return `${diag}<div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
-    <input type="text" id="jdFilterSearch" placeholder="بحث بالاسم أو رقم المشروع…" value="${escHtmlJD(filters.search)}" class="jd-round-select" style="flex:1;min-width:180px">
-    <select id="jdFilterTrack" class="jd-round-select">
+    <input type="text" id="${idPrefix}FilterSearch" placeholder="بحث بالاسم أو رقم المشروع…" value="${escHtmlJD(filters.search)}" class="jd-round-select" style="flex:1;min-width:180px">
+    <select id="${idPrefix}FilterTrack" class="jd-round-select">
       <option value="" ${filters.track===''?'selected':''}>كل المسارات${tracks.length?'':' (لا يوجد)'}</option>
       ${tracks.map(t=>`<option value="${escHtmlJD(t)}" ${filters.track===t?'selected':''}>${escHtmlJD(t)}</option>`).join('')}
     </select>
-    <select id="jdFilterDomain" class="jd-round-select">
+    <select id="${idPrefix}FilterDomain" class="jd-round-select">
       <option value="" ${filters.domain===''?'selected':''}>كل المجالات${domains.length?'':' (لا يوجد)'}</option>
       ${domains.map(d=>`<option value="${escHtmlJD(d)}" ${filters.domain===d?'selected':''}>${escHtmlJD(d)}</option>`).join('')}
     </select>
-    ${showStatusFilter ? `<select id="jdFilterStatus" class="jd-round-select">
+    ${showStatusFilter ? `<select id="${idPrefix}FilterStatus" class="jd-round-select">
       <option value="" ${filters.status===''?'selected':''}>كل الحالات</option>
       <option value="evaluated" ${filters.status==='evaluated'?'selected':''}>تم تقييمه</option>
       <option value="notEvaluated" ${filters.status==='notEvaluated'?'selected':''}>لم يُقيَّم بعد</option>
     </select>` : ''}
-    ${hasActiveFilter ? `<button class="jd-back" id="jdClearFiltersBtn" style="margin:0">إزالة الفلاتر</button>` : ''}
+    ${hasActiveFilter ? `<button class="jd-back" id="${idPrefix}ClearFiltersBtn" style="margin:0">إزالة الفلاتر</button>` : ''}
   </div>
   <div style="font-size:12px;color:var(--ink-400);margin-bottom:14px">${matchedCount} من ${rows.length} مشروعًا${hasActiveFilter?' مطابق للفلاتر المحددة':''}</div>`;
 }
 let jdSearchDebounce = null;
-function bindFilterBar(onChange, filters){
-  const t = document.getElementById('jdFilterTrack');
-  const d = document.getElementById('jdFilterDomain');
-  const s = document.getElementById('jdFilterStatus');
-  const c = document.getElementById('jdClearFiltersBtn');
-  const q = document.getElementById('jdFilterSearch');
+function bindFilterBar(onChange, filters, idPrefix){
+  const t = document.getElementById(idPrefix+'FilterTrack');
+  const d = document.getElementById(idPrefix+'FilterDomain');
+  const s = document.getElementById(idPrefix+'FilterStatus');
+  const c = document.getElementById(idPrefix+'ClearFiltersBtn');
+  const q = document.getElementById(idPrefix+'FilterSearch');
   // نحدّد القيمة المعروضة برمجيًا مباشرة (بدل الاعتماد فقط على خاصية selected
   // بالـHTML) — بعض المتصفحات لا تُحدّث العرض المرئي فورًا بعد استبدال
   // innerHTML لعنصر select كان نشطًا للتو، رغم إن الخيار الصحيح موسوم فعليًا
@@ -810,7 +810,7 @@ function bindFilterBar(onChange, filters){
       jdSearchDebounce = setTimeout(async ()=>{
         filters.search = q.value;
         await onChange();
-        const freshQ = document.getElementById('jdFilterSearch');
+        const freshQ = document.getElementById(idPrefix+'FilterSearch');
         if(freshQ){ freshQ.focus(); freshQ.setSelectionRange(cursorPos, cursorPos); }
       }, 300);
     });
@@ -934,8 +934,8 @@ async function loadProjectLists(){
   const pendingCount = filteredMyAll.filter(p=>!p.evaluated).length;
   const evaluatedCount = filteredMyAll.filter(p=>p.evaluated).length;
 
-  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), true, filteredMyAll.length + filteredOtherIds.length, JD_FILTERS_TEAMS);
-  bindFilterBar(loadProjectLists, JD_FILTERS_TEAMS);
+  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), true, filteredMyAll.length + filteredOtherIds.length, JD_FILTERS_TEAMS, 'jdTeams');
+  bindFilterBar(loadProjectLists, JD_FILTERS_TEAMS, 'jdTeams');
 
   document.getElementById('jdStatusPills').innerHTML = `
     <button class="jd-tab-pill ${JD_STATUS_TAB==='all'?'active':''}" data-jstatus="all">الكل (${filteredMyAll.length})</button>
@@ -1034,8 +1034,8 @@ async function loadAllProjectsView(){
   const filtered = applyJdFilters(Object.values(formMap), JD_FILTERS_ALL);
 
   document.getElementById('jdAllProjectsTitle').textContent = `كل المشاريع المستوفية (${forms.length})`;
-  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), false, filtered.length, JD_FILTERS_ALL);
-  bindFilterBar(loadAllProjectsView, JD_FILTERS_ALL);
+  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), false, filtered.length, JD_FILTERS_ALL, 'jdAll');
+  bindFilterBar(loadAllProjectsView, JD_FILTERS_ALL, 'jdAll');
 
   el.innerHTML = filtered.length ? filtered.map(p=>`<div class="jd-pcard" data-openproject="${p.id}">
       <div class="pname">${escHtmlJD(p.project_name||p.project_id)}</div>
