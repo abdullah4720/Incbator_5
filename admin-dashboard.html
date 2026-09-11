@@ -4006,8 +4006,18 @@ async function renderQualificationTab(showQualifying){
       <button class="btn btn-ghost" id="refreshQualBtn">تحديث</button>
     </div>
 
-    <div class="req-banner" style="margin-bottom:16px;font-family:monospace;font-size:11.5px;direction:ltr;text-align:left">
-      🔍 DEBUG — submittedRows: ${submittedRows.length} | reviewReqStatusAll (all): ${reviewReqStatusAll.length} | reviewReqStatusAll (commercial_registration): ${reviewReqStatusAll.filter(x=>x.requirement==='commercial_registration').length} | reviewReqStatusAll (commercial_registration, status=ok): ${reviewReqStatusAll.filter(x=>x.requirement==='commercial_registration' && x.status==='ok').length} | classified: ${classified.length} | plus+commercial_only+ip_only: ${plusCount+commercialOnlyCount+ipOnlyCount}
+    <div class="req-banner" style="margin-bottom:16px;font-family:monospace;font-size:11px;direction:ltr;text-align:left;line-height:1.8">
+      🔍 DEBUG<br>
+      submittedRows: ${submittedRows.length} | classified: ${classified.length}<br>
+      reviewReqStatusAll (all): ${reviewReqStatusAll.length} | commercial_registration rows: ${reviewReqStatusAll.filter(x=>x.requirement==='commercial_registration').length} | status=ok: ${reviewReqStatusAll.filter(x=>x.requirement==='commercial_registration' && x.status==='ok').length}<br>
+      raw av['f2_1']==='نعم' count (direct from shortlistAutoData): ${submittedRows.filter(r=>(shortlistAutoData[r.form_id]?.av?.['f2_1'])==='نعم').length}<br>
+      forms missing from shortlistAutoData entirely: ${submittedRows.filter(r=>!shortlistAutoData[r.form_id]).length}<br>
+      hasCommercial via classifyDocumentation logic (recomputed here): ${submittedRows.filter(r=>{
+        const data = shortlistAutoData[r.form_id] || { av:{} };
+        const humanRow = reviewReqStatusAll.find(x=>x.form_id===r.form_id && x.requirement==='commercial_registration');
+        return humanRow ? humanRow.status==='ok' : data.av['f2_1']==='نعم';
+      }).length}<br>
+      plus+commercial_only+ip_only (from render below): ${plusCount+commercialOnlyCount+ipOnlyCount} | commercial_only: ${commercialOnlyCount} | plus: ${plusCount} | ip_only: ${ipOnlyCount} | none: ${noneCount}
     </div>
 
     <div class="grid kpi-row" style="margin-bottom:18px">
