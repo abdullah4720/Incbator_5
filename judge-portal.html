@@ -926,8 +926,6 @@ async function openProjectDetail(formId, projInfo){
   document.getElementById('jdDetailMeta').textContent = `${projInfo.project_id} — ${projInfo.track||''}`;
   document.getElementById('jdDetailAssignedBadge').style.display = JD_ASSIGNED_FORM_IDS.has(formId) ? 'inline-flex' : 'none';
   document.getElementById('jdInfoSections').innerHTML = `<div class="jd-empty">جارٍ التحميل…</div>`;
-  document.getElementById('jdSubmittedNote').style.display = 'none';
-  document.getElementById('jdScoreErr').classList.remove('show');
 
   const [{data: answers}, {data: questions}, {data: sections}, {data: files}, {data: members}, {data: existingEval}] = await Promise.all([
     sb.from('form_answers').select('field_key, value_text, value_json').eq('form_id', formId),
