@@ -769,15 +769,15 @@ function buildFilterBarHTML(rows, showStatusFilter, matchedCount){
   return `${diag}<div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
     <input type="text" id="jdFilterSearch" placeholder="بحث بالاسم أو رقم المشروع…" value="${escHtmlJD(JD_FILTERS.search)}" class="jd-round-select" style="flex:1;min-width:180px">
     <select id="jdFilterTrack" class="jd-round-select">
-      <option value="">كل المسارات${tracks.length?'':' (لا يوجد)'}</option>
+      <option value="" ${JD_FILTERS.track===''?'selected':''}>كل المسارات${tracks.length?'':' (لا يوجد)'}</option>
       ${tracks.map(t=>`<option value="${escHtmlJD(t)}" ${JD_FILTERS.track===t?'selected':''}>${escHtmlJD(t)}</option>`).join('')}
     </select>
     <select id="jdFilterDomain" class="jd-round-select">
-      <option value="">كل المجالات${domains.length?'':' (لا يوجد)'}</option>
+      <option value="" ${JD_FILTERS.domain===''?'selected':''}>كل المجالات${domains.length?'':' (لا يوجد)'}</option>
       ${domains.map(d=>`<option value="${escHtmlJD(d)}" ${JD_FILTERS.domain===d?'selected':''}>${escHtmlJD(d)}</option>`).join('')}
     </select>
     ${showStatusFilter ? `<select id="jdFilterStatus" class="jd-round-select">
-      <option value="">كل الحالات</option>
+      <option value="" ${JD_FILTERS.status===''?'selected':''}>كل الحالات</option>
       <option value="evaluated" ${JD_FILTERS.status==='evaluated'?'selected':''}>تم تقييمه</option>
       <option value="notEvaluated" ${JD_FILTERS.status==='notEvaluated'?'selected':''}>لم يُقيَّم بعد</option>
     </select>` : ''}
@@ -1027,7 +1027,7 @@ async function loadAllProjectsView(){
   const filtered = applyJdFilters(Object.values(formMap));
 
   document.getElementById('jdAllProjectsTitle').textContent = `كل المشاريع المستوفية (${forms.length})`;
-  filterSlot.innerHTML = `<div style="background:var(--danger-100);color:var(--danger);border-radius:8px;padding:8px 12px;font-size:11px;margin-bottom:10px;font-family:monospace;direction:ltr;text-align:left">DEBUG JD_FILTERS: ${JSON.stringify(JD_FILTERS)} | forms total: ${Object.keys(formMap).length} | filtered: ${filtered.length} | sample tracks: ${[...new Set(Object.values(formMap).map(p=>p.track))].slice(0,5).join(', ')}</div>` + buildFilterBarHTML(Object.values(formMap), false, filtered.length);
+  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), false, filtered.length);
   bindFilterBar(loadAllProjectsView);
 
   el.innerHTML = filtered.length ? filtered.map(p=>`<div class="jd-pcard" data-openproject="${p.id}">
