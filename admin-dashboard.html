@@ -1148,13 +1148,16 @@ async function exportReportPpt(d){
 }
 
 /* ==========================================================================
-   التحكيم — إدارة المعايير والمحكّمين وتوزيع المشاريع ومتابعة النتائج.
+   التحكيم — إدارة الجولات والمعايير والمحكّمين وتوزيع المشاريع والنتائج.
    ========================================================================== */
-let judgingSubtab = 'criteria';
+let judgingSubtab = 'rounds';
 let JUDGING_CRITERIA_CACHE = [];
 let JUDGES_CACHE = [];
+let JUDGING_ROUNDS_CACHE = [];
+let CURRENT_ADMIN_ROUND_ID = null;
 
 const JUDGING_SUBTABS = [
+  {id:'rounds', l:'الجولات'},
   {id:'criteria', l:'معايير التحكيم'},
   {id:'judges', l:'المحكّمون'},
   {id:'assignment', l:'توزيع المشاريع'},
@@ -1164,7 +1167,7 @@ const JUDGING_SUBTABS = [
 async function renderJudgingTab(){
   const el = document.getElementById('view-judging');
   el.innerHTML = `
-    <div class="section-title-row"><div><h2>التحكيم</h2><p>إدارة معايير التحكيم، المحكّمين، توزيع المشاريع، ومتابعة النتائج المجمَّعة.</p></div></div>
+    <div class="section-title-row"><div><h2>التحكيم</h2><p>إدارة جولات التحكيم، المعايير، المحكّمين، توزيع المشاريع، ومتابعة النتائج المجمَّعة.</p></div></div>
     <div class="subtabs" style="display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:2px">
       ${JUDGING_SUBTABS.map(t=>`<button class="subtab-btn ${judgingSubtab===t.id?'active':''}" data-jsub="${t.id}">${t.l}</button>`).join('')}
     </div>
@@ -1173,22 +1176,120 @@ async function renderJudgingTab(){
   el.querySelectorAll('[data-jsub]').forEach(b=>{
     b.addEventListener('click', ()=>{ judgingSubtab = b.dataset.jsub; renderJudgingTab(); });
   });
-  if(judgingSubtab==='criteria') renderJudgingCriteria();
+  if(judgingSubtab==='rounds') renderJudgingRounds();
+  else if(judgingSubtab==='criteria') renderJudgingCriteria();
   else if(judgingSubtab==='judges') renderJudgingJudges();
   else if(judgingSubtab==='assignment') renderJudgingAssignment();
   else if(judgingSubtab==='results') renderJudgingResults();
 }
 
+/* يبني شريط اختيار الجولة المستخدَم بأعلى تبويبات المعايير/التوزيع/النتائج،
+   ويضمن تحميل JUDGING_ROUNDS_CACHE واختيار جولة افتراضية معقولة أولًا */
+async function ensureRoundsLoaded(){
+  if(!JUDGING_ROUNDS_CACHE.length){
+    const { data } = await sb.from('judging_rounds').select('*').order('order_index');
+    JUDGING_ROUNDS_CACHE = data || [];
+  }
+  if(!CURRENT_ADMIN_ROUND_ID && JUDGING_ROUNDS_CACHE.length){
+    const active = JUDGING_ROUNDS_CACHE.find(r=>r.is_active) || JUDGING_ROUNDS_CACHE[0];
+    CURRENT_ADMIN_ROUND_ID = active.id;
+  }
+}
+function roundSelectorHTML(){
+  if(!JUDGING_ROUNDS_CACHE.length) return `<div class="req-banner" style="margin-bottom:16px">لا توجد جولات تحكيم بعد — أنشئ جولة من تبويب "الجولات" أولًا.</div>`;
+  return `<div style="margin-bottom:16px;display:flex;align-items:center;gap:10px">
+    <label style="font-size:12.5px;color:var(--ink-600);font-weight:600">الجولة:</label>
+    <select id="adminRoundSelect" style="padding:8px 14px;border:1px solid var(--line);border-radius:8px">
+      ${JUDGING_ROUNDS_CACHE.map(r=>`<option value="${r.id}" ${CURRENT_ADMIN_ROUND_ID==r.id?'selected':''}>${escHtml(r.name)}${r.is_active?' (نشطة)':''}</option>`).join('')}
+    </select>
+  </div>`;
+}
+function bindRoundSelector(onChange){
+  const sel = document.getElementById('adminRoundSelect');
+  if(sel) sel.addEventListener('change', ()=>{ CURRENT_ADMIN_ROUND_ID = parseInt(sel.value); onChange(); });
+}
+
+/* ---------------- الجولات ---------------- */
+async function renderJudgingRounds(){
+  const content = document.getElementById('judgingSubContent');
+  const { data, error } = await sb.from('judging_rounds').select('*').order('order_index');
+  if(error){ content.innerHTML = `<div class="empty-hint">تعذّر التحميل: ${error.message}</div>`; return; }
+  JUDGING_ROUNDS_CACHE = data || [];
+
+  content.innerHTML = `
+    <div class="req-banner" style="margin-bottom:16px">كل جولة لها معاييرها وتوزيعها ونتائجها المستقلة — مثال: "التصفية الأولية" ثم "الجولة النهائية" بمعايير مختلفة على نفس المشاريع.</div>
+    <div style="text-align:left;margin-bottom:14px"><button class="btn btn-primary btn-sm" id="addRoundBtn">+ إضافة جولة</button></div>
+    ${JUDGING_ROUNDS_CACHE.length===0 ? `<div class="empty-hint">لا توجد جولات بعد</div>` : `
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>الجولة</th><th>الوصف</th><th>الحالة</th><th></th></tr></thead>
+      <tbody>${JUDGING_ROUNDS_CACHE.map(r=>`<tr>
+        <td><b>${escHtml(r.name)}</b></td>
+        <td style="color:var(--ink-400);font-size:12.5px">${escHtml(r.description)||'—'}</td>
+        <td><span class="badge ${r.is_active?'ok':'mid'}">${r.is_active?'نشطة':'غير نشطة'}</span></td>
+        <td>
+          <button class="btn btn-ghost btn-sm" data-activateround="${r.id}">${r.is_active?'إيقاف':'تفعيل'}</button>
+          <button class="icon-btn" data-editround="${r.id}" title="تعديل">${icon('pencil',{size:13})}</button>
+        </td>
+      </tr>`).join('')}</tbody>
+    </table></div></div>`}
+  `;
+  document.getElementById('addRoundBtn').addEventListener('click', ()=>openRoundModal(null));
+  content.querySelectorAll('[data-editround]').forEach(b=>{
+    b.addEventListener('click', ()=>openRoundModal(JUDGING_ROUNDS_CACHE.find(r=>r.id==b.dataset.editround)));
+  });
+  content.querySelectorAll('[data-activateround]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const r = JUDGING_ROUNDS_CACHE.find(x=>x.id==b.dataset.activateround);
+      const { error } = await sb.from('judging_rounds').update({ is_active: !r.is_active }).eq('id', r.id);
+      if(error){ showToast('تعذّر التحديث: '+error.message); return; }
+      showToast('تم التحديث'); JUDGING_ROUNDS_CACHE=[]; renderJudgingRounds();
+    });
+  });
+}
+
+function openRoundModal(existing){
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '460px';
+  box.innerHTML = `
+    <h3>${existing?'تعديل جولة':'إضافة جولة جديدة'}</h3>
+    <div class="field-inline"><label class="flabel">اسم الجولة</label><input type="text" id="roundName" value="${existing?escHtml(existing.name):''}" placeholder="مثال: التصفية الأولية"></div>
+    <div class="field-inline"><label class="flabel">الوصف (اختياري)</label><textarea id="roundDesc" style="min-height:70px">${existing?escHtml(existing.description||''):''}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="roundCancel">إلغاء</button>
+      <button class="btn btn-primary" id="roundSave">حفظ</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('roundCancel').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('roundSave').addEventListener('click', async ()=>{
+    const name = document.getElementById('roundName').value.trim();
+    const desc = document.getElementById('roundDesc').value.trim();
+    if(!name){ showToast('اكتب اسم الجولة'); return; }
+    const payload = { name, description: desc||null };
+    let error;
+    if(existing){ ({ error } = await sb.from('judging_rounds').update(payload).eq('id', existing.id)); }
+    else { ({ error } = await sb.from('judging_rounds').insert({ ...payload, order_index: JUDGING_ROUNDS_CACHE.length, is_active:false }).select().single()); }
+    if(error){ showToast('تعذّر الحفظ: '+error.message); return; }
+    modal.classList.remove('show'); restoreConfirmModal();
+    showToast('تم الحفظ'); JUDGING_ROUNDS_CACHE=[]; renderJudgingRounds();
+  });
+}
+
 /* ---------------- معايير التحكيم ---------------- */
 async function renderJudgingCriteria(){
   const content = document.getElementById('judgingSubContent');
-  const { data, error } = await sb.from('judging_criteria').select('*').order('order_index');
+  await ensureRoundsLoaded();
+  if(!CURRENT_ADMIN_ROUND_ID){ content.innerHTML = roundSelectorHTML(); return; }
+
+  const { data, error } = await sb.from('judging_criteria').select('*').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index');
   if(error){ content.innerHTML = `<div class="empty-hint">تعذّر التحميل: ${error.message}</div>`; return; }
   JUDGING_CRITERIA_CACHE = data || [];
 
   content.innerHTML = `
+    ${roundSelectorHTML()}
     <div style="text-align:left;margin-bottom:14px"><button class="btn btn-primary btn-sm" id="addCriterionBtn">+ إضافة معيار</button></div>
-    ${JUDGING_CRITERIA_CACHE.length===0 ? `<div class="empty-hint">لا توجد معايير بعد</div>` : `
+    ${JUDGING_CRITERIA_CACHE.length===0 ? `<div class="empty-hint">لا توجد معايير لهذه الجولة بعد</div>` : `
     <div class="card"><div class="table-wrap"><table>
       <thead><tr><th>المعيار</th><th>الوصف</th><th>الدرجة القصوى</th><th>الحالة</th><th></th></tr></thead>
       <tbody>${JUDGING_CRITERIA_CACHE.map(c=>`<tr>
@@ -1204,6 +1305,7 @@ async function renderJudgingCriteria(){
     </table></div></div>`}
   `;
   document.getElementById('addCriterionBtn').addEventListener('click', ()=>openCriterionModal(null));
+  bindRoundSelector(renderJudgingCriteria);
   content.querySelectorAll('[data-editcrit]').forEach(b=>{
     b.addEventListener('click', ()=>openCriterionModal(JUDGING_CRITERIA_CACHE.find(c=>c.id==b.dataset.editcrit)));
   });
@@ -1242,7 +1344,7 @@ function openCriterionModal(existing){
     const payload = { label, description: desc||null, max_score: max };
     let error;
     if(existing){ ({ error } = await sb.from('judging_criteria').update(payload).eq('id', existing.id)); }
-    else { ({ error } = await sb.from('judging_criteria').insert({ ...payload, order_index: JUDGING_CRITERIA_CACHE.length }).select().single()); }
+    else { ({ error } = await sb.from('judging_criteria').insert({ ...payload, round_id: CURRENT_ADMIN_ROUND_ID, order_index: JUDGING_CRITERIA_CACHE.length }).select().single()); }
     if(error){ showToast('تعذّر الحفظ: '+error.message); return; }
     modal.classList.remove('show'); restoreConfirmModal();
     showToast('تم الحفظ'); renderJudgingCriteria();
@@ -1327,10 +1429,12 @@ function openJudgeModal(){
 async function renderJudgingAssignment(){
   const content = document.getElementById('judgingSubContent');
   content.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  await ensureRoundsLoaded();
+  if(!CURRENT_ADMIN_ROUND_ID){ content.innerHTML = roundSelectorHTML(); return; }
 
   const [{data: judges}, {data: assignments}] = await Promise.all([
     sb.from('judges').select('id, full_name').eq('is_active', true),
-    sb.from('judge_assignments').select('judge_id, form_id'),
+    sb.from('judge_assignments').select('judge_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
   ]);
   const activeJudges = judges || [];
   const rows = joinedReviewRows().filter(r=>r.status==='submitted');
@@ -1340,7 +1444,8 @@ async function renderJudgingAssignment(){
   activeJudges.forEach(j=>{ countByJudge[j.id] = (assignments||[]).filter(a=>a.judge_id===j.id).length; });
 
   content.innerHTML = `
-    <div class="req-banner" style="margin-bottom:16px">اختر المشاريع اللي تبي تدخلها جولة التحكيم، وحدّد عدد المحكّمين لكل مشروع، ثم اضغط "توزيع ذكي" — يوزّع المشاريع على المحكّمين النشطين بالتساوي تلقائيًا.</div>
+    ${roundSelectorHTML()}
+    <div class="req-banner" style="margin-bottom:16px">اختر المشاريع اللي تبي تدخلها هذه الجولة، وحدّد عدد المحكّمين لكل مشروع، ثم اضغط "توزيع ذكي" — يوزّع المشاريع على المحكّمين النشطين بالتساوي تلقائيًا.</div>
 
     <div class="card" style="margin-bottom:16px">
       <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">
@@ -1351,7 +1456,7 @@ async function renderJudgingAssignment(){
     </div>
 
     <div class="card" style="margin-bottom:16px">
-      <div class="ac-title" style="margin-bottom:10px">عدد المشاريع المُسندة لكل محكّم</div>
+      <div class="ac-title" style="margin-bottom:10px">عدد المشاريع المُسندة لكل محكّم بهذه الجولة</div>
       ${activeJudges.length===0 ? `<div class="empty-hint">لا يوجد محكّمون نشطون — أضفهم من تبويب "المحكّمون" أولًا</div>` : `
       <div class="table-wrap"><table>
         <thead><tr><th>المحكّم</th><th>عدد المشاريع المُسندة</th></tr></thead>
@@ -1369,6 +1474,7 @@ async function renderJudgingAssignment(){
       </div>
     </div>
   `;
+  bindRoundSelector(renderJudgingAssignment);
 
   document.getElementById('smartDistributeBtn').addEventListener('click', async ()=>{
     if(!activeJudges.length){ showToast('لا يوجد محكّمون نشطون'); return; }
@@ -1379,15 +1485,15 @@ async function renderJudgingAssignment(){
     const btn = document.getElementById('smartDistributeBtn');
     btn.disabled = true; btn.textContent = 'جارٍ التوزيع…';
 
-    // حذف التوزيع الحالي لهذه المشاريع بالذات فقط، ثم إعادة التوزيع من الصفر
-    await sb.from('judge_assignments').delete().in('form_id', selectedFormIds);
+    // حذف التوزيع الحالي لهذه المشاريع بالذات ضمن هذه الجولة فقط، ثم إعادة التوزيع
+    await sb.from('judge_assignments').delete().in('form_id', selectedFormIds).eq('round_id', CURRENT_ADMIN_ROUND_ID);
 
     const judgeLoad = {}; activeJudges.forEach(j=>{ judgeLoad[j.id] = 0; });
     const newRows = [];
     selectedFormIds.forEach(formId=>{
       const sortedJudges = [...activeJudges].sort((a,b)=>judgeLoad[a.id]-judgeLoad[b.id]);
       const picked = sortedJudges.slice(0, Math.min(perProject, activeJudges.length));
-      picked.forEach(j=>{ judgeLoad[j.id]++; newRows.push({ judge_id:j.id, form_id:formId, assigned_by: currentAdmin.id }); });
+      picked.forEach(j=>{ judgeLoad[j.id]++; newRows.push({ judge_id:j.id, form_id:formId, round_id: CURRENT_ADMIN_ROUND_ID, assigned_by: currentAdmin.id }); });
     });
 
     const { error } = await sb.from('judge_assignments').insert(newRows);
@@ -1402,11 +1508,13 @@ async function renderJudgingAssignment(){
 async function renderJudgingResults(){
   const content = document.getElementById('judgingSubContent');
   content.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  await ensureRoundsLoaded();
+  if(!CURRENT_ADMIN_ROUND_ID){ content.innerHTML = roundSelectorHTML(); return; }
 
   const [{data: assignments}, {data: evals}, {data: criteria}] = await Promise.all([
-    sb.from('judge_assignments').select('judge_id, form_id'),
-    sb.from('judge_evaluations').select('judge_id, form_id, scores, is_submitted'),
-    sb.from('judging_criteria').select('id, max_score').eq('is_active', true),
+    sb.from('judge_assignments').select('judge_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+    sb.from('judge_evaluations').select('judge_id, form_id, scores, is_submitted').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+    sb.from('judging_criteria').select('id, max_score').eq('is_active', true).eq('round_id', CURRENT_ADMIN_ROUND_ID),
   ]);
 
   const maxTotal = (criteria||[]).reduce((sum,c)=>sum+parseFloat(c.max_score),0) || 1;
@@ -1414,7 +1522,7 @@ async function renderJudgingResults(){
   const formIdToProject = {}; rows.forEach(r=>{ formIdToProject[r.form_id] = r; });
 
   const formIds = [...new Set((assignments||[]).map(a=>a.form_id))];
-  if(!formIds.length){ content.innerHTML = `<div class="empty-hint">لا توجد مشاريع بجولة التحكيم بعد</div>`; return; }
+  if(!formIds.length){ content.innerHTML = roundSelectorHTML() + `<div class="empty-hint">لا توجد مشاريع بهذه الجولة بعد</div>`; bindRoundSelector(renderJudgingResults); return; }
 
   const resultsRows = formIds.map(formId=>{
     const assignedCount = (assignments||[]).filter(a=>a.form_id===formId).length;
@@ -1432,6 +1540,7 @@ async function renderJudgingResults(){
   });
 
   content.innerHTML = `
+    ${roundSelectorHTML()}
     <div class="req-banner" style="margin-bottom:16px">المتوسط محسوب من تقييمات المحكّمين المُرسَلة نهائيًا فقط (لا يشمل المسودات غير المكتملة).</div>
     <div class="card"><div class="table-wrap"><table>
       <thead><tr><th>#</th><th>رقم المشروع</th><th>اسم المشروع</th><th>محكّمون أرسلوا / مُسندون</th><th>متوسط الدرجة</th></tr></thead>
@@ -1444,6 +1553,7 @@ async function renderJudgingResults(){
       </tr>`).join('')}</tbody>
     </table></div></div>
   `;
+  bindRoundSelector(renderJudgingResults);
 }
 
 function statusBadge(st){

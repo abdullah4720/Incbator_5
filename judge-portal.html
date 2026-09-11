@@ -47,6 +47,17 @@ body{
 .jd-topbar-right{display:flex;align-items:center;gap:16px;}
 .jd-topbar-who{font-size:12.5px;color:rgba(255,255,255,.75);}
 
+/* ---------------- تبويبات علوية بشكل حبوب + شارة الجولة ---------------- */
+.jd-round-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(201,162,75,.18);border:1px solid rgba(201,162,75,.4);color:var(--gold-500);font-size:11.5px;font-weight:600;border-radius:999px;padding:4px 12px;margin-top:4px;}
+.jd-tabs-row{display:flex;gap:8px;max-width:920px;margin:0 auto 20px;padding:0 20px;flex-wrap:wrap;}
+.jd-tab-pill{background:#fff;border:1px solid var(--line);border-radius:999px;padding:10px 20px;font-size:13px;font-weight:600;color:var(--ink-600);cursor:pointer;font-family:'IBM Plex Sans Arabic',sans-serif;transition:all .15s;display:flex;align-items:center;gap:7px;}
+.jd-tab-pill:hover{border-color:var(--teal-500);}
+.jd-tab-pill.active{background:var(--navy-800);color:#fff;border-color:var(--navy-800);}
+.jd-round-select{padding:8px 14px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:12.5px;background:#fff;}
+.jd-build-footer{position:fixed;bottom:8px;left:14px;font-size:10px;color:var(--ink-400);font-family:'IBM Plex Mono',monospace;opacity:.6;}
+.jd-cert-page{background:#fff;border:1px solid var(--line);border-radius:16px;padding:48px;max-width:720px;margin:0 auto;text-align:center;position:relative;}
+.jd-cert-page::before{content:'';position:absolute;inset:14px;border:2px solid var(--gold-500);border-radius:10px;pointer-events:none;}
+
 .brand-row{display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:26px;}
 .brand-logo-svg{height:40px;width:auto;flex:none;}
 
@@ -122,7 +133,11 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
 .jd-crit-desc{font-size:11.5px;color:var(--ink-400);margin-top:2px;}
 .jd-score-input{width:80px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;text-align:center;font-family:'IBM Plex Mono',monospace;}
 .jd-score-max{font-size:11px;color:var(--ink-400);}
-.jd-filelink{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--teal-600);text-decoration:none;padding:6px 10px;border:1px solid var(--line);border-radius:8px;margin:3px 4px 3px 0;}
+.jd-filelink{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--teal-600);text-decoration:none;padding:6px 10px;border:1px solid var(--line);border-radius:8px;margin:3px 4px 3px 0;}@media print{
+  body *{visibility:hidden;}
+  #jdCertPrintable, #jdCertPrintable *{visibility:visible;}
+  #jdCertPrintable{position:absolute;top:0;right:0;left:0;margin:40px auto;}
+}
 </style>
 </head>
 <body>
@@ -309,10 +324,18 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
         <div style="text-align:left">
           <div style="font-size:15px;font-weight:800;font-family:'Cairo',sans-serif">لوحة المحكّم</div>
           <div class="jd-topbar-who" id="jdWhoText"></div>
+          <div class="jd-round-badge" id="jdRoundBadge" style="display:none"><span id="jdRoundBadgeIcon"></span> <span id="jdRoundBadgeText"></span></div>
         </div>
         <button class="btn btn-ghost" id="jdLogoutBtn" style="width:auto;padding:9px 18px;background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.25)">خروج</button>
       </div>
     </div>
+  </div>
+
+  <div class="jd-tabs-row">
+    <button class="jd-tab-pill active" data-jtab="teams"><span class="jd-tab-icon" data-icon="users"></span> الفرق والتقييم</button>
+    <button class="jd-tab-pill" data-jtab="allprojects"><span class="jd-tab-icon" data-icon="folder"></span> كل المشاريع</button>
+    <button class="jd-tab-pill" data-jtab="certificate"><span class="jd-tab-icon" data-icon="award"></span> شهاداتي</button>
+    <select class="jd-round-select" id="jdRoundSelect" style="margin-inline-start:auto"></select>
   </div>
 
   <div style="max-width:920px;margin:0 auto;padding:0 20px">
@@ -322,6 +345,15 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
 
     <div class="jd-section-title">باقي مشاريع جولة التحكيم</div>
     <div class="jd-project-grid" id="jdOtherGrid"></div>
+  </div>
+
+  <div id="jdAllProjectsView" style="display:none">
+    <div class="jd-section-title">كل المشاريع المُرسَلة</div>
+    <div class="jd-project-grid" id="jdAllProjectsGrid"><div class="jd-empty">جارٍ التحميل…</div></div>
+  </div>
+
+  <div id="jdCertificateView" style="display:none">
+    <div id="jdCertificateBody"><div class="jd-empty">جارٍ التحميل…</div></div>
   </div>
 
   <div id="jdDetailView" style="display:none">
@@ -363,6 +395,7 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
     </div>
   </div>
   </div>
+  <div class="jd-build-footer">build: 2026-09-11</div>
 </div>
 
 <script>
@@ -386,6 +419,9 @@ const LUCIDE_ICONS = {
   "arrow-right": `<path d="M5 12h14" /> <path d="m12 5 7 7-7 7" />`,
   "ban": `<circle cx="12" cy="12" r="10" /> <path d="M4.929 4.929 19.07 19.071" />`,
   "clipboard-list": `<rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" />`,
+  "trophy": `<path d="M10 14.66V17a1 1 0 0 1-1 1 2 2 0 0 0-2 2v2" /> <path d="M14 14.66V17a1 1 0 0 0 1 1 2 2 0 0 1 2 2v2" /> <path d="M17.916 10H19.5A2.5 2.5 0 0 0 22 7.5V5a1 1 0 0 0-1-1h-3" /> <path d="M4 22h16" /> <path d="M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z" /> <path d="M6.084 10H4.5A2.5 2.5 0 0 1 2 7.5V5a1 1 0 0 1 1-1h3" />`,
+  "folder": `<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />`,
+  "award": `<path d="m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-3.58-2.687a1 1 0 0 0-1.197 0l-3.586 2.686a.5.5 0 0 1-.81-.469l1.514-8.526" /> <circle cx="12" cy="8" r="6" />`,
   "users": `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <path d="M16 3.128a4 4 0 0 1 0 7.744" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <circle cx="9" cy="7" r="4" />`,
   "x": `<path d="M18 6 6 18" /> <path d="m6 6 12 12" />`,
   "paperclip": `<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551" />`,
@@ -578,6 +614,14 @@ els.loginPassword.addEventListener('keydown', e=>{ if(e.key==='Enter') handleLog
 let JD_CRITERIA = [];
 let JD_ASSIGNED_FORM_IDS = new Set();
 let JD_CURRENT_FORM = null; // {id, project_id, project_name, track}
+let JD_ROUNDS = [];
+let CURRENT_ROUND_ID = null;
+let JD_ACTIVE_TAB = 'teams';
+
+function injectStaticIcons(){
+  document.getElementById('jdRoundBadgeIcon').innerHTML = icon('trophy',{size:11});
+  document.querySelectorAll('.jd-tab-icon').forEach(el=>{ el.innerHTML = icon(el.dataset.icon,{size:14}); });
+}
 
 async function enterDashboard(){
   document.body.style.display = 'block';
@@ -585,26 +629,73 @@ async function enterDashboard(){
   document.querySelector('.stage').style.display = 'none';
   document.getElementById('judgeDashboard').style.display = 'block';
   document.getElementById('jdWhoText').textContent = CURRENT_JUDGE_NAME ? `مرحبًا، ${CURRENT_JUDGE_NAME}` : '';
+  injectStaticIcons();
   document.getElementById('jdLogoutBtn').addEventListener('click', ()=>{
     sessionStorage.removeItem('ib5_judge_session');
     window.location.reload();
   });
   document.getElementById('jdBackBtn').addEventListener('click', showListView);
-  await loadJudgingCriteria();
-  await loadProjectLists();
+  document.querySelectorAll('[data-jtab]').forEach(btn=>{
+    btn.addEventListener('click', ()=>switchJudgeTab(btn.dataset.jtab));
+  });
+  document.getElementById('jdRoundSelect').addEventListener('change', async e=>{
+    CURRENT_ROUND_ID = parseInt(e.target.value);
+    updateRoundBadge();
+    await refreshCurrentTab();
+  });
+
+  await loadJudgingRounds();
+  await refreshCurrentTab();
+}
+
+async function loadJudgingRounds(){
+  const { data } = await sb.from('judging_rounds').select('*').order('order_index');
+  JD_ROUNDS = data || [];
+  const select = document.getElementById('jdRoundSelect');
+  select.innerHTML = JD_ROUNDS.map(r=>`<option value="${r.id}">${escHtmlJD(r.name)}</option>`).join('');
+  const activeRound = JD_ROUNDS.find(r=>r.is_active) || JD_ROUNDS[0];
+  CURRENT_ROUND_ID = activeRound ? activeRound.id : null;
+  if(CURRENT_ROUND_ID) select.value = CURRENT_ROUND_ID;
+  updateRoundBadge();
+}
+
+function updateRoundBadge(){
+  const round = JD_ROUNDS.find(r=>r.id===CURRENT_ROUND_ID);
+  const badge = document.getElementById('jdRoundBadge');
+  if(round){ document.getElementById('jdRoundBadgeText').textContent = round.name; badge.style.display = 'inline-flex'; }
+  else { badge.style.display = 'none'; }
+}
+
+function switchJudgeTab(tab){
+  JD_ACTIVE_TAB = tab;
+  document.querySelectorAll('[data-jtab]').forEach(b=>b.classList.toggle('active', b.dataset.jtab===tab));
+  document.getElementById('jdListView').style.display = tab==='teams' ? 'block' : 'none';
+  document.getElementById('jdAllProjectsView').style.display = tab==='allprojects' ? 'block' : 'none';
+  document.getElementById('jdCertificateView').style.display = tab==='certificate' ? 'block' : 'none';
+  document.getElementById('jdDetailView').style.display = 'none';
+  document.getElementById('jdRoundSelect').style.display = tab==='certificate' ? 'none' : 'block';
+  refreshCurrentTab();
+}
+
+async function refreshCurrentTab(){
+  if(JD_ACTIVE_TAB==='teams'){ await loadJudgingCriteria(); await loadProjectLists(); }
+  else if(JD_ACTIVE_TAB==='allprojects'){ await loadAllProjectsView(); }
+  else if(JD_ACTIVE_TAB==='certificate'){ await loadCertificateView(); }
 }
 
 async function loadJudgingCriteria(){
-  const { data } = await sb.from('judging_criteria').select('*').eq('is_active', true).order('order_index');
+  if(!CURRENT_ROUND_ID){ JD_CRITERIA = []; return; }
+  const { data } = await sb.from('judging_criteria').select('*').eq('is_active', true).eq('round_id', CURRENT_ROUND_ID).order('order_index');
   JD_CRITERIA = data || [];
 }
 
 async function loadProjectLists(){
   const assignedGrid = document.getElementById('jdAssignedGrid');
   const otherGrid = document.getElementById('jdOtherGrid');
+  if(!CURRENT_ROUND_ID){ assignedGrid.innerHTML = `<div class="jd-empty">لا توجد جولات تحكيم مُعدَّة بعد.</div>`; otherGrid.innerHTML=''; return; }
 
-  const { data: myAssignments } = await sb.from('judge_assignments').select('form_id').eq('judge_id', CURRENT_JUDGE_ID);
-  const { data: allAssignments } = await sb.from('judge_assignments').select('form_id');
+  const { data: myAssignments } = await sb.from('judge_assignments').select('form_id').eq('judge_id', CURRENT_JUDGE_ID).eq('round_id', CURRENT_ROUND_ID);
+  const { data: allAssignments } = await sb.from('judge_assignments').select('form_id').eq('round_id', CURRENT_ROUND_ID);
 
   const myFormIds = [...new Set((myAssignments||[]).map(a=>a.form_id))];
   const allFormIds = [...new Set((allAssignments||[]).map(a=>a.form_id))];
@@ -612,7 +703,7 @@ async function loadProjectLists(){
   const otherFormIds = allFormIds.filter(id=>!JD_ASSIGNED_FORM_IDS.has(id));
 
   if(!allFormIds.length){
-    assignedGrid.innerHTML = `<div class="jd-empty">لا توجد مشاريع بجولة التحكيم بعد — تواصل مع فريق البرنامج.</div>`;
+    assignedGrid.innerHTML = `<div class="jd-empty">لا توجد مشاريع بهذه الجولة بعد — تواصل مع فريق البرنامج.</div>`;
     otherGrid.innerHTML = '';
     return;
   }
@@ -623,8 +714,8 @@ async function loadProjectLists(){
   const projMap = {}; (projects||[]).forEach(p=>{ projMap[p.project_id] = p; });
   const formMap = {}; (forms||[]).forEach(f=>{ formMap[f.id] = { ...f, ...(projMap[f.project_id]||{}) }; });
 
-  // درجات المحكّم الحالي لمعرفة أي المشاريع أُرسل تقييمها فعليًا (لعرض شارة)
-  const { data: myEvals } = await sb.from('judge_evaluations').select('form_id, is_submitted').eq('judge_id', CURRENT_JUDGE_ID);
+  // درجات المحكّم الحالي بهذه الجولة لمعرفة أي المشاريع أُرسل تقييمها فعليًا
+  const { data: myEvals } = await sb.from('judge_evaluations').select('form_id, is_submitted').eq('judge_id', CURRENT_JUDGE_ID).eq('round_id', CURRENT_ROUND_ID);
   const evalMap = {}; (myEvals||[]).forEach(e=>{ evalMap[e.form_id] = e.is_submitted; });
 
   const cardHTML = (formId)=>{
@@ -638,12 +729,58 @@ async function loadProjectLists(){
     </div>`;
   };
 
-  assignedGrid.innerHTML = myFormIds.length ? myFormIds.map(cardHTML).join('') : `<div class="jd-empty">لا توجد مشاريع مُسندة إليك حاليًا.</div>`;
-  otherGrid.innerHTML = otherFormIds.length ? otherFormIds.map(cardHTML).join('') : `<div class="jd-empty">لا توجد مشاريع أخرى بجولة التحكيم حاليًا.</div>`;
+  assignedGrid.innerHTML = myFormIds.length ? myFormIds.map(cardHTML).join('') : `<div class="jd-empty">لا توجد مشاريع مُسندة إليك بهذه الجولة.</div>`;
+  otherGrid.innerHTML = otherFormIds.length ? otherFormIds.map(cardHTML).join('') : `<div class="jd-empty">لا توجد مشاريع أخرى بهذه الجولة حاليًا.</div>`;
 
   document.querySelectorAll('[data-openproject]').forEach(el=>{
     el.addEventListener('click', ()=>openProjectDetail(el.dataset.openproject, formMap[el.dataset.openproject]));
   });
+}
+
+/* ---------------- كل المشاريع (استعراض فقط، بدون تسجيل درجات) ---------------- */
+async function loadAllProjectsView(){
+  const el = document.getElementById('jdAllProjectsGrid');
+  el.innerHTML = `<div class="jd-empty">جارٍ التحميل…</div>`;
+  const { data: forms } = await sb.from('verification_forms').select('id, project_id, status').eq('status', 'submitted');
+  if(!forms || !forms.length){ el.innerHTML = `<div class="jd-empty">لا توجد طلبات مُرسَلة بعد.</div>`; return; }
+  const projectIds = [...new Set(forms.map(f=>f.project_id))];
+  const { data: projects } = await sb.from('eligible_projects').select('project_id, project_name, track').in('project_id', projectIds);
+  const projMap = {}; (projects||[]).forEach(p=>{ projMap[p.project_id] = p; });
+  const formMap = {}; forms.forEach(f=>{ formMap[f.id] = { ...f, ...(projMap[f.project_id]||{}) }; });
+
+  el.innerHTML = forms.map(f=>{
+    const p = formMap[f.id];
+    return `<div class="jd-pcard" data-openproject="${f.id}">
+      <div class="pname">${escHtmlJD(p.project_name||p.project_id)}</div>
+      <div class="pmeta mono">${escHtmlJD(p.project_id)} — ${escHtmlJD(p.track||'')}</div>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('#jdAllProjectsGrid [data-openproject]').forEach(el2=>{
+    el2.addEventListener('click', ()=>openProjectDetail(el2.dataset.openproject, formMap[el2.dataset.openproject]));
+  });
+}
+
+/* ---------------- شهاداتي ---------------- */
+async function loadCertificateView(){
+  const el = document.getElementById('jdCertificateBody');
+  const { count } = await sb.from('judge_evaluations').select('id', {count:'exact', head:true}).eq('judge_id', CURRENT_JUDGE_ID).eq('is_submitted', true);
+  const today = new Date().toLocaleDateString('ar-SA', { year:'numeric', month:'long', day:'numeric' });
+  el.innerHTML = `
+    <div style="text-align:left;max-width:720px;margin:0 auto 14px">
+      <button class="btn btn-primary btn-sm" id="jdPrintCertBtn" style="width:auto;padding:10px 20px">${icon('download',{size:13})} تنزيل PDF</button>
+    </div>
+    <div class="jd-cert-page" id="jdCertPrintable">
+      <div style="font-size:12px;letter-spacing:2px;color:var(--gold-500);font-weight:700;margin-bottom:6px">شهادة شكر وتقدير</div>
+      <div style="font-size:22px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:18px">حاضنة ابتكار 5</div>
+      <div style="font-size:14px;color:var(--ink-600);margin-bottom:8px">تتقدَّم حاضنة الابتكار بجامعة القصيم بخالص الشكر والتقدير إلى</div>
+      <div style="font-size:26px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin:14px 0;border-bottom:2px solid var(--gold-500);display:inline-block;padding-bottom:6px">${escHtmlJD(CURRENT_JUDGE_NAME)}</div>
+      <div style="font-size:14px;color:var(--ink-600);line-height:2;max-width:520px;margin:14px auto">
+        لمشاركته كمحكّم ضمن برنامج حاضنة ابتكار 5، وتقييمه ${count||0} مشروعًا بمهنية وحرص على تطوير المشاريع الريادية المشارِكة.
+      </div>
+      <div style="margin-top:30px;font-size:12px;color:var(--ink-400)">${today}</div>
+    </div>
+  `;
+  document.getElementById('jdPrintCertBtn').addEventListener('click', ()=>window.print());
 }
 
 function escHtmlJD(str){
@@ -653,7 +790,7 @@ function escHtmlJD(str){
 
 function showListView(){
   document.getElementById('jdDetailView').style.display = 'none';
-  document.getElementById('jdListView').style.display = 'block';
+  document.getElementById(JD_ACTIVE_TAB==='allprojects' ? 'jdAllProjectsView' : 'jdListView').style.display = 'block';
 }
 
 async function openProjectDetail(formId, projInfo){
@@ -673,7 +810,7 @@ async function openProjectDetail(formId, projInfo){
     sb.from('form_questions').select('field_key, label, type, section_id, order_index').eq('is_active', true).order('order_index'),
     sb.from('form_sections').select('id, title, order_index').order('order_index'),
     sb.from('form_files').select('field_key, file_name, storage_path').eq('form_id', formId).is('deleted_at', null),
-    sb.from('judge_evaluations').select('*').eq('judge_id', CURRENT_JUDGE_ID).eq('form_id', formId).maybeSingle(),
+    sb.from('judge_evaluations').select('*').eq('judge_id', CURRENT_JUDGE_ID).eq('form_id', formId).eq('round_id', CURRENT_ROUND_ID).maybeSingle(),
   ]);
 
   const avMap = {}; (answers||[]).forEach(a=>{ avMap[a.field_key] = a.value_json!==null ? a.value_json : a.value_text; });
@@ -748,11 +885,11 @@ async function saveEvaluation(isSubmit){
   btn.disabled = true; btn.textContent = 'جارٍ الحفظ…';
 
   const { error } = await sb.from('judge_evaluations').upsert({
-    judge_id: CURRENT_JUDGE_ID, form_id: JD_CURRENT_FORM.id, scores,
+    judge_id: CURRENT_JUDGE_ID, form_id: JD_CURRENT_FORM.id, round_id: CURRENT_ROUND_ID, scores,
     overall_note: note || null, is_submitted: isSubmit,
     submitted_at: isSubmit ? new Date().toISOString() : null,
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'judge_id,form_id' });
+  }, { onConflict: 'judge_id,form_id,round_id' });
 
   btn.disabled = false; btn.textContent = original;
   if(error){ errBox.textContent = 'تعذّر الحفظ: ' + error.message; errBox.classList.add('show'); return; }
