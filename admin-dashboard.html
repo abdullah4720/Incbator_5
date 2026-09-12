@@ -1760,6 +1760,14 @@ async function renderJudgingRanking(){
     ${roundSelectorHTML()}
     <div class="card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
       <div>
+        <b>${icon('lock',{size:14})} قفل التحكيم</b>
+        <div style="font-size:12px;color:var(--ink-400);margin-top:2px">${round?.is_locked ? `مقفلة منذ ${relativeTime(round.locked_at)} — لا يقدر أي محكّم يسجّل أو يعدّل درجة` : 'التحكيم مفتوح — المحكّمون يقدرون يسجّلون ويعدّلون درجاتهم'}</div>
+      </div>
+      <button class="btn ${round?.is_locked?'btn-ghost':'btn-primary'} btn-sm" id="toggleLockBtn">${round?.is_locked?'إلغاء القفل':'قفل التحكيم الآن'}</button>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
         <b>نشر النتائج للفرق</b>
         <div style="font-size:12px;color:var(--ink-400);margin-top:2px">${round?.results_published ? `منشورة منذ ${relativeTime(round.published_at)}` : 'غير منشورة حاليًا — الفرق ما تقدر تشوف نتائجها'}</div>
       </div>
@@ -1767,6 +1775,9 @@ async function renderJudgingRanking(){
     </div>
 
     ${ranked.length===0 ? `<div class="empty-hint">لا توجد نتائج كافية بعد لعرض المراكز</div>` : `
+    <div class="card" style="margin-bottom:16px;display:flex;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" id="exportRankingBtn">${icon('download',{size:13})} تصدير Excel</button>
+    </div>
     <div class="card"><div class="table-wrap"><table>
       <thead><tr><th>المركز</th><th>رقم المشروع</th><th>اسم المشروع</th><th>الدرجة</th><th>الحالة</th></tr></thead>
       <tbody>${ranked.map((r,i)=>`<tr style="${i<3?'background:var(--gold-100)33':''}">
@@ -1779,6 +1790,20 @@ async function renderJudgingRanking(){
     </table></div></div>`}
   `;
   bindRoundSelector(renderJudgingRanking);
+  document.getElementById('toggleLockBtn').addEventListener('click', async ()=>{
+    const lock = !round?.is_locked;
+    const doToggle = async ()=>{
+      const { error } = await sb.from('judging_rounds').update({ is_locked: lock, locked_at: lock ? new Date().toISOString() : null }).eq('id', CURRENT_ADMIN_ROUND_ID);
+      if(error){ showToast('تعذّر التحديث: '+error.message); return; }
+      showToast(lock ? 'تم قفل التحكيم' : 'تم إلغاء القفل');
+      JUDGING_ROUNDS_CACHE = [];
+      renderJudgingRanking();
+    };
+    if(lock){ openConfirm('قفل التحكيم يمنع كل المحكّمين من تسجيل أو تعديل أي درجة بهذه الجولة فورًا. متابعة؟', doToggle); }
+    else { doToggle(); }
+  });
+  const exportBtn = document.getElementById('exportRankingBtn');
+  if(exportBtn) exportBtn.addEventListener('click', ()=>exportRankingToExcel(ranked, maxTotal, round));
   document.getElementById('togglePublishBtn').addEventListener('click', async ()=>{
     const publish = !round?.results_published;
     const doToggle = async ()=>{
@@ -1791,6 +1816,19 @@ async function renderJudgingRanking(){
     if(publish){ openConfirm('نشر النتائج يعني الفرق تقدر تشوف نتائج هذه الجولة. متابعة؟', doToggle); }
     else { doToggle(); }
   });
+}
+
+function exportRankingToExcel(ranked, maxTotal, round){
+  if(typeof XLSX === 'undefined'){ showToast('تعذّر تحميل مكتبة التصدير — تأكد من اتصالك بالإنترنت وأعد المحاولة'); return; }
+  const header = ['المركز', 'رقم المشروع', 'اسم المشروع', `الدرجة (من ${maxTotal})`, 'عدد المحكّمين المُرسِلين', 'عدد المحكّمين المُكلَّفين', 'الحالة'];
+  const rows = ranked.map((r,i)=>[
+    i+1, r.project_id, r.project_name, r.avgTotal.toFixed(1), r.submittedCount, r.assignedCount,
+    r.complete ? 'اكتمل التحكيم' : 'لم يكتمل',
+  ]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, ...rows]), 'المراكز والنتائج');
+  const roundName = (round?.name || 'جولة').replace(/[\\/:*?"<>|]/g, '');
+  XLSX.writeFile(wb, `نتائج_${roundName}_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 async function renderJudgingRounds(){

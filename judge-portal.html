@@ -683,7 +683,10 @@ async function loadJudgingRounds(){
 function updateRoundBadge(){
   const round = JD_ROUNDS.find(r=>r.id===CURRENT_ROUND_ID);
   const badge = document.getElementById('jdRoundBadge');
-  if(round){ document.getElementById('jdRoundBadgeText').textContent = round.name; badge.style.display = 'inline-flex'; }
+  if(round){
+    document.getElementById('jdRoundBadgeText').textContent = round.name + (round.is_locked ? ' 🔒 مقفلة' : '');
+    badge.style.display = 'inline-flex';
+  }
   else { badge.style.display = 'none'; }
 }
 
@@ -1220,6 +1223,22 @@ function renderScoringForm(existingEval, isAssigned){
         ${icon('info',{size:16})}
         <div style="font-size:13px">هذا المشروع للاطلاع فقط — غير مُسند إليك للتقييم بهذه الجولة.</div>
       </div>`;
+    return;
+  }
+  const currentRound = JD_ROUNDS.find(r=>r.id===CURRENT_ROUND_ID);
+  if(currentRound && currentRound.is_locked){
+    const totalMaxLocked = JD_CRITERIA.reduce((s,c)=>s+parseFloat(c.max_score),0) || 1;
+    const lockedScores = existingEval ? (existingEval.scores||{}) : null;
+    scoringCard.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;color:var(--ink-600);margin-bottom:14px">
+        ${icon('info',{size:16})}
+        <div style="font-size:13px">التحكيم مقفل لهذه الجولة — ما تقدر تسجّل أو تعدّل أي درجة الآن.</div>
+      </div>
+      ${lockedScores ? JD_CRITERIA.map(c=>{
+        const weight = Math.round(parseFloat(c.max_score)/totalMaxLocked*100);
+        return `<div class="jd-crit-row"><div class="jd-crit-label">${escHtmlJD(c.label)}</div><div class="jd-score-max">${lockedScores[c.id]!==undefined?lockedScores[c.id]:'—'} / 5 (الوزن ${weight}%)</div></div>`;
+      }).join('') : `<div class="jd-empty">لم يُسجَّل أي تقييم لهذا المشروع.</div>`}
+    `;
     return;
   }
   const totalMax = JD_CRITERIA.reduce((s,c)=>s+parseFloat(c.max_score),0) || 1;
