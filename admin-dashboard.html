@@ -1387,7 +1387,7 @@ async function renderJudgingCommittees(){
       const projectFormIds = projectsByCommittee[c.id] || [];
       return `<div class="card" style="margin-bottom:14px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-          <div><b>${escHtml(c.name)}</b><div style="font-size:12px;color:var(--ink-400);margin-top:2px">${escHtml(c.description||'كل المسارات')} · ${memberIds.length} محكّمًا</div></div>
+          <div><b>${escHtml(c.name)}</b><div style="font-size:12px;color:var(--ink-400);margin-top:2px">${c.track ? `<span style="color:var(--teal-600);font-weight:600">${escHtml(c.track)}</span>` : 'كل المسارات'} · ${memberIds.length} محكّمًا${c.description?' · '+escHtml(c.description):''}</div></div>
           <div>
             <button class="btn btn-ghost btn-sm" data-assignprojects="${c.id}">إسناد لمشاريع</button>
             <button class="btn btn-ghost btn-sm" data-editmembers="${c.id}">تعديل</button>
@@ -1410,7 +1410,7 @@ async function renderJudgingCommittees(){
 
   document.getElementById('addCommitteeBtn').addEventListener('click', ()=>openCommitteeModal(null));
   document.getElementById('autoFormCommitteesBtn').addEventListener('click', ()=>openAutoFormCommitteesModal(allJudges||[]));
-  document.getElementById('autoAssignProjectsBtn').addEventListener('click', ()=>runAutoAssignProjects(JUDGING_COMMITTEES_CACHE, membersByCommittee, submittedRows));
+  document.getElementById('autoAssignProjectsBtn').addEventListener('click', ()=>runAutoAssignProjects(JUDGING_COMMITTEES_CACHE, membersByCommittee, submittedRows, projectsByCommittee, committeeAssignedFormIds));
   document.getElementById('openProgressBtn').addEventListener('click', ()=>{ judgingSubtab='progress'; renderJudgingTab(); });
   const orphanBtn = document.getElementById('viewOrphanedBtn');
   if(orphanBtn) orphanBtn.addEventListener('click', ()=>openOrphanedAssignmentsModal(orphanedFormIds, submittedRows));
@@ -1480,26 +1480,50 @@ function openAutoFormCommitteesModal(allJudges){
 
 /* إسناد تلقائي: يوزّع كل المشاريع المُرسَلة على اللجان الموجودة بالتساوي،
    وينشئ تكليفًا فرديًا لكل عضو بكل لجنة تلقائيًا */
-async function runAutoAssignProjects(committees, membersByCommittee, submittedRows){
+async function runAutoAssignProjects(committees, membersByCommittee, submittedRows, projectsByCommittee, committeeAssignedFormIds){
   if(!committees.length){ showToast('شكّل لجنة واحدة على الأقل أولًا'); return; }
-  openConfirm(`سيُسنَد ${submittedRows.length} مشروعًا على ${committees.length} لجنة بالتساوي، ويُنشئ تكليفًا فرديًا لكل عضو. سيُستبدَل أي إسناد سابق لهذه الجولة. متابعة؟`, async ()=>{
-    await sb.from('committee_assignments').delete().eq('round_id', CURRENT_ADMIN_ROUND_ID);
-    // نحذف فقط التكليفات الفردية اللي كانت ناتجة عن لجان (نحافظ على أي تكليف فردي يدوي قديم كما هو، يظهر بقسم "المعلَّقة")
+
+  // فقط المشاريع غير المُسندة أصلًا لأي لجنة — يحافظ على أي إسناد سابق
+  const newRows = submittedRows.filter(r=>!committeeAssignedFormIds.has(r.form_id));
+  if(!newRows.length){ showToast('كل المشاريع المستوفية مُسندة أصلًا — لا يوجد جديد للتوزيع'); return; }
+
+  const tracksCovered = [...new Set(committees.filter(c=>c.track).map(c=>c.track))];
+  const trackNote = tracksCovered.length ? ` بأولوية لتطابق المسار (${tracksCovered.join('، ')})،` : '';
+  openConfirm(`سيُسنَد ${newRows.length} مشروعًا جديدًا (غير المُسندة سابقًا) على اللجان،${trackNote} ويُنشئ تكليفًا فرديًا لكل عضو. الإسناد الحالي يبقى بدون أي تغيير. متابعة؟`, async ()=>{
+    // نبدأ عدّاد الحمل من العدد الحالي الفعلي لكل لجنة — يضمن توازنًا صحيحًا
+    // حتى مع التشغيل المتكرر بدل إعادة الصفر في كل مرة
+    const currentLoad = {};
+    committees.forEach(c=>{ currentLoad[c.id] = (projectsByCommittee[c.id]||[]).length; });
+
+    const committeesByTrack = {};
+    const generalCommittees = [];
+    committees.forEach(c=>{
+      if(c.track){ (committeesByTrack[c.track] = committeesByTrack[c.track]||[]).push(c); }
+      else { generalCommittees.push(c); }
+    });
+
     const committeeAssignRows = [];
     const judgeAssignRows = [];
-    submittedRows.forEach((r,i)=>{
-      const committee = committees[i % committees.length];
+    newRows.forEach(r=>{
+      // أولًا: لجان مخصَّصة لنفس مسار المشروع. وإلا: اللجان العامة. وإلا: كل اللجان كحل أخير
+      let candidates = committeesByTrack[r.track] || [];
+      if(!candidates.length) candidates = generalCommittees;
+      if(!candidates.length) candidates = committees;
+      candidates = [...candidates].sort((a,b)=>currentLoad[a.id]-currentLoad[b.id]);
+      const committee = candidates[0];
+      currentLoad[committee.id]++;
+
       committeeAssignRows.push({ committee_id: committee.id, form_id: r.form_id, round_id: CURRENT_ADMIN_ROUND_ID, assigned_by: currentAdmin.id });
       (membersByCommittee[committee.id]||[]).forEach(jid=>{
         judgeAssignRows.push({ judge_id: jid, form_id: r.form_id, round_id: CURRENT_ADMIN_ROUND_ID, assigned_by: currentAdmin.id });
       });
     });
+
     const { error: e1 } = await sb.from('committee_assignments').insert(committeeAssignRows);
     if(e1){ showToast('تعذّر الإسناد: '+e1.message); return; }
-    // إدراج التكليفات الفردية، بتجاهل التكرار (upsert بمفتاح مركّب)
     const { error: e2 } = await sb.from('judge_assignments').upsert(judgeAssignRows, { onConflict: 'judge_id,form_id,round_id' });
     if(e2){ showToast('تعذّر إسناد المحكّمين: '+e2.message); return; }
-    showToast(`تم إسناد ${submittedRows.length} مشروعًا على ${committees.length} لجنة`);
+    showToast(`تم إسناد ${newRows.length} مشروعًا جديدًا`);
     renderJudgingCommittees();
   });
 }
@@ -1635,9 +1659,18 @@ function openCommitteeModal(existing){
   const modal = document.getElementById('confirmModal');
   const box = modal.querySelector('.modal-box');
   box.style.maxWidth = '440px';
+  const tracks = [...new Set(eligibleProjects.map(p=>p.track).filter(Boolean))].sort();
   box.innerHTML = `
     <h3>${existing?'تعديل لجنة':'إضافة لجنة جديدة'}</h3>
     <div class="field-inline"><label class="flabel">اسم اللجنة</label><input type="text" id="commName" value="${existing?escHtml(existing.name):''}" placeholder="مثال: لجنة مسار الابتكار"></div>
+    <div class="field-inline">
+      <label class="flabel">المسار المخصَّص (اختياري)</label>
+      <select id="commTrack" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px">
+        <option value="">كل المسارات (لجنة عامة)</option>
+        ${tracks.map(t=>`<option value="${escHtml(t)}" ${existing && existing.track===t?'selected':''}>${escHtml(t)}</option>`).join('')}
+      </select>
+      <div style="font-size:11px;color:var(--ink-400);margin-top:4px">لو حدَّدت مسارًا، الإسناد التلقائي يعطي هذه اللجنة أولوية مشاريع هذا المسار تحديدًا.</div>
+    </div>
     <div class="field-inline"><label class="flabel">الوصف (اختياري)</label><textarea id="commDesc" style="min-height:70px">${existing?escHtml(existing.description||''):''}</textarea></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="commCancel">إلغاء</button>
@@ -1649,8 +1682,9 @@ function openCommitteeModal(existing){
   document.getElementById('commSave').addEventListener('click', async ()=>{
     const name = document.getElementById('commName').value.trim();
     const desc = document.getElementById('commDesc').value.trim();
+    const track = document.getElementById('commTrack').value.trim();
     if(!name){ showToast('اكتب اسم اللجنة'); return; }
-    const payload = { name, description: desc||null };
+    const payload = { name, description: desc||null, track: track||null };
     let error;
     if(existing){ ({ error } = await sb.from('judging_committees').update(payload).eq('id', existing.id)); }
     else { ({ error } = await sb.from('judging_committees').insert({ ...payload, round_id: CURRENT_ADMIN_ROUND_ID, order_index: JUDGING_COMMITTEES_CACHE.length }).select().single()); }
