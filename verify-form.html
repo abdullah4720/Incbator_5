@@ -921,6 +921,7 @@ function renderSection(){
     <div class="section-desc">${section.desc}</div>
   </div>`;
   if(section.banner) inner += `<div class="req-banner"><b>تنبيه:</b>&nbsp;${section.banner}</div>`;
+  if(IS_READONLY) inner += `<div class="req-banner" style="background:var(--danger-100);color:var(--danger)"><b>🔒 هذا النموذج مقفل للتعديل حاليًا من قبل فريق البرنامج.</b>&nbsp;تقدر تتصفح بياناتك، لكن أي تعديل لن يُحفظ.</div>`;
 
   if(section.isTeamSection) inner += renderTeamSection(section);
   else if(section.isStageSection) inner += renderStageSection(section);
@@ -931,10 +932,11 @@ function renderSection(){
   inner += `<div class="nav-row">
     <button class="btn btn-ghost" id="btnPrev" ${isFirst?'disabled':''}>القسم السابق</button>
     <div class="side-actions">
-      <button class="btn btn-ghost" id="btnSaveDraft">حفظ كمسودة</button>
+      ${IS_READONLY ? '' : `<button class="btn btn-ghost" id="btnSaveDraft">حفظ كمسودة</button>
       ${isLast
         ? `<button class="btn btn-gold" id="btnSubmit">إرسال النموذج</button>`
-        : `<button class="btn btn-primary" id="btnNext">القسم التالي</button>`}
+        : `<button class="btn btn-primary" id="btnNext">القسم التالي</button>`}`}
+      ${IS_READONLY && !isLast ? `<button class="btn btn-primary" id="btnNext">القسم التالي</button>` : ''}
     </div>
   </div>`;
   card.innerHTML = inner;
@@ -1064,7 +1066,7 @@ function bindSectionEvents(section){
   });
   const next=document.getElementById('btnNext');
   if(next) next.addEventListener('click',()=>{
-    if(validateSection(section)){
+    if(IS_READONLY || validateSection(section)){
       const idx = SECTIONS.findIndex(s=>s.id===state.current);
       if(idx < SECTIONS.length-1){ state.current = SECTIONS[idx+1].id; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); }
     }
@@ -1155,8 +1157,10 @@ async function saveDraft(showToastOnSuccess = true){
   if(!FORM_ID){ showToast('تعذّر الحفظ: لم يتم تحميل النموذج بعد'); return false; }
   if(await refuseIfClosed()) return false;
   if(IS_READONLY){
-    showToast('تم قفل التعديل على هذا النموذج من قبل فريق البرنامج — تعذّر الحفظ.');
-    setTimeout(()=>window.location.reload(), 1800);
+    clearTimeout(autosaveTimer); // نوقف أي محاولة حفظ تلقائي معلّقة — يمنع حلقة تكرار الرسالة
+    if(showToastOnSuccess) showToast('تم قفل التعديل على هذا النموذج من قبل فريق البرنامج — تعذّر الحفظ.');
+    const statusEl = document.getElementById('draftStatus');
+    if(statusEl) statusEl.textContent = 'مقفل للتعديل';
     return false;
   }
   syncLeaderFromProjectInfo();
@@ -1250,7 +1254,7 @@ async function trySubmit(){
 /* ---------------- تحديثات خفيفة بدون إعادة رسم كاملة ---------------- */
 let autosaveTimer = null;
 function scheduleAutosave(){
-  if(!FORM_ID) return;
+  if(!FORM_ID || IS_READONLY) return;
   clearTimeout(autosaveTimer);
   document.getElementById('draftStatus').textContent = 'تعديلات غير محفوظة…';
   autosaveTimer = setTimeout(()=>{ saveDraft(false); }, 2500);
