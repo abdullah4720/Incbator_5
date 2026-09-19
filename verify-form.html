@@ -1426,9 +1426,9 @@ async function initApp(){
 
     // 1) بيانات المشروع الأساسية
     const { data: proj } = await SB.from('eligible_projects')
-      .select('project_id, project_name, team_leader_name, team_leader_phone, team_leader_email, track, domain, is_active')
+      .select('project_id, project_name, team_leader_name, team_leader_phone, team_leader_email, track, domain, is_active, edit_locked')
       .eq('project_id', PROJECT_ID).maybeSingle();
-    IS_READONLY = !!proj && proj.is_active === false;
+    IS_READONLY = !!proj && (proj.is_active === false || proj.edit_locked === true);
 
     // 2) جلب سجل النموذج أو إنشاؤه لأول مرة
     let { data: form, error: formErr } = await SB_AUTH.from('verification_forms')
