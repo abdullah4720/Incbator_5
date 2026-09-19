@@ -1154,6 +1154,11 @@ async function refuseIfClosed(){
 async function saveDraft(showToastOnSuccess = true){
   if(!FORM_ID){ showToast('تعذّر الحفظ: لم يتم تحميل النموذج بعد'); return false; }
   if(await refuseIfClosed()) return false;
+  if(IS_READONLY){
+    showToast('تم قفل التعديل على هذا النموذج من قبل فريق البرنامج — تعذّر الحفظ.');
+    setTimeout(()=>window.location.reload(), 1800);
+    return false;
+  }
   syncLeaderFromProjectInfo();
   document.getElementById('draftStatus').textContent = 'جارٍ الحفظ…';
   try{
@@ -1209,6 +1214,10 @@ async function saveDraft(showToastOnSuccess = true){
 
 async function trySubmit(){
   if(await refuseIfClosed()) return;
+  if(IS_READONLY){
+    showToast('تم قفل التعديل على هذا النموذج من قبل فريق البرنامج — تعذّر الإرسال.');
+    return;
+  }
 
   const invalidSection = findFirstInvalidSection();
   if(invalidSection){
