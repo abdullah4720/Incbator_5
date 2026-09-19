@@ -251,7 +251,11 @@ input:disabled,select:disabled{background:#F0F1F4;color:var(--ink-400);}
 .field.has-error .error-text{display:block;}
 
 .footer-note{max-width:1180px;margin:8px auto 40px;padding:0 28px;font-size:11.5px;color:var(--ink-400);text-align:center;}
-.eq-divider{width:100%;height:22px;display:block;background:var(--paper);}
+.eq-divider{width:100%;height:22px;display:block;background:var(--paper);}@media print{
+  body *{visibility:hidden;}
+  #participantReportPrintable, #participantReportPrintable *{visibility:visible;}
+  #participantReportPrintable{position:absolute;top:0;right:0;left:0;width:100%;padding:20px;}
+}
 </style>
 </head>
 <body>
@@ -411,6 +415,17 @@ const SUPABASE_ANON_KEY = "sb_publishable_URvlZnzYTl0CwwVxCikLvA_OeGSzhJh";
 
 let PROJECT_ID = null;
 let FORM_ID = null;
+let IS_READONLY = false;         // true لو المشروع أصبح غير نشط — يمنع التعديل بدون ما يمنع الدخول للعرض
+let QUALIFICATION_BADGE = null;  // 'ok' | 'none' | null (null = غير منشورة أو غير محسوبة)
+let PUBLISHED_REPORT = null;
+const REQ_LABELS_AR = {
+  commercial_registration: "السجل التجاري",
+  camp_attendance: "حضور المعسكر",
+  team_size: "عدد أعضاء الفريق",
+  prototype: "النموذج الأولي",
+  pitch_deck: "العرض الاستثماري",
+  market_validation: "التحقق من احتياج السوق",
+};
 let SB = null;       // عميل عام — يُستخدم لكل عمليات النموذج (لا حاجة لتوكن خاص)
 let showingThankYou = false;
 let ALLOW_EDIT_AFTER_SUBMIT = true;
@@ -657,7 +672,7 @@ function renderStepper(){
   }).join('');
   el.querySelectorAll('[data-goto]').forEach(n=>{
     n.addEventListener('click',()=>{
-      if(showingThankYou && !ALLOW_EDIT_AFTER_SUBMIT) return; // التعديل بعد الإرسال غير متاح
+      if(showingThankYou && (!ALLOW_EDIT_AFTER_SUBMIT || IS_READONLY)) return; // التعديل بعد الإرسال أو بعد الإقفال غير متاح
       showingThankYou = false;
       state.current=parseInt(n.dataset.goto); renderAll(); window.scrollTo({top:0,behavior:'smooth'});
     });
@@ -1247,18 +1262,66 @@ function updateTopbar(){
 function renderThankYouScreen(){
   const card = document.getElementById('sectionCard');
   const closed = computeClosedState();
-  const canEdit = ALLOW_EDIT_AFTER_SUBMIT && !closed;
+  const canEdit = ALLOW_EDIT_AFTER_SUBMIT && !closed && !IS_READONLY;
+  const rep = PUBLISHED_REPORT ? PUBLISHED_REPORT.report : null;
+  const qualBadge = QUALIFICATION_BADGE ? `
+    <div style="max-width:420px;margin:0 auto 20px;padding:16px 20px;border-radius:12px;text-align:center;background:${QUALIFICATION_BADGE==='ok'?'var(--success-100)':'var(--danger-100)'};color:${QUALIFICATION_BADGE==='ok'?'var(--success)':'var(--danger)'}">
+      <div style="font-size:16px;font-weight:800;font-family:'Cairo',sans-serif">${QUALIFICATION_BADGE==='ok'?'✓ مشروعكم مستوفٍ':'✗ مشروعكم غير مستوفٍ'}</div>
+      <div style="font-size:12.5px;margin-top:4px;opacity:.85">${QUALIFICATION_BADGE==='ok'?'استوفى مشروعكم متطلبات المستندات الأساسية (سجل تجاري أو حماية ملكية فكرية/شراكة).':'لم يستوف مشروعكم متطلبات المستندات الأساسية بعد. تواصلوا مع فريق البرنامج للاستفسار.'}</div>
+    </div>` : '';
   card.innerHTML = `
-    <div style="text-align:center;padding:56px 20px">
+    <div style="text-align:center;padding:56px 20px 24px">
       <div style="width:64px;height:64px;border-radius:50%;background:var(--success-100);color:var(--success);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">${icon('check',{size:30,strokeWidth:2.5})}</div>
       <div style="font-size:20px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:10px">تم إرسال النموذج بنجاح</div>
       <div style="font-size:14px;color:var(--ink-600);max-width:480px;margin:0 auto 26px;line-height:1.9">
         شكرًا لإكمال نموذج التحقق من استيفاء متطلبات الانتقال إلى مرحلة التحكيم. سيقوم فريق البرنامج بمراجعة طلبكم، وسيتم التواصل معكم في حال الحاجة لأي استكمال.
       </div>
+      ${qualBadge}
       ${canEdit
         ? `<button class="btn btn-primary" id="btnEditAfterSubmit">تعديل الإجابات</button>`
-        : `<div class="req-banner" style="display:inline-flex;max-width:420px;text-align:right">${closed?'تم إغلاق النموذج، ولا يمكن تعديل الإجابات حاليًا.':'تعديل الإجابات بعد الإرسال غير متاح حاليًا — تواصل مع فريق البرنامج إذا احتجت لتحديث بياناتك.'}</div>`}
+        : `<div class="req-banner" style="display:inline-flex;max-width:420px;text-align:right">${IS_READONLY?'انتهت نافذة التعديل على هذا النموذج — تقدرون تشوفون بياناتكم المُرسَلة، بدون إمكانية تعديلها الآن.':closed?'تم إغلاق النموذج، ولا يمكن تعديل الإجابات حاليًا.':'تعديل الإجابات بعد الإرسال غير متاح حاليًا — تواصل مع فريق البرنامج إذا احتجت لتحديث بياناتك.'}</div>`}
     </div>
+    ${rep ? `
+    <div style="border-top:1px solid var(--line);padding:28px 20px 8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;max-width:640px;margin:0 auto 16px">
+        <div style="font-size:16px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif">تقرير تطوير مشروعكم</div>
+        <button class="btn btn-ghost btn-sm" id="printReportBtn">${icon('download',{size:12})} تنزيل PDF</button>
+      </div>
+      <div id="participantReportPrintable" style="max-width:640px;margin:0 auto;text-align:right">
+        <div class="ann-banner" style="margin-bottom:14px"><span>${escHtml(rep.qualitative_level)}</span></div>
+        <p style="font-size:13.5px;line-height:1.9;color:var(--ink-900);margin-bottom:18px">${escHtml(rep.overall_message)}</p>
+
+        ${(rep.strengths||[]).length ? `
+        <div style="margin-bottom:18px">
+          <div style="font-weight:700;color:var(--success);margin-bottom:8px;font-size:13.5px">${icon('check',{size:13})} مواطن القوة</div>
+          <ul style="margin:0;padding-inline-start:20px;font-size:13px;color:var(--ink-900);line-height:1.9">
+            ${rep.strengths.map(s=>`<li>${escHtml(s)}</li>`).join('')}
+          </ul>
+        </div>` : ''}
+
+        <div style="margin-bottom:18px">
+          <div style="font-weight:700;color:var(--navy-800);margin-bottom:8px;font-size:13.5px">ملاحظات حسب كل متطلب</div>
+          ${rep.requirement_feedback ? Object.entries(REQ_LABELS_AR).map(([k,label])=>{
+            const note = rep.requirement_feedback[k];
+            if(!note) return '';
+            return `<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)">
+              <div style="font-weight:600;font-size:12.5px;color:var(--navy-800);margin-bottom:3px">${label}</div>
+              <div style="font-size:13px;color:var(--ink-900);line-height:1.8">${escHtml(note)}</div>
+            </div>`;
+          }).join('') : ''}
+        </div>
+
+        ${(rep.next_steps||[]).length ? `
+        <div style="margin-bottom:18px">
+          <div style="font-weight:700;color:var(--navy-800);margin-bottom:8px;font-size:13.5px">${icon('rocket',{size:13})} خطوات مقترحة قادمة</div>
+          <ul style="margin:0;padding-inline-start:20px;font-size:13px;color:var(--ink-900);line-height:1.9">
+            ${rep.next_steps.map(s=>`<li>${escHtml(s)}</li>`).join('')}
+          </ul>
+        </div>` : ''}
+
+        ${rep.motivational_closing ? `<div class="ann-banner">${icon('sparkles',{size:13})}<span>${escHtml(rep.motivational_closing)}</span></div>` : ''}
+      </div>
+    </div>` : ''}
   `;
   const editBtn = document.getElementById('btnEditAfterSubmit');
   if(editBtn) editBtn.addEventListener('click', ()=>{
@@ -1266,6 +1329,8 @@ function renderThankYouScreen(){
     renderAll();
     window.scrollTo({top:0,behavior:'smooth'});
   });
+  const printBtn = document.getElementById('printReportBtn');
+  if(printBtn) printBtn.addEventListener('click', ()=>window.print());
 }
 
 /* ---------------- شاشة إغلاق النموذج (يدوي أو بعد الموعد النهائي) ---------------- */
@@ -1361,8 +1426,9 @@ async function initApp(){
 
     // 1) بيانات المشروع الأساسية
     const { data: proj } = await SB.from('eligible_projects')
-      .select('project_id, project_name, team_leader_name, team_leader_phone, team_leader_email, track, domain')
+      .select('project_id, project_name, team_leader_name, team_leader_phone, team_leader_email, track, domain, is_active')
       .eq('project_id', PROJECT_ID).maybeSingle();
+    IS_READONLY = !!proj && proj.is_active === false;
 
     // 2) جلب سجل النموذج أو إنشاؤه لأول مرة
     let { data: form, error: formErr } = await SB_AUTH.from('verification_forms')
@@ -1379,6 +1445,25 @@ async function initApp(){
     // 3) الإجابات المحفوظة سابقًا
     const { data: answers } = await SB_AUTH.from('form_answers').select('field_key, value_text, value_json').eq('form_id', FORM_ID);
     (answers||[]).forEach(a=>{ state.values[a.field_key] = a.value_json !== null ? a.value_json : a.value_text; });
+
+    // حساب حالة الاستيفاء (نفس منطق لوحة التحكم بالضبط) — يُعرض فقط لو
+    // الإداري نشرها صراحة، وفقط لو النموذج فعليًا "مُرسَل"
+    try{
+      const { data: settingsRow } = await SB.from('form_settings').select('qualification_status_published').eq('id', 1).maybeSingle();
+      if(settingsRow && settingsRow.qualification_status_published && form.status === 'submitted'){
+        const { data: humanOverride } = await SB_AUTH.from('requirement_status').select('status').eq('form_id', FORM_ID).eq('requirement', 'commercial_registration').maybeSingle();
+        const hasCommercial = humanOverride ? humanOverride.status === 'ok' : state.values['f2_1'] === 'نعم';
+        let ipKey = null;
+        for(const sec of sections){
+          for(const q of sec.questions){
+            if((q.label||'').includes('حماية للملكية الفكرية') || (q.label||'').includes('شراكة مع جهات حكومية')){ ipKey = q.id; break; }
+          }
+          if(ipKey) break;
+        }
+        const hasIp = ipKey ? state.values[ipKey] === 'نعم' : false;
+        QUALIFICATION_BADGE = (hasCommercial || hasIp) ? 'ok' : 'none';
+      }
+    } catch(e){ console.error('تعذّر حساب حالة الاستيفاء:', e); }
 
     // 4) أعضاء الفريق
     const { data: members } = await SB_AUTH.from('team_members').select('*').eq('form_id', FORM_ID).order('order_index');
@@ -1428,6 +1513,10 @@ async function initApp(){
     // 7.1) الإعلانات المفعَّلة حاليًا
     const { data: anns } = await SB.from('announcements').select('id, message, created_at').eq('is_active', true).order('created_at', {ascending:false});
     ACTIVE_ANNOUNCEMENTS = anns || [];
+
+    // 7.2) تقرير المشارك المنشور (إن وُجد) — تحفيزي وتطويري، منفصل عن أي تقييم داخلي
+    const { data: pubReport } = await SB.from('participant_reports').select('report, published_at').eq('form_id', FORM_ID).eq('is_published', true).order('generated_at',{ascending:false}).limit(1).maybeSingle();
+    PUBLISHED_REPORT = pubReport || null;
 
     if(form.status === 'submitted'){
       showingThankYou = true;
