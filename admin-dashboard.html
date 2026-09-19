@@ -2898,6 +2898,17 @@ function renderEligibility(){
 
     <div id="importPanel"></div>
 
+    <div class="card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <b>${icon('lock',{size:14})} قفل التعديل الجماعي</b>
+        <div style="font-size:12px;color:var(--ink-400);margin-top:2px" id="bulkLockSummary"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" id="bulkUnlockBtn">إلغاء القفل عن الجميع</button>
+        <button class="btn btn-primary btn-sm" id="bulkLockBtn">قفل التعديل لكل الفرق</button>
+      </div>
+    </div>
+
     <div class="card">
       <div class="filter-row">
         <input type="text" class="search-box" id="eligSearch" placeholder="ابحث برقم المشروع، اسم الفريق، أو البريد الإلكتروني…" value="${eligFilter.q}">
@@ -2916,6 +2927,26 @@ function renderEligibility(){
     </div>
   `;
   renderEligTbody();
+  updateBulkLockSummary();
+
+  document.getElementById('bulkLockBtn').addEventListener('click', ()=>{
+    openConfirm(`سيُقفَل التعديل لكل الفرق المؤهّلة (${eligibleProjects.length} فريقًا) دفعة واحدة. الدخول والعرض يبقيان متاحين لهم دائمًا — فقط التعديل يُمنع. متابعة؟`, async ()=>{
+      const { error } = await sb.from('eligible_projects').update({ edit_locked: true }).neq('project_id', '');
+      if(error){ showToast('تعذّر القفل الجماعي: '+error.message); return; }
+      eligibleProjects.forEach(p=>{ p.edit_locked = true; });
+      renderEligTbody(); updateBulkLockSummary();
+      showToast('تم قفل التعديل لكل الفرق');
+    });
+  });
+  document.getElementById('bulkUnlockBtn').addEventListener('click', ()=>{
+    openConfirm(`سيُلغى قفل التعديل عن كل الفرق (${eligibleProjects.length} فريقًا) دفعة واحدة. متابعة؟`, async ()=>{
+      const { error } = await sb.from('eligible_projects').update({ edit_locked: false }).neq('project_id', '');
+      if(error){ showToast('تعذّر إلغاء القفل الجماعي: '+error.message); return; }
+      eligibleProjects.forEach(p=>{ p.edit_locked = false; });
+      renderEligTbody(); updateBulkLockSummary();
+      showToast('تم إلغاء قفل التعديل عن كل الفرق');
+    });
+  });
 
   document.getElementById('eligSearch').addEventListener('input', e=>{ eligFilter.q=e.target.value; renderEligTbody(); });
   document.getElementById('eligTrackFilter').addEventListener('change', e=>{ eligFilter.track=e.target.value; renderEligTbody(); });
@@ -2925,6 +2956,16 @@ function renderEligibility(){
   document.getElementById('exportEligBtn').addEventListener('click', exportEligibleCSV);
 }
 
+function updateBulkLockSummary(){
+  const el = document.getElementById('bulkLockSummary');
+  if(!el) return;
+  const total = eligibleProjects.length;
+  const locked = eligibleProjects.filter(p=>p.edit_locked).length;
+  if(total===0){ el.textContent = 'لا توجد فرق مؤهّلة بعد'; return; }
+  if(locked===0) el.textContent = `كل الفرق (${total}) قابلة للتعديل حاليًا`;
+  else if(locked===total) el.textContent = `كل الفرق (${total}) مقفلة التعديل حاليًا`;
+  else el.textContent = `${locked} من ${total} فريقًا مقفل التعديل حاليًا`;
+}
 function renderEligTbody(){
   const tb = document.getElementById('eligTbody');
   const rows = filteredEligible();
@@ -2965,9 +3006,9 @@ function renderEligTbody(){
   tb.querySelectorAll('[data-togglelock]').forEach(b=>b.addEventListener('click', async ()=>{
     const p = eligibleProjects.find(x=>x.project_id===b.dataset.togglelock);
     const prev = p.edit_locked;
-    p.edit_locked = !p.edit_locked; renderEligTbody();
+    p.edit_locked = !p.edit_locked; renderEligTbody(); updateBulkLockSummary();
     const { error } = await sb.from('eligible_projects').update({ edit_locked: p.edit_locked }).eq('project_id', p.project_id);
-    if(error){ p.edit_locked = prev; renderEligTbody(); showToast('تعذّر التحديث: '+error.message); return; }
+    if(error){ p.edit_locked = prev; renderEligTbody(); updateBulkLockSummary(); showToast('تعذّر التحديث: '+error.message); return; }
     showToast(p.edit_locked?'تم قفل التعديل — الفريق يقدر يدخل ويشوف بياناته، بدون تعديلها':'تم إلغاء قفل التعديل');
   }));
   tb.querySelectorAll('[data-delelig]').forEach(b=>b.addEventListener('click',()=>{
