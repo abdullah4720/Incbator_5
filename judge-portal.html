@@ -983,31 +983,62 @@ async function loadProjectLists(){
 async function fetchQualifyingFormIds(formIds, questions){
   if(!formIds.length) return new Set();
   const ipKey = findFieldKeyByLabelJD(questions, ['حماية للملكية الفكرية', 'شراكة مع جهات حكومية']);
-  const fieldKeys = ipKey ? ['f2_1', ipKey] : ['f2_1'];
+  // نحتاج أيضًا إجابات بقية المتطلبات الخمسة (بخلاف السجل التجاري) لتحديد
+  // "المرشّح للتأهل" — نفس منطق لوحة التحكم بالضبط لضمان تطابق الأعداد
+  const otherFieldKeys = ['f3_2','f5_1','f6_1','f7_1'];
+  const fieldKeys = [...new Set(['f2_1', ...(ipKey?[ipKey]:[]), ...otherFieldKeys])];
+  const otherFileKeys = ['f2_8','f6_2'];
   const CHUNK_SIZE = 40;
   const chunks = [];
   for(let i=0; i<formIds.length; i+=CHUNK_SIZE) chunks.push(formIds.slice(i, i+CHUNK_SIZE));
 
   const answerResults = await Promise.all(chunks.map(c=>sb.from('form_answers').select('form_id, field_key, value_text').in('field_key', fieldKeys).in('form_id', c)));
-  const reqResults = await Promise.all(chunks.map(c=>sb.from('requirement_status').select('form_id, status').eq('requirement', 'commercial_registration').in('form_id', c)));
+  const reqResults = await Promise.all(chunks.map(c=>sb.from('requirement_status').select('form_id, requirement, status').in('form_id', c)));
+  const memberResults = await Promise.all(chunks.map(c=>sb.from('team_members').select('form_id').in('form_id', c)));
+  const fileResults = await Promise.all(chunks.map(c=>sb.from('form_files').select('form_id, field_key').in('field_key', otherFileKeys).in('form_id', c).is('deleted_at', null)));
   answerResults.forEach(r=>{ if(r.error) console.error('[بوابة المحكّم] تعذّر جلب حالة الاستيفاء:', r.error.message, r.error); });
-  reqResults.forEach(r=>{ if(r.error) console.error('[بوابة المحكّم] تعذّر جلب مراجعة السجل التجاري اليدوية:', r.error.message, r.error); });
+  reqResults.forEach(r=>{ if(r.error) console.error('[بوابة المحكّم] تعذّر جلب مراجعة المتطلبات اليدوية:', r.error.message, r.error); });
   const data = answerResults.flatMap(r=>r.data||[]);
   const reqStatus = reqResults.flatMap(r=>r.data||[]);
+  const members = memberResults.flatMap(r=>r.data||[]);
+  const files = fileResults.flatMap(r=>r.data||[]);
 
   const byForm = {};
   (data||[]).forEach(a=>{ (byForm[a.form_id] = byForm[a.form_id]||{})[a.field_key] = a.value_text; });
-  // مراجعة المدقق اليدوية على "السجل التجاري" لها الأولوية على الإجابة الخام —
-  // نفس منطق لوحة التحكم بالضبط، لضمان تطابق الأعداد بين الصفحتين
-  const humanCommercialByForm = {};
-  (reqStatus||[]).forEach(r=>{ humanCommercialByForm[r.form_id] = r.status; });
+  const memberCountByForm = {};
+  (members||[]).forEach(m=>{ memberCountByForm[m.form_id] = (memberCountByForm[m.form_id]||0)+1; });
+  const filesByForm = {};
+  (files||[]).forEach(f=>{ (filesByForm[f.form_id] = filesByForm[f.form_id]||[]).push(f.field_key); });
+  // مراجعة المدقق اليدوية — لها الأولوية على الاستيفاء التلقائي المحسوب من
+  // الإجابات الخام، لكل متطلب على حدة (نفس منطق لوحة التحكم بالضبط)
+  const humanStatusByForm = {};
+  (reqStatus||[]).forEach(r=>{ (humanStatusByForm[r.form_id] = humanStatusByForm[r.form_id]||{})[r.requirement] = r.status; });
+
+  const otherReqKeys = ['camp_attendance','team_size','prototype','pitch_deck','market_validation'];
+  const suggestOther = (key, av, memberCount, formFiles)=>{
+    if(key==='camp_attendance') return av['f3_2']==='نعم' ? 'ok' : (av['f3_2']==='لا' ? 'no' : null);
+    if(key==='team_size') return memberCount ? (memberCount>=2 ? 'ok' : 'no') : null;
+    if(key==='prototype'){ const s=av['f5_1']; return s ? (['poc','prototype','mvp','market'].includes(s)?'ok':'no') : null; }
+    if(key==='pitch_deck'){ const s=av['f6_1']; const hasFile=formFiles.includes('f6_2'); if(!s) return null; return (s==='غير مكتمل'||s==='لم يبدأ'||!hasFile) ? 'no' : 'ok'; }
+    if(key==='market_validation'){ const s=av['f7_1']; if(s==='تحقق مكتمل') return 'ok'; if(s==='تحقق جزئي'||s==='تحقق جارٍ') return 'mid'; if(s==='لم يبدأ التحقق') return 'no'; return null; }
+    return null;
+  };
+
   const qualifying = new Set();
   formIds.forEach(id=>{
     const av = byForm[id] || {};
-    const humanStatus = humanCommercialByForm[id];
-    const hasCommercial = humanStatus ? humanStatus==='ok' : av['f2_1']==='نعم';
+    const humanReqs = humanStatusByForm[id] || {};
+    const hasCommercial = humanReqs['commercial_registration'] ? humanReqs['commercial_registration']==='ok' : av['f2_1']==='نعم';
     const hasIp = ipKey && av[ipKey]==='نعم';
-    if(hasCommercial || hasIp) qualifying.add(id);
+    if(hasCommercial || hasIp){ qualifying.add(id); return; }
+    // مرشّح للتأهل: حقّق بقية المتطلبات الخمسة كاملة رغم عدم وجود سجل/بديل
+    const memberCount = memberCountByForm[id] || 0;
+    const formFiles = filesByForm[id] || [];
+    const candidateWithoutReg = otherReqKeys.every(k=>{
+      const effective = humanReqs[k] ? humanReqs[k] : suggestOther(k, av, memberCount, formFiles);
+      return effective === 'ok';
+    });
+    if(candidateWithoutReg) qualifying.add(id);
   });
   return qualifying;
 }

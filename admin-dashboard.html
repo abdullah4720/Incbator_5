@@ -437,6 +437,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
   <div class="view" id="view-shortlist"></div>
   <div class="view" id="view-duplicates"></div>
   <div class="view" id="view-qualifying"></div>
+  <div class="view" id="view-candidates"></div>
   <div class="view" id="view-nonqualifying"></div>
   <div class="view" id="view-review"></div>
   <div class="view" id="view-judging"></div>
@@ -473,6 +474,7 @@ const LUCIDE_ICONS = {
   "megaphone": `<path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" /> <path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14" /> <path d="M8 6v8" />`,
   "bar-chart-3": `<path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" />`,
   "lock": `<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /> <path d="M7 11V7a5 5 0 0 1 10 0v4" />`,
+  "check-check": `<path d="M18 6 7 17l-5-5" /> <path d="m22 10-7.5 7.5L13 16" />`,
   "lock-open": `<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /> <path d="M7 11V7a5 5 0 0 1 9.9-1" />`,
   "check": `<path d="M20 6 9 17l-5-5" />`,
   "save": `<path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /> <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" /> <path d="M7 3v4a1 1 0 0 0 1 1h7" />`,
@@ -828,6 +830,7 @@ const TABS = [
   {id:"shortlist", l:"الترشيح المبدئي", adminOnly:false},
   {id:"duplicates", l:"تكرار الملفات", adminOnly:false},
   {id:"qualifying", l:"المشاريع المستوفية", adminOnly:false},
+  {id:"candidates", l:"المشاريع المرشحة للتأهل", adminOnly:false},
   {id:"nonqualifying", l:"المشاريع غير المستوفية", adminOnly:false},
   {id:"review", l:"مراجعة الطلبات", adminOnly:false},
   {id:"judging", l:"التحكيم", adminOnly:true},
@@ -845,7 +848,7 @@ function visibleTabs(){
    يُصنَّف بقوائم منسدلة قصيرة بدل شريط طويل يحتاج تمريرًا أفقيًا */
 const TAB_GROUPS = [
   { primary: true, tabs: ['dashboard','review','judging'] },
-  { id:'verify', label:'التحقق والفرز', tabs: ['shortlist','duplicates','qualifying','nonqualifying'] },
+  { id:'verify', label:'التحقق والفرز', tabs: ['shortlist','duplicates','qualifying','candidates','nonqualifying'] },
   { id:'reports', label:'التقارير', tabs: ['report','analytics'] },
   { id:'admin', label:'الإدارة', tabs: ['builder','eligibility','users','announcements','settings'] },
 ];
@@ -4134,12 +4137,10 @@ function classifyDocumentation(av, files, formId){
    هذه هي مرشِّحات التحكيم فعليًا، لا كل الطلبات المُرسَلة بلا تمييز. تُستخدم
    من تبويب "اللجان والتعيين" لتحديد المشاريع المتاحة للإسناد. */
 async function getQualifyingSubmittedRows(){
-  const submittedRows = joinedReviewRows().filter(r=>r.status==='submitted');
-  await loadShortlistAutoData(submittedRows.map(r=>r.form_id));
-  return submittedRows.filter(r=>{
-    const data = shortlistAutoData[r.form_id] || { av:{}, files:[] };
-    return classifyDocumentation(data.av, data.files, r.form_id) !== 'none';
-  });
+  const classified = await computeQualificationClassification();
+  // مؤهَّل للتحكيم = مستوفٍ رسميًا (أي تصنيف غير "none")، أو "مرشّح للتأهل"
+  // (حقّق باقي المتطلبات الخمسة كاملة، وينقصه فقط السجل التجاري/بديله)
+  return classified.filter(r=>r.docStatus!=='none' || r.candidateWithoutReg);
 }
 
 /* فحص موضوعي: هل قائد الفريق فعليًا صاحب قرار بالمنشأة المسجَّلة (مالك/شريك/
@@ -4151,18 +4152,16 @@ function checkRegistrationLinkage(av){
   return role === 'عضو في فريق المشروع' ? 'weak' : 'strong';
 }
 
-async function renderQualificationTab(showQualifying){
-  const elId = showQualifying ? 'view-qualifying' : 'view-nonqualifying';
-  const el = document.getElementById(elId);
-  el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
-
+/* منطق تصنيف الاستيفاء المشترك — يُستخدم من تبويبات: المستوفية، المرشحة
+   للتأهل، وغير المستوفية معًا، لضمان تطابق تام بالأرقام بين الثلاثة */
+async function computeQualificationClassification(){
   await loadReviewList(); // جلب طازج لحالات المراجعة البشرية أولًا — قبل أي استخدام لـjoinedReviewRows
   await loadFormSettings(); // جلب طازج لحالة نشر الاستيفاء للمشاركين
   const submittedRows = joinedReviewRows().filter(r=>r.status==='submitted');
   await loadShortlistAutoData(submittedRows.map(r=>r.form_id)); // جلب طازج دائمًا — يعكس أي تعديل حديث بالإجابات
 
   const otherReqKeys = REQUIREMENTS.filter(r=>r.key!=='commercial_registration').map(r=>r.key);
-  const classified = submittedRows.map(r=>{
+  return submittedRows.map(r=>{
     const data = shortlistAutoData[r.form_id] || { av:{}, members:[], files:[] };
     const docStatus = classifyDocumentation(data.av, data.files, r.form_id);
     let candidateWithoutReg = false;
@@ -4177,17 +4176,25 @@ async function renderQualificationTab(showQualifying){
     }
     return { ...r, docStatus, linkage: checkRegistrationLinkage(data.av), candidateWithoutReg };
   });
+}
+
+async function renderQualificationTab(showQualifying){
+  const elId = showQualifying ? 'view-qualifying' : 'view-nonqualifying';
+  const el = document.getElementById(elId);
+  el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+
+  const classified = await computeQualificationClassification();
 
   const rows = showQualifying
     ? classified.filter(r=>r.docStatus==='plus' || r.docStatus==='commercial_only' || r.docStatus==='ip_only')
-    : classified.filter(r=>r.docStatus==='none');
+    : classified.filter(r=>r.docStatus==='none' && !r.candidateWithoutReg); // نستبعد المرشحين للتأهل — لهم تبويبهم المستقل
 
   const plusCount = classified.filter(r=>r.docStatus==='plus').length;
   const commercialOnlyCount = classified.filter(r=>r.docStatus==='commercial_only').length;
   const ipOnlyCount = classified.filter(r=>r.docStatus==='ip_only').length;
-  const noneCount = classified.filter(r=>r.docStatus==='none').length;
+  const candidateCount = classified.filter(r=>r.candidateWithoutReg).length;
+  const noneCount = classified.filter(r=>r.docStatus==='none' && !r.candidateWithoutReg).length; // غير مستوفٍ فعليًا (باستثناء المرشحين)
   const weakLinkageCount = rows.filter(r=>r.linkage==='weak').length;
-  const candidateCount = rows.filter(r=>r.candidateWithoutReg).length;
 
   el.innerHTML = `
     <div class="section-title-row">
@@ -4205,30 +4212,30 @@ async function renderQualificationTab(showQualifying){
     </div>
 
     <div class="grid kpi-row" style="margin-bottom:18px">
-      <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('sparkles',{size:18})}</div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">${icon('check-check',{size:18})}</div>
         <div class="kval mono">${plusCount}</div><div class="klabel">مستوفٍ ++ (سجل تجاري وشراكة/ملكية فكرية معًا)</div></div>
       <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">${icon('check',{size:18})}</div>
         <div class="kval mono">${commercialOnlyCount}</div><div class="klabel">مستوفٍ (سجل تجاري فقط)</div></div>
       <div class="card kpi-card"><div class="kicon" style="background:var(--amber-100);color:var(--amber)">${icon('triangle-alert',{size:18})}</div>
         <div class="kval mono">${ipOnlyCount}</div><div class="klabel">مستوفٍ — عدم وجود سجل تجاري (شراكة/ملكية فكرية فقط)</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('sparkles',{size:18})}</div>
+        <div class="kval mono">${candidateCount}</div><div class="klabel">مرشّح للتأهل — بدون سجل (حقق باقي المتطلبات كاملة)</div></div>
       <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">${icon('x',{size:18})}</div>
-        <div class="kval mono">${noneCount}</div><div class="klabel">غير مستوفٍ (لا على الاثنين)</div></div>
+        <div class="kval mono">${noneCount}</div><div class="klabel">غير مستوفٍ (نواقص متعددة)</div></div>
       ${showQualifying ? `<div class="card kpi-card"><div class="kicon" style="background:var(--purple-100);color:var(--purple)">${icon('users',{size:18})}</div>
         <div class="kval mono">${weakLinkageCount}</div><div class="klabel">قائد الفريق "عضو" فقط بالمنشأة — يحتاج تحقق ارتباط</div></div>` : ''}
-      ${!showQualifying ? `<div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('sparkles',{size:18})}</div>
-        <div class="kval mono">${candidateCount}</div><div class="klabel">مرشّح للتأهل - بدون سجل (حقق باقي المتطلبات كاملة)</div></div>` : ''}
     </div>
 
     ${showQualifying ? `<div class="req-banner" style="margin-bottom:16px">
       <b>ملاحظة:</b>&nbsp;وسم "يحتاج تحقق ارتباط" يظهر لو صفة قائد الفريق بالمنشأة المسجَّلة هي "عضو في فريق المشروع" فقط (لا مالك، لا شريك، لا مدير، لا مفوَّض) — مؤشر موضوعي إن السجل قد يكون لمنشأة غير مرتبطة فعليًا بالفريق، يستدعي تحقق يدوي من ارتباطه الفعلي بمجال ووصف المشروع.
     </div>` : `<div class="req-banner" style="margin-bottom:16px">
-      <b>ملاحظة:</b>&nbsp;وسم "مرشّح للتأهل - بدون سجل" يظهر للمشروع اللي حقق باقي المتطلبات الخمسة كاملة (حضور المعسكر، عدد الأعضاء، النموذج الأولي، العرض الاستثماري، التحقق من السوق) ولم ينقصه سوى السجل التجاري أو بديله — يستحق أولوية بالمتابعة مقارنة بمشاريع ناقصة بجوانب متعددة.
+      <b>ملاحظة:</b>&nbsp;هذه القائمة تستثني المشاريع "المرشحة للتأهل" (حقّقت باقي المتطلبات الخمسة كاملة، وينقصها فقط السجل التجاري أو بديله) — لها تبويب مستقل بقائمة "التحقق والفرز". القائمة هنا تعرض فقط المشاريع الناقصة بجوانب متعددة.
     </div>`}
 
     ${rows.length===0 ? `<div class="empty-hint">لا توجد طلبات ضمن هذا التصنيف حاليًا</div>` : `
     <div class="card">
       <div class="table-wrap"><table>
-        <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th>${showQualifying?'<th>التصنيف</th><th>ارتباط السجل بالقائد</th>':'<th>ملاحظة</th>'}<th></th></tr></thead>
+        <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th>${showQualifying?'<th>التصنيف</th><th>ارتباط السجل بالقائد</th>':''}<th></th></tr></thead>
         <tbody>
           ${rows.map(r=>{
             const statusInfo = {
@@ -4244,8 +4251,7 @@ async function renderQualificationTab(showQualifying){
               <span class="badge ${statusInfo[1]}">${statusInfo[0]}</span>
               ${r.docStatus==='ip_only' ? `<span class="badge no" style="margin-inline-start:4px">عدم وجود سجل تجاري</span>` : ''}
             </td>
-            <td>${r.linkage==='weak' ? `<span class="badge no">${icon('triangle-alert',{size:10})} يحتاج تحقق ارتباط</span>` : r.linkage==='strong' ? `<span class="badge ok">مرتبط مباشرة</span>` : '—'}</td>`
-            :`<td>${r.candidateWithoutReg ? `<span class="badge ok">${icon('sparkles',{size:10})} مرشّح للتأهل - بدون سجل</span>` : '—'}</td>`}
+            <td>${r.linkage==='weak' ? `<span class="badge no">${icon('triangle-alert',{size:10})} يحتاج تحقق ارتباط</span>` : r.linkage==='strong' ? `<span class="badge ok">مرتبط مباشرة</span>` : '—'}</td>` : ''}
             <td><button class="btn btn-ghost btn-sm" data-openreview="${r.project_id}">فتح</button></td>
           </tr>`;}).join('')}
         </tbody>
@@ -4268,6 +4274,76 @@ async function renderQualificationTab(showQualifying){
     };
     if(publish){ openConfirm('نشر حالة الاستيفاء يعني كل مشارك يقدر يشوف "مستوفٍ" أو "غير مستوفٍ" فورًا بصفحته الخاصة. متابعة؟', doToggle); }
     else { doToggle(); }
+  });
+  el.querySelectorAll('[data-openreview]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      activeTab = 'review';
+      renderTabs();
+      openReviewDetail(b.dataset.openreview);
+    });
+  });
+}
+
+/* تبويب مستقل: المشاريع "المرشحة للتأهل" — حقّقت باقي المتطلبات الخمسة
+   كاملة (حضور المعسكر، عدد الأعضاء، النموذج الأولي، العرض الاستثماري،
+   التحقق من السوق)، وينقصها فقط السجل التجاري أو بديله (ملكية فكرية/شراكة) */
+async function renderCandidatesTab(){
+  const el = document.getElementById('view-candidates');
+  el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+
+  const classified = await computeQualificationClassification();
+  const rows = classified.filter(r=>r.candidateWithoutReg);
+
+  const plusCount = classified.filter(r=>r.docStatus==='plus').length;
+  const commercialOnlyCount = classified.filter(r=>r.docStatus==='commercial_only').length;
+  const ipOnlyCount = classified.filter(r=>r.docStatus==='ip_only').length;
+  const candidateCount = rows.length;
+  const noneCount = classified.filter(r=>r.docStatus==='none' && !r.candidateWithoutReg).length;
+
+  el.innerHTML = `
+    <div class="section-title-row">
+      <div><h2>المشاريع المرشحة للتأهل</h2>
+      <p>مشاريع حقّقت باقي المتطلبات الخمسة كاملة (حضور المعسكر، عدد الأعضاء، النموذج الأولي، العرض الاستثماري، التحقق من السوق)، وينقصها فقط السجل التجاري أو بديله — تستحق أولوية متابعة مقارنة بمشاريع ناقصة بجوانب متعددة.</p></div>
+      <button class="btn btn-ghost" id="refreshCandidatesBtn">تحديث</button>
+    </div>
+
+    <div class="grid kpi-row" style="margin-bottom:18px">
+      <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">${icon('check-check',{size:18})}</div>
+        <div class="kval mono">${plusCount}</div><div class="klabel">مستوفٍ ++ (سجل تجاري وشراكة/ملكية فكرية معًا)</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">${icon('check',{size:18})}</div>
+        <div class="kval mono">${commercialOnlyCount}</div><div class="klabel">مستوفٍ (سجل تجاري فقط)</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--amber-100);color:var(--amber)">${icon('triangle-alert',{size:18})}</div>
+        <div class="kval mono">${ipOnlyCount}</div><div class="klabel">مستوفٍ — عدم وجود سجل تجاري (شراكة/ملكية فكرية فقط)</div></div>
+      <div class="card kpi-card" style="border-color:var(--teal-600)"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('sparkles',{size:18})}</div>
+        <div class="kval mono">${candidateCount}</div><div class="klabel">مرشّح للتأهل — بدون سجل (حقق باقي المتطلبات كاملة)</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">${icon('x',{size:18})}</div>
+        <div class="kval mono">${noneCount}</div><div class="klabel">غير مستوفٍ (نواقص متعددة)</div></div>
+    </div>
+
+    <div class="req-banner" style="margin-bottom:16px">
+      <b>ملاحظة:</b>&nbsp;هذه المشاريع غير مصنَّفة "مستوفية" رسميًا (ما فيها سجل تجاري أو ملكية فكرية/شراكة بعد) — لكنها الأقرب للتأهل بين كل غير المستوفية، لأنها أكملت كل شيء آخر. راجعها أولًا لو تفكر بمنح مهلة استكمال إضافية.
+    </div>
+
+    ${rows.length===0 ? `<div class="empty-hint">لا توجد مشاريع مرشحة للتأهل حاليًا</div>` : `
+    <div class="card">
+      <div class="table-wrap"><table>
+        <thead><tr><th>رقم المشروع</th><th>اسم المشروع</th><th>المسار</th><th></th></tr></thead>
+        <tbody>
+          ${rows.map(r=>`<tr>
+            <td class="mono">${escHtml(r.project_id)}</td>
+            <td>${escHtml(r.project_name)}</td>
+            <td>${escHtml(r.track)}</td>
+            <td><button class="btn btn-ghost btn-sm" data-openreview="${r.project_id}">فتح</button></td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`}
+  `;
+
+  document.getElementById('refreshCandidatesBtn').addEventListener('click', async ()=>{
+    shortlistAutoData = null;
+    await renderCandidatesTab();
+    showToast('تم التحديث');
   });
   el.querySelectorAll('[data-openreview]').forEach(b=>{
     b.addEventListener('click', ()=>{
@@ -5599,6 +5675,7 @@ function renderAll(){
   if(activeTab==='shortlist') renderShortlist();
   if(activeTab==='duplicates') renderDuplicates();
   if(activeTab==='qualifying') renderQualificationTab(true);
+  if(activeTab==='candidates') renderCandidatesTab();
   if(activeTab==='nonqualifying') renderQualificationTab(false);
   if(activeTab==='announcements') renderAnnouncements();
   if(activeTab==='review') renderReview();
