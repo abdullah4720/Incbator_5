@@ -4938,7 +4938,7 @@ async function confirmDeleteAllReports(){
   document.getElementById('delRepConfirmBtn').addEventListener('click', async ()=>{
     const typed = document.getElementById('deleteReportsConfirmInput').value.trim();
     if(typed !== 'حذف'){ showToast('اكتب "حذف" بالضبط للتأكيد'); return; }
-    const { error: delErr } = await sb.from('participant_reports').delete().neq('form_id', '');
+    const { error: delErr } = await sb.from('participant_reports').delete().not('form_id', 'is', null);
     modal.classList.remove('show');
     restoreConfirmModal();
     if(delErr){ showToast('تعذّر الحذف: '+delErr.message); return; }
