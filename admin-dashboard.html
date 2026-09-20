@@ -4203,12 +4203,8 @@ async function renderQualificationTab(showQualifying){
       <button class="btn btn-ghost" id="refreshQualBtn">تحديث</button>
     </div>
 
-    <div class="card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-      <div>
-        <b>نشر حالة الاستيفاء للمشاركين</b>
-        <div style="font-size:12px;color:var(--ink-400);margin-top:2px">${formSettings.qualificationPublished ? 'منشورة — كل مشارك يشوف "مستوفٍ" أو "غير مستوفٍ" بصفحته الخاصة' : 'غير منشورة حاليًا — المشاركون ما يشوفون حالة استيفائهم بعد'}</div>
-      </div>
-      <button class="btn ${formSettings.qualificationPublished?'btn-ghost':'btn-primary'} btn-sm" id="toggleQualPublishBtn">${formSettings.qualificationPublished?'إلغاء النشر':'نشر الحالة الآن'}</button>
+    <div class="req-banner" style="margin-bottom:16px">
+      <b>ملاحظة:</b>&nbsp;حالة الاستيفاء أصبحت جزءًا من "تقرير المشارك" — تظهر للمشارك تلقائيًا فقط عند نشر تقريره من صفحة المراجعة التفصيلية لطلبه (زر "نشر للمشارك"). ما فيه مفتاح نشر منفصل هنا بعد الآن.
     </div>
 
     <div class="grid kpi-row" style="margin-bottom:18px">
@@ -4263,17 +4259,6 @@ async function renderQualificationTab(showQualifying){
     shortlistAutoData = null;
     await renderQualificationTab(showQualifying);
     showToast('تم التحديث');
-  });
-  document.getElementById('toggleQualPublishBtn').addEventListener('click', async ()=>{
-    const publish = !formSettings.qualificationPublished;
-    const doToggle = async ()=>{
-      const { error } = await sb.from('form_settings').update({ qualification_status_published: publish }).eq('id', 1);
-      if(error){ showToast('تعذّر التحديث: '+error.message); return; }
-      showToast(publish ? 'تم نشر حالة الاستيفاء' : 'تم إلغاء النشر');
-      renderQualificationTab(showQualifying);
-    };
-    if(publish){ openConfirm('نشر حالة الاستيفاء يعني كل مشارك يقدر يشوف "مستوفٍ" أو "غير مستوفٍ" فورًا بصفحته الخاصة. متابعة؟', doToggle); }
-    else { doToggle(); }
   });
   el.querySelectorAll('[data-openreview]').forEach(b=>{
     b.addEventListener('click', ()=>{
@@ -5429,7 +5414,7 @@ function renderParticipantReportContent(){
   const existing = participantReportCache[formId];
   const canEdit = currentAdmin && ['admin','reviewer'].includes(currentAdmin.role);
 
-  const disclaimer = `<div class="req-banner" style="margin-bottom:16px"><b>تنبيه:</b>&nbsp;هذا تقرير تحفيزي وتطويري موجَّه للمشارك نفسه — منفصل تمامًا عن التقييم الداخلي، ولا يحتوي أي درجة رقمية أو مقارنة بفرق أخرى. <b>لا يصل للمشارك إلا بعد ما تضغط "نشر للمشارك" صراحة.</b></div>`;
+  const disclaimer = `<div class="req-banner" style="margin-bottom:16px"><b>تنبيه:</b>&nbsp;هذا تقرير تحفيزي وتطويري موجَّه للمشارك نفسه — منفصل تمامًا عن التقييم الداخلي، ولا يحتوي أي درجة رقمية أو مقارنة بفرق أخرى. <b>لا يصل للمشارك إلا بعد ما تضغط "نشر للمشارك" صراحة</b> — وهذا النشر يشمل تلقائيًا إظهار حالة الاستيفاء (مستوفٍ/غير مستوفٍ) له أيضًا، ضمن نفس التقرير.${(reviewDetail.notes||[]).length ? ` سيتم تضمين ${reviewDetail.notes.length} ملاحظة مراجعة داخلية ضمن التوليد لإثراء دقة التقرير.` : ''}</div>`;
 
   if(!existing){
     content.innerHTML = `
@@ -5506,8 +5491,19 @@ function bindParticipantReportButtons(){
   if(unpubBtn) unpubBtn.addEventListener('click', ()=>toggleParticipantReportPublish(false));
 }
 
+function buildReviewNotesText(){
+  const notes = reviewDetail.notes || [];
+  if(!notes.length) return '';
+  let text = '\n## ملاحظات فريق المراجعة على هذا الطلب\n';
+  // من الأقدم للأحدث، ليقرأها الذكاء الاصطناعي بترتيب زمني منطقي
+  [...notes].reverse().forEach(n=>{
+    text += `- ${n.note}\n`;
+  });
+  return text;
+}
+
 async function runGenerateParticipantReport(){
-  const qaText = buildQaText();
+  const qaText = buildQaText() + buildReviewNotesText();
   if(!qaText.trim()){ showToast('لا توجد إجابات كافية لهذا الطلب بعد لتوليد تقرير'); return; }
 
   const btn = document.getElementById('genParticipantBtn');

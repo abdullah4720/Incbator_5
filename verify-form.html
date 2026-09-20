@@ -253,8 +253,9 @@ input:disabled,select:disabled{background:#F0F1F4;color:var(--ink-400);}
 .footer-note{max-width:1180px;margin:8px auto 40px;padding:0 28px;font-size:11.5px;color:var(--ink-400);text-align:center;}
 .eq-divider{width:100%;height:22px;display:block;background:var(--paper);}@media print{
   body *{visibility:hidden;}
-  #participantReportPrintable, #participantReportPrintable *{visibility:visible;}
-  #participantReportPrintable{position:absolute;top:0;right:0;left:0;width:100%;padding:20px;}
+  #participantReportPrintable, #participantReportPrintable *{visibility:visible;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  #participantReportPrintable{position:absolute;top:0;right:0;left:0;width:100%;border:none!important;border-radius:0!important;margin:0!important;}
+  @page{margin:14mm;}
 }
 </style>
 </head>
@@ -415,6 +416,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_URvlZnzYTl0CwwVxCikLvA_OeGSzhJh";
 
 let PROJECT_ID = null;
 let FORM_ID = null;
+let PROJECT_NAME = '';
 let IS_READONLY = false;         // true لو المشروع أصبح غير نشط — يمنع التعديل بدون ما يمنع الدخول للعرض
 let QUALIFICATION_BADGE = null;  // 'ok' | 'none' | null (null = غير منشورة أو غير محسوبة)
 let PUBLISHED_REPORT = null;
@@ -428,6 +430,7 @@ const REQ_LABELS_AR = {
 };
 let SB = null;       // عميل عام — يُستخدم لكل عمليات النموذج (لا حاجة لتوكن خاص)
 let showingThankYou = false;
+let showingReport = false;
 let ALLOW_EDIT_AFTER_SUBMIT = true;
 let MAX_PDF_MB = 10;
 let MAX_VIDEO_MB = 200;
@@ -674,6 +677,7 @@ function renderStepper(){
     n.addEventListener('click',()=>{
       if(showingThankYou && (!ALLOW_EDIT_AFTER_SUBMIT || IS_READONLY)) return; // التعديل بعد الإرسال أو بعد الإقفال غير متاح
       showingThankYou = false;
+      showingReport = false;
       state.current=parseInt(n.dataset.goto); renderAll(); window.scrollTo({top:0,behavior:'smooth'});
     });
   });
@@ -1276,12 +1280,6 @@ function renderThankYouScreen(){
   const card = document.getElementById('sectionCard');
   const closed = computeClosedState();
   const canEdit = ALLOW_EDIT_AFTER_SUBMIT && !closed && !IS_READONLY;
-  const rep = PUBLISHED_REPORT ? PUBLISHED_REPORT.report : null;
-  const qualBadge = QUALIFICATION_BADGE ? `
-    <div style="max-width:420px;margin:0 auto 20px;padding:16px 20px;border-radius:12px;text-align:center;background:${QUALIFICATION_BADGE==='ok'?'var(--success-100)':'var(--danger-100)'};color:${QUALIFICATION_BADGE==='ok'?'var(--success)':'var(--danger)'}">
-      <div style="font-size:16px;font-weight:800;font-family:'Cairo',sans-serif">${QUALIFICATION_BADGE==='ok'?'✓ مشروعكم مستوفٍ':'✗ مشروعكم غير مستوفٍ'}</div>
-      <div style="font-size:12.5px;margin-top:4px;opacity:.85">${QUALIFICATION_BADGE==='ok'?'استوفى مشروعكم متطلبات المستندات الأساسية (سجل تجاري أو حماية ملكية فكرية/شراكة).':'لم يستوف مشروعكم متطلبات المستندات الأساسية بعد. تواصلوا مع فريق البرنامج للاستفسار.'}</div>
-    </div>` : '';
   card.innerHTML = `
     <div style="text-align:center;padding:56px 20px 24px">
       <div style="width:64px;height:64px;border-radius:50%;background:var(--success-100);color:var(--success);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">${icon('check',{size:30,strokeWidth:2.5})}</div>
@@ -1289,56 +1287,72 @@ function renderThankYouScreen(){
       <div style="font-size:14px;color:var(--ink-600);max-width:480px;margin:0 auto 26px;line-height:1.9">
         شكرًا لإكمال نموذج التحقق من استيفاء متطلبات الانتقال إلى مرحلة التحكيم. سيقوم فريق البرنامج بمراجعة طلبكم، وسيتم التواصل معكم في حال الحاجة لأي استكمال.
       </div>
-      ${qualBadge}
+      ${PUBLISHED_REPORT ? `<div style="margin-bottom:22px"><button class="btn btn-primary" id="btnGoToReport">${icon('file-text',{size:14})} عرض تقرير مشروعكم</button></div>` : ''}
       ${canEdit
         ? `<button class="btn btn-primary" id="btnEditAfterSubmit">تعديل الإجابات</button>`
         : `<div class="req-banner" style="display:inline-flex;max-width:420px;text-align:right">${IS_READONLY?'انتهت نافذة التعديل على هذا النموذج — تقدرون تشوفون بياناتكم المُرسَلة، بدون إمكانية تعديلها الآن.':closed?'تم إغلاق النموذج، ولا يمكن تعديل الإجابات حاليًا.':'تعديل الإجابات بعد الإرسال غير متاح حاليًا — تواصل مع فريق البرنامج إذا احتجت لتحديث بياناتك.'}</div>`}
     </div>
-    ${rep ? `
-    <div style="border-top:1px solid var(--line);padding:28px 20px 8px">
-      <div style="display:flex;justify-content:space-between;align-items:center;max-width:640px;margin:0 auto 16px">
-        <div style="font-size:16px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif">تقرير تطوير مشروعكم</div>
-        <button class="btn btn-ghost btn-sm" id="printReportBtn">${icon('download',{size:12})} تنزيل PDF</button>
-      </div>
-      <div id="participantReportPrintable" style="max-width:640px;margin:0 auto;text-align:right">
-        <div class="ann-banner" style="margin-bottom:14px"><span>${escHtml(rep.qualitative_level)}</span></div>
-        <p style="font-size:13.5px;line-height:1.9;color:var(--ink-900);margin-bottom:18px">${escHtml(rep.overall_message)}</p>
-
-        ${(rep.strengths||[]).length ? `
-        <div style="margin-bottom:18px">
-          <div style="font-weight:700;color:var(--success);margin-bottom:8px;font-size:13.5px">${icon('check',{size:13})} مواطن القوة</div>
-          <ul style="margin:0;padding-inline-start:20px;font-size:13px;color:var(--ink-900);line-height:1.9">
-            ${rep.strengths.map(s=>`<li>${escHtml(s)}</li>`).join('')}
-          </ul>
-        </div>` : ''}
-
-        <div style="margin-bottom:18px">
-          <div style="font-weight:700;color:var(--navy-800);margin-bottom:8px;font-size:13.5px">ملاحظات حسب كل متطلب</div>
-          ${rep.requirement_feedback ? Object.entries(REQ_LABELS_AR).map(([k,label])=>{
-            const note = rep.requirement_feedback[k];
-            if(!note) return '';
-            return `<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)">
-              <div style="font-weight:600;font-size:12.5px;color:var(--navy-800);margin-bottom:3px">${label}</div>
-              <div style="font-size:13px;color:var(--ink-900);line-height:1.8">${escHtml(note)}</div>
-            </div>`;
-          }).join('') : ''}
-        </div>
-
-        ${(rep.next_steps||[]).length ? `
-        <div style="margin-bottom:18px">
-          <div style="font-weight:700;color:var(--navy-800);margin-bottom:8px;font-size:13.5px">${icon('rocket',{size:13})} خطوات مقترحة قادمة</div>
-          <ul style="margin:0;padding-inline-start:20px;font-size:13px;color:var(--ink-900);line-height:1.9">
-            ${rep.next_steps.map(s=>`<li>${escHtml(s)}</li>`).join('')}
-          </ul>
-        </div>` : ''}
-
-        ${rep.motivational_closing ? `<div class="ann-banner">${icon('sparkles',{size:13})}<span>${escHtml(rep.motivational_closing)}</span></div>` : ''}
-      </div>
-    </div>` : ''}
   `;
   const editBtn = document.getElementById('btnEditAfterSubmit');
   if(editBtn) editBtn.addEventListener('click', ()=>{
     showingThankYou = false;
+    renderAll();
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+  const goReportBtn = document.getElementById('btnGoToReport');
+  if(goReportBtn) goReportBtn.addEventListener('click', ()=>{
+    showingReport = true;
+    renderAll();
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+}
+
+/* ---------------- شاشة التقرير المستقلة — تدمج نتيجة الاستيفاء داخل التقرير نفسه ---------------- */
+function renderReportScreen(){
+  const card = document.getElementById('sectionCard');
+  const rep = PUBLISHED_REPORT ? PUBLISHED_REPORT.report : null;
+  if(!rep){ showingReport = false; renderThankYouScreen(); return; }
+  const qualRow = QUALIFICATION_BADGE ? `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:10px 14px;border-radius:10px;background:${QUALIFICATION_BADGE==='ok'?'rgba(255,255,255,.15)':'rgba(255,255,255,.12)'}">
+      <span style="font-size:15px">${QUALIFICATION_BADGE==='ok'?'✓':'✗'}</span>
+      <span style="font-size:12.5px;font-weight:700;color:#fff">${QUALIFICATION_BADGE==='ok'?'مشروعكم مستوفٍ لمتطلبات المستندات الأساسية':'مشروعكم لم يستوفِ متطلبات المستندات الأساسية بعد'}</span>
+    </div>` : '';
+  card.innerHTML = `
+    <div style="padding:20px 20px 8px">
+      <button class="btn btn-ghost btn-sm" id="btnBackFromReport">${icon('arrow-right',{size:13})} رجوع</button>
+    </div>
+    <div style="padding:8px 20px 28px">
+      <div style="display:flex;justify-content:flex-end;max-width:640px;margin:0 auto 12px">
+        <button class="btn btn-ghost btn-sm" id="printReportBtn">${icon('download',{size:12})} تنزيل PDF</button>
+      </div>
+      <div id="participantReportPrintable" style="max-width:640px;margin:0 auto;text-align:right;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:#fff">
+        <div style="background:linear-gradient(135deg,var(--navy-800),#1a2456);padding:22px 24px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:${qualRow?'16px':'0'}">
+            <div>
+              <div style="font-size:11px;color:var(--gold-300,#E6C570);letter-spacing:.5px;font-family:'Cairo',sans-serif">حاضنة ابتكار 5 — تقرير تطوير مشروعكم</div>
+              <div style="font-size:17px;font-weight:800;color:#fff;font-family:'Cairo',sans-serif;margin-top:4px">${escHtml(PROJECT_NAME||'')}</div>
+            </div>
+            <div id="reportLogoSlot" style="flex-shrink:0;width:64px"></div>
+          </div>
+          ${qualRow}
+        </div>
+        <div style="padding:24px">
+          <div style="display:inline-block;padding:6px 14px;border-radius:20px;background:var(--gold-100,#FBF0DA);color:var(--navy-800);font-weight:700;font-size:13px;margin-bottom:14px">${escHtml(rep.qualitative_level)}</div>
+          <p style="font-size:13.5px;line-height:1.9;color:var(--ink-900);margin-bottom:20px">${escHtml(rep.overall_message)}</p>
+
+          ${rep.motivational_closing ? `<div style="background:var(--teal-100);border-radius:10px;padding:14px 16px">
+            <div style="font-size:13px;color:var(--teal-700,#0E5C5B);line-height:1.9">${icon('sparkles',{size:13})}&nbsp;${escHtml(rep.motivational_closing)}</div>
+          </div>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+  const logoSlot = document.getElementById('reportLogoSlot');
+  const sourceLogo = document.querySelector('.brand-logo-svg');
+  if(logoSlot && sourceLogo){ const clone = sourceLogo.cloneNode(true); clone.style.width = '100%'; clone.style.height = 'auto'; clone.removeAttribute('class'); logoSlot.appendChild(clone); }
+  const backBtn = document.getElementById('btnBackFromReport');
+  if(backBtn) backBtn.addEventListener('click', ()=>{
+    showingReport = false;
     renderAll();
     window.scrollTo({top:0,behavior:'smooth'});
   });
@@ -1411,13 +1425,17 @@ function startCloseWatcher(){
 function renderAnnouncementsBanner(){
   const el = document.getElementById('announcementsBanner');
   if(!el) return;
-  if(!ACTIVE_ANNOUNCEMENTS.length){ el.innerHTML = ''; return; }
-  el.innerHTML = ACTIVE_ANNOUNCEMENTS.map(a=>`<div class="ann-banner">${icon('megaphone',{size:14})}<span>${escHtml(a.message)}</span></div>`).join('');
+  const reportBanner = PUBLISHED_REPORT ? `<div class="ann-banner" id="reportBannerLink" style="cursor:pointer;background:var(--navy-800);color:#fff">${icon('file-text',{size:14})}<span>تقرير مشروعكم جاهز — اضغطوا هنا للاطلاع عليه</span></div>` : '';
+  const regularBanners = ACTIVE_ANNOUNCEMENTS.map(a=>`<div class="ann-banner">${icon('megaphone',{size:14})}<span>${escHtml(a.message)}</span></div>`).join('');
+  el.innerHTML = reportBanner + regularBanners;
+  const bannerLink = document.getElementById('reportBannerLink');
+  if(bannerLink) bannerLink.addEventListener('click', ()=>{ showingReport = true; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
 }
 
 function renderAll(){
   renderStepper();
   renderAnnouncementsBanner();
+  if(showingReport){ renderReportScreen(); updateTopbar(); return; }
   if(showingThankYou){ renderThankYouScreen(); updateTopbar(); return; }
   renderSection();
   updateTopbar();
@@ -1442,6 +1460,7 @@ async function initApp(){
       .select('project_id, project_name, team_leader_name, team_leader_phone, team_leader_email, track, domain, is_active, edit_locked')
       .eq('project_id', PROJECT_ID).maybeSingle();
     IS_READONLY = !!proj && (proj.is_active === false || proj.edit_locked === true);
+    PROJECT_NAME = proj ? (proj.project_name || '') : '';
 
     // 2) جلب سجل النموذج أو إنشاؤه لأول مرة
     let { data: form, error: formErr } = await SB_AUTH.from('verification_forms')
@@ -1458,25 +1477,6 @@ async function initApp(){
     // 3) الإجابات المحفوظة سابقًا
     const { data: answers } = await SB_AUTH.from('form_answers').select('field_key, value_text, value_json').eq('form_id', FORM_ID);
     (answers||[]).forEach(a=>{ state.values[a.field_key] = a.value_json !== null ? a.value_json : a.value_text; });
-
-    // حساب حالة الاستيفاء (نفس منطق لوحة التحكم بالضبط) — يُعرض فقط لو
-    // الإداري نشرها صراحة، وفقط لو النموذج فعليًا "مُرسَل"
-    try{
-      const { data: settingsRow } = await SB.from('form_settings').select('qualification_status_published').eq('id', 1).maybeSingle();
-      if(settingsRow && settingsRow.qualification_status_published && form.status === 'submitted'){
-        const { data: humanOverride } = await SB_AUTH.from('requirement_status').select('status').eq('form_id', FORM_ID).eq('requirement', 'commercial_registration').maybeSingle();
-        const hasCommercial = humanOverride ? humanOverride.status === 'ok' : state.values['f2_1'] === 'نعم';
-        let ipKey = null;
-        for(const sec of sections){
-          for(const q of sec.questions){
-            if((q.label||'').includes('حماية للملكية الفكرية') || (q.label||'').includes('شراكة مع جهات حكومية')){ ipKey = q.id; break; }
-          }
-          if(ipKey) break;
-        }
-        const hasIp = ipKey ? state.values[ipKey] === 'نعم' : false;
-        QUALIFICATION_BADGE = (hasCommercial || hasIp) ? 'ok' : 'none';
-      }
-    } catch(e){ console.error('تعذّر حساب حالة الاستيفاء:', e); }
 
     // 4) أعضاء الفريق
     const { data: members } = await SB_AUTH.from('team_members').select('*').eq('form_id', FORM_ID).order('order_index');
@@ -1530,6 +1530,24 @@ async function initApp(){
     // 7.2) تقرير المشارك المنشور (إن وُجد) — تحفيزي وتطويري، منفصل عن أي تقييم داخلي
     const { data: pubReport } = await SB.from('participant_reports').select('report, published_at').eq('form_id', FORM_ID).eq('is_published', true).order('generated_at',{ascending:false}).limit(1).maybeSingle();
     PUBLISHED_REPORT = pubReport || null;
+
+    // حالة الاستيفاء أصبحت جزءًا من التقرير نفسه — تُحسَب وتُعرَض فقط لو
+    // التقرير منشور فعليًا (مفتاح واحد موحَّد بدل مفتاحين منفصلين سابقًا)
+    if(PUBLISHED_REPORT && form.status === 'submitted'){
+      try{
+        const { data: humanOverride } = await SB_AUTH.from('requirement_status').select('status').eq('form_id', FORM_ID).eq('requirement', 'commercial_registration').maybeSingle();
+        const hasCommercial = humanOverride ? humanOverride.status === 'ok' : state.values['f2_1'] === 'نعم';
+        let ipKey = null;
+        for(const sec of sections){
+          for(const q of sec.questions){
+            if((q.label||'').includes('حماية للملكية الفكرية') || (q.label||'').includes('شراكة مع جهات حكومية')){ ipKey = q.id; break; }
+          }
+          if(ipKey) break;
+        }
+        const hasIp = ipKey ? state.values[ipKey] === 'نعم' : false;
+        QUALIFICATION_BADGE = (hasCommercial || hasIp) ? 'ok' : 'none';
+      } catch(e){ console.error('تعذّر حساب حالة الاستيفاء:', e); }
+    }
 
     if(form.status === 'submitted'){
       showingThankYou = true;
