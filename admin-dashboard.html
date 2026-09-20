@@ -3846,6 +3846,7 @@ function renderReviewList(){
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary" id="batchAiBtn">${icon('sparkles',{size:13})} تقييم دفعي بالذكاء الاصطناعي</button>
         <button class="btn btn-ghost" id="batchReportsBtn">${icon('file-text',{size:13})} توليد تقارير المشاركين دفعة واحدة</button>
+        <button class="btn btn-ghost" id="deleteAllReportsBtn" style="color:var(--danger)">${icon('trash-2',{size:13})} حذف كل تقارير المشاركين</button>
         <button class="btn btn-ghost" id="exportCustomBtn">${icon('sliders',{size:13})} تصدير مخصص</button>
         <button class="btn btn-ghost" id="exportAllBtn">${icon('download',{size:13})} تصدير الكل (Excel)</button>
         <button class="btn btn-ghost" id="refreshReviewBtn">تحديث</button>
@@ -3911,6 +3912,7 @@ function renderReviewList(){
   document.getElementById('exportCustomBtn').addEventListener('click', openExportModal);
   document.getElementById('batchAiBtn').addEventListener('click', confirmBatchEvaluation);
   document.getElementById('batchReportsBtn').addEventListener('click', confirmBatchParticipantReports);
+  document.getElementById('deleteAllReportsBtn').addEventListener('click', confirmDeleteAllReports);
   document.querySelectorAll('.queue-chip').forEach(c=>{
     c.addEventListener('click', ()=>{ reviewFilter.queue = c.dataset.queue; renderReviewList(); });
   });
@@ -4906,6 +4908,43 @@ async function runBatchParticipantReports(targets){
   }
   participantReportCache = {};
   showBatchSummary(done, failed, targets, errorCounts, batchCancelled);
+}
+
+async function confirmDeleteAllReports(){
+  const { data: allReports, error } = await sb.from('participant_reports').select('form_id, is_published');
+  if(error){ showToast('تعذّر جلب التقارير: '+error.message); return; }
+  const total = (allReports||[]).length;
+  if(!total){ showToast('لا توجد أي تقارير مشاركين محفوظة حاليًا'); return; }
+  const publishedCount = (allReports||[]).filter(r=>r.is_published).length;
+
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '460px';
+  box.innerHTML = `
+    <h3 style="color:var(--danger)">${icon('trash-2',{size:15})} حذف كل تقارير المشاركين</h3>
+    <p>سيُحذف ${total} تقريرًا نهائيًا — إجراء لا يمكن التراجع عنه.</p>
+    ${publishedCount ? `<div class="req-banner" style="background:var(--danger-100);color:var(--danger)"><b>تنبيه:</b>&nbsp;${publishedCount} من هذي التقارير منشورة حاليًا للمشاركين — حذفها يعني اختفاء التقرير وحالة الاستيفاء المرتبطة به فورًا من صفحاتهم.</div>` : ''}
+    <div class="field-inline" style="margin-top:14px">
+      <label class="flabel">للتأكيد، اكتب <b>حذف</b> بالمربع أدناه</label>
+      <input type="text" id="deleteReportsConfirmInput" placeholder="حذف">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="delRepCancelBtn">إلغاء</button>
+      <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)" id="delRepConfirmBtn">حذف الكل نهائيًا</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('delRepCancelBtn').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('delRepConfirmBtn').addEventListener('click', async ()=>{
+    const typed = document.getElementById('deleteReportsConfirmInput').value.trim();
+    if(typed !== 'حذف'){ showToast('اكتب "حذف" بالضبط للتأكيد'); return; }
+    const { error: delErr } = await sb.from('participant_reports').delete().neq('form_id', '');
+    modal.classList.remove('show');
+    restoreConfirmModal();
+    if(delErr){ showToast('تعذّر الحذف: '+delErr.message); return; }
+    participantReportCache = {};
+    showToast(`تم حذف ${total} تقريرًا بنجاح`);
+  });
 }
 
 function openReviewDetail(projectId){
