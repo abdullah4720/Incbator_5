@@ -1541,8 +1541,8 @@ async function initApp(){
         const { data: humanOverride } = await SB_AUTH.from('requirement_status').select('status').eq('form_id', FORM_ID).eq('requirement', 'commercial_registration').maybeSingle();
         const hasCommercial = humanOverride ? humanOverride.status === 'ok' : state.values['f2_1'] === 'نعم';
         let ipKey = null;
-        for(const sec of sections){
-          for(const q of sec.questions){
+        for(const sec of SECTIONS){
+          for(const q of sec.fields){
             if((q.label||'').includes('حماية للملكية الفكرية') || (q.label||'').includes('شراكة مع جهات حكومية')){ ipKey = q.id; break; }
           }
           if(ipKey) break;
