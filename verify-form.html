@@ -1280,17 +1280,48 @@ function renderThankYouScreen(){
   const card = document.getElementById('sectionCard');
   const closed = computeClosedState();
   const canEdit = ALLOW_EDIT_AFTER_SUBMIT && !closed && !IS_READONLY;
+
+  const genericMessage = `<div style="font-size:14px;color:var(--ink-600);max-width:480px;margin:0 auto 26px;line-height:1.9">
+    شكرًا لإكمال نموذج التحقق من استيفاء متطلبات الانتقال إلى مرحلة التحكيم. سيقوم فريق البرنامج بمراجعة طلبكم، وسيتم التواصل معكم في حال الحاجة لأي استكمال.
+  </div>`;
+
+  const qualifiedDetails = `<div style="max-width:480px;margin:0 auto 22px;padding:20px 22px;border-radius:12px;background:var(--paper);border:1px solid var(--line);text-align:right">
+    <div style="font-size:13.5px;color:var(--ink-900);line-height:2">عزيزي المشارك في حاضنة ابتكار 5،</div>
+    <div style="font-size:13.5px;color:var(--ink-900);line-height:2;margin-top:8px">السلام عليكم ورحمة الله وبركاته،</div>
+    <div style="font-size:13.5px;color:var(--ink-900);line-height:2;margin-top:8px">يسرنا تهنئتكم بتأهُّل مشروعكم إلى المرحلة الثالثة: تقييم وتحكيم المشاريع ضمن حاضنة ابتكار في نسختها الخامسة، ونثمِّن لكم حرصكم وجهودكم خلال مراحل البرنامج.</div>
+
+    <div style="font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;font-size:13.5px;margin-top:16px;margin-bottom:10px">تفاصيل المرحلة الثالثة:</div>
+    <div style="font-size:13px;color:var(--ink-900);line-height:2.1">
+      📅 <b>التاريخ:</b> الثلاثاء 29 سبتمبر 2026م<br>
+      🕘 <b>الوقت:</b> من الساعة 9:00 صباحًا إلى الساعة 5:00 مساءً<br>
+      📍 <b>الموقع:</b> المركز الرئيسي لريادة الأعمال الرقمية – مدينة الرياض
+    </div>
+
+    <div style="font-size:13.5px;color:var(--ink-900);line-height:2;margin-top:14px">سيتم تزويدكم لاحقًا بكافة التفاصيل والتعليمات المتعلقة بآلية التحكيم، ومتطلبات المشاركة، وجدول عرض المشاريع.</div>
+    <div style="font-size:13.5px;color:var(--ink-900);line-height:2;margin-top:14px">مع خالص التقدير،<br>فريق حاضنة ابتكار</div>
+  </div>`;
+
+  const notQualifiedMessage = `<div style="font-size:13.5px;color:var(--ink-900);max-width:480px;margin:0 auto 22px;line-height:2;text-align:right;padding:20px 22px;border-radius:12px;background:var(--paper);border:1px solid var(--line)">
+    <div>عزيزي المشارك في حاضنة ابتكار في نسختها الخامسة،</div>
+    <div style="margin-top:8px">نشكر لكم مشاركتكم وحرصكم وجهودكم خلال مراحل حاضنة ابتكار في نسختها الخامسة، ونقدِّر ما تم تقديمه من أفكار ومشاريع مميزة. ونفيدكم بأن مشروعكم لم يتأهَّل إلى المرحلة الثالثة: تقييم وتحكيم المشاريع، والتي تخضع لاشتراطات ومعايير ومتطلبات محدَّدة للانتقال إليها.</div>
+    <div style="margin-top:12px">ونؤكد لكم حرصنا على دعم جميع المشاركين، ومتابعة تطوير مشاريعهم والاستفادة من مخرجات البرنامج، ونأمل أن تمثِّل هذه التجربة خطوة جديدة في مسيرتكم الابتكارية.</div>
+    <div style="margin-top:14px">مع خالص الشكر والتقدير،<br>فريق حاضنة ابتكار</div>
+  </div>`;
+
   card.innerHTML = `
     <div style="text-align:center;padding:56px 20px 24px">
       <div style="width:64px;height:64px;border-radius:50%;background:var(--success-100);color:var(--success);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">${icon('check',{size:30,strokeWidth:2.5})}</div>
       <div style="font-size:20px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:10px">تم إرسال النموذج بنجاح</div>
-      <div style="font-size:14px;color:var(--ink-600);max-width:480px;margin:0 auto 26px;line-height:1.9">
-        شكرًا لإكمال نموذج التحقق من استيفاء متطلبات الانتقال إلى مرحلة التحكيم. سيقوم فريق البرنامج بمراجعة طلبكم، وسيتم التواصل معكم في حال الحاجة لأي استكمال.
+      ${QUALIFICATION_BADGE ? '' : genericMessage}
+      ${QUALIFICATION_BADGE ? `
+      <div style="max-width:420px;margin:0 auto 22px;padding:14px 18px;border-radius:12px;background:${QUALIFICATION_BADGE==='ok'?'var(--success-100)':'var(--danger-100)'};color:${QUALIFICATION_BADGE==='ok'?'var(--success)':'var(--danger)'};text-align:center">
+        <div style="font-size:14px;font-weight:800;font-family:'Cairo',sans-serif">${QUALIFICATION_BADGE==='ok'?'مشروعكم متأهِّل للانتقال إلى مرحلة التحكيم':'مشروعكم غير متأهِّل حاليًا للانتقال إلى مرحلة التحكيم'}</div>
       </div>
+      ${QUALIFICATION_BADGE==='ok' ? qualifiedDetails : notQualifiedMessage}` : ''}
       ${PUBLISHED_REPORT ? `<div style="margin-bottom:22px"><button class="btn btn-primary" id="btnGoToReport">${icon('file-text',{size:14})} عرض تقرير مشروعكم</button></div>` : ''}
       ${canEdit
         ? `<button class="btn btn-primary" id="btnEditAfterSubmit">تعديل الإجابات</button>`
-        : `<div class="req-banner" style="display:inline-flex;max-width:420px;text-align:right">${IS_READONLY?'انتهت نافذة التعديل على هذا النموذج — تقدرون تشوفون بياناتكم المُرسَلة، بدون إمكانية تعديلها الآن.':closed?'تم إغلاق النموذج، ولا يمكن تعديل الإجابات حاليًا.':'تعديل الإجابات بعد الإرسال غير متاح حاليًا — تواصل مع فريق البرنامج إذا احتجت لتحديث بياناتك.'}</div>`}
+        : `<div class="req-banner" style="display:inline-flex;max-width:420px;text-align:right">${IS_READONLY?'انتهت نافذة التعديل على هذا النموذج — يمكنكم الاطلاع على بياناتكم المُرسَلة، دون إمكانية تعديلها حاليًا.':closed?'تم إغلاق النموذج، ولا يمكن تعديل الإجابات حاليًا.':'تعديل الإجابات بعد الإرسال غير متاح حاليًا — يُرجى التواصل مع فريق البرنامج في حال الحاجة لتحديث بياناتكم.'}</div>`}
     </div>
   `;
   const editBtn = document.getElementById('btnEditAfterSubmit');
@@ -1317,7 +1348,6 @@ function renderReportScreen(){
       <span style="font-size:17px;line-height:1.3">${QUALIFICATION_BADGE==='ok'?'✓':'✗'}</span>
       <div>
         <div style="font-size:13.5px;font-weight:800;color:#fff;font-family:'Cairo',sans-serif">${QUALIFICATION_BADGE==='ok'?'مشروعكم متأهِّل للانتقال إلى مرحلة التحكيم':'مشروعكم غير متأهِّل حاليًا للانتقال إلى مرحلة التحكيم'}</div>
-        <div style="font-size:11.5px;color:rgba(255,255,255,.85);margin-top:3px;line-height:1.7">${QUALIFICATION_BADGE==='ok'?'استوفيتم المستندات الأساسية المطلوبة (سجل تجاري، أو حماية ملكية فكرية/شراكة).':'يحتاج مشروعكم استكمال السجل التجاري أو ما يعادله (حماية ملكية فكرية/شراكة) قبل الانتقال. تواصلوا مع فريق البرنامج للاستفسار.'}</div>
       </div>
     </div>` : '';
   card.innerHTML = `
@@ -1428,7 +1458,7 @@ function startCloseWatcher(){
 function renderAnnouncementsBanner(){
   const el = document.getElementById('announcementsBanner');
   if(!el) return;
-  const reportBanner = PUBLISHED_REPORT ? `<div class="ann-banner" id="reportBannerLink" style="cursor:pointer;background:var(--navy-800);color:#fff">${icon('file-text',{size:14})}<span>تقرير مشروعكم جاهز — اضغطوا هنا للاطلاع عليه</span></div>` : '';
+  const reportBanner = PUBLISHED_REPORT ? `<div class="ann-banner" id="reportBannerLink" style="cursor:pointer;background:var(--navy-800);color:#fff">${icon('file-text',{size:14})}<span>تقرير مشروعكم جاهز للاطلاع عليه</span></div>` : '';
   const regularBanners = ACTIVE_ANNOUNCEMENTS.map(a=>`<div class="ann-banner">${icon('megaphone',{size:14})}<span>${escHtml(a.message)}</span></div>`).join('');
   el.innerHTML = reportBanner + regularBanners;
   const bannerLink = document.getElementById('reportBannerLink');
@@ -1534,9 +1564,15 @@ async function initApp(){
     const { data: pubReport } = await SB.from('participant_reports').select('report, published_at').eq('form_id', FORM_ID).eq('is_published', true).order('generated_at',{ascending:false}).limit(1).maybeSingle();
     PUBLISHED_REPORT = pubReport || null;
 
-    // حالة الاستيفاء أصبحت جزءًا من التقرير نفسه — تُحسَب وتُعرَض فقط لو
-    // التقرير منشور فعليًا (مفتاح واحد موحَّد بدل مفتاحين منفصلين سابقًا)
-    if(PUBLISHED_REPORT && form.status === 'submitted'){
+    // حالة الاستيفاء مستقلة عن التقرير — تُحسَب وتُعرَض فورًا لو نُشرت صراحة
+    // (حتى قبل جاهزية التقرير الكامل)، أو تلقائيًا لو التقرير نُشر أصلًا
+    let qualificationPublished = false;
+    try{
+      const { data: settingsRow } = await SB.from('form_settings').select('qualification_status_published').eq('id', 1).maybeSingle();
+      qualificationPublished = !!(settingsRow && settingsRow.qualification_status_published);
+    } catch(e){ console.error('تعذّر جلب إعداد نشر الاستيفاء:', e); }
+
+    if((qualificationPublished || PUBLISHED_REPORT) && form.status === 'submitted'){
       try{
         const { data: humanOverride } = await SB_AUTH.from('requirement_status').select('status').eq('form_id', FORM_ID).eq('requirement', 'commercial_registration').maybeSingle();
         const hasCommercial = humanOverride ? humanOverride.status === 'ok' : state.values['f2_1'] === 'نعم';
