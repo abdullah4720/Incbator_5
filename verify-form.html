@@ -1574,8 +1574,9 @@ async function initApp(){
 
     if((qualificationPublished || PUBLISHED_REPORT) && form.status === 'submitted'){
       try{
-        const { data: humanOverride } = await SB_AUTH.from('requirement_status').select('status').eq('form_id', FORM_ID).eq('requirement', 'commercial_registration').maybeSingle();
-        const hasCommercial = humanOverride ? humanOverride.status === 'ok' : state.values['f2_1'] === 'نعم';
+        const { data: allHumanReqs } = await SB_AUTH.from('requirement_status').select('requirement, status').eq('form_id', FORM_ID);
+        const humanReqMap = {}; (allHumanReqs||[]).forEach(r=>{ humanReqMap[r.requirement] = r.status; });
+        const hasCommercial = humanReqMap['commercial_registration'] ? humanReqMap['commercial_registration'] === 'ok' : state.values['f2_1'] === 'نعم';
         let ipKey = null;
         for(const sec of SECTIONS){
           for(const q of sec.fields){
@@ -1584,7 +1585,34 @@ async function initApp(){
           if(ipKey) break;
         }
         const hasIp = ipKey ? state.values[ipKey] === 'نعم' : false;
-        QUALIFICATION_BADGE = (hasCommercial || hasIp) ? 'ok' : 'none';
+
+        if(hasCommercial || hasIp){
+          QUALIFICATION_BADGE = 'ok';
+        } else {
+          // "مرشّح للتأهل": حقّق بقية المتطلبات الخمسة كاملة رغم عدم وجود
+          // سجل تجاري أو بديله — يُعامَل معاملة "متأهل" تمامًا بصفحة المشارك،
+          // نفس منطق لوحة التحكم بالضبط
+          const [{ data: members }, { data: files }] = await Promise.all([
+            SB_AUTH.from('team_members').select('id').eq('form_id', FORM_ID),
+            SB_AUTH.from('form_files').select('field_key').eq('form_id', FORM_ID).is('deleted_at', null),
+          ]);
+          const memberCount = (members||[]).length;
+          const fileKeys = (files||[]).map(f=>f.field_key);
+          const suggestOther = (key)=>{
+            if(key==='camp_attendance') return state.values['f3_2']==='نعم' ? 'ok' : (state.values['f3_2']==='لا' ? 'no' : null);
+            if(key==='team_size') return memberCount ? (memberCount>=2 ? 'ok' : 'no') : null;
+            if(key==='prototype'){ const s=state.values['f5_1']; return s ? (['poc','prototype','mvp','market'].includes(s)?'ok':'no') : null; }
+            if(key==='pitch_deck'){ const s=state.values['f6_1']; const hasFile=fileKeys.includes('f6_2'); if(!s) return null; return (s==='غير مكتمل'||s==='لم يبدأ'||!hasFile) ? 'no' : 'ok'; }
+            if(key==='market_validation'){ const s=state.values['f7_1']; if(s==='تحقق مكتمل') return 'ok'; if(s==='تحقق جزئي'||s==='تحقق جارٍ') return 'mid'; if(s==='لم يبدأ التحقق') return 'no'; return null; }
+            return null;
+          };
+          const otherReqKeys = ['camp_attendance','team_size','prototype','pitch_deck','market_validation'];
+          const candidateWithoutReg = otherReqKeys.every(k=>{
+            const effective = humanReqMap[k] ? humanReqMap[k] : suggestOther(k);
+            return effective === 'ok';
+          });
+          QUALIFICATION_BADGE = candidateWithoutReg ? 'ok' : 'none';
+        }
       } catch(e){ console.error('تعذّر حساب حالة الاستيفاء:', e); }
     }
 
