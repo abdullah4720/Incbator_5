@@ -729,13 +729,13 @@ function renderField(f){
     }
     case "file": {
       const files = state.files[f.id]||[];
-      body = `<div class="file-drop" data-filetrigger="${f.id}">
+      body = IS_READONLY ? '' : `<div class="file-drop" data-filetrigger="${f.id}">
         <div class="fi-title">اضغط لإرفاق ${f.multiple?'ملف أو أكثر':'ملف'} (PDF)</div>
         <div class="fi-sub">الحد الأقصى ${MAX_PDF_MB} م.ب لكل ملف${f.multiple?` — حتى ${MAX_FILES_PER_FIELD} ملفات`:''}</div>
       </div>
-      <input type="file" id="file_${f.id}" data-fileinput="${f.id}" accept="${f.accept||'.pdf'}" ${f.multiple?'multiple':''} style="display:none">
-      <div class="file-list">${files.map((fl,i)=>`
-        <div class="file-chip"><span class="fc-name">${icon('file-text',{size:13})} ${fl.name}</span><span class="fc-size">${fmtSize(fl.size)}</span><button type="button" class="fc-remove" data-removefile="${f.id}" data-idx="${i}">إزالة</button></div>
+      <input type="file" id="file_${f.id}" data-fileinput="${f.id}" accept="${f.accept||'.pdf'}" ${f.multiple?'multiple':''} style="display:none">`;
+      body += `<div class="file-list">${files.map((fl,i)=>`
+        <div class="file-chip"><span class="fc-name">${icon('file-text',{size:13})} ${fl.name}</span><span class="fc-size">${fmtSize(fl.size)}</span>${IS_READONLY?'':`<button type="button" class="fc-remove" data-removefile="${f.id}" data-idx="${i}">إزالة</button>`}</div>
       `).join('')}</div>`;
       break;
     }
@@ -747,13 +747,13 @@ function renderField(f){
         <button type="button" class="vt-btn ${mode==='link'?'active':''}" data-vmode="${f.id}" data-mode="link">رابط فيديو خاص</button>
       </div>`;
       if(mode==="upload"){
-        body += `<div class="file-drop" data-filetrigger="${f.id}">
+        body += IS_READONLY ? '' : `<div class="file-drop" data-filetrigger="${f.id}">
           <div class="fi-title">اضغط لرفع الفيديو</div>
           <div class="fi-sub">الحد الأقصى ${MAX_VIDEO_MB} م.ب ومدة ${MAX_VIDEO_MINUTES} دقائق</div>
         </div>
-        <input type="file" id="file_${f.id}" data-fileinput="${f.id}" accept="video/*" style="display:none">
-        <div class="file-list">${files.map((fl,i)=>`
-          <div class="file-chip"><span class="fc-name">${icon('video',{size:13})} ${fl.name}</span><span class="fc-size">${fmtSize(fl.size)}</span><button type="button" class="fc-remove" data-removefile="${f.id}" data-idx="${i}">إزالة</button></div>
+        <input type="file" id="file_${f.id}" data-fileinput="${f.id}" accept="video/*" style="display:none">`;
+        body += `<div class="file-list">${files.map((fl,i)=>`
+          <div class="file-chip"><span class="fc-name">${icon('video',{size:13})} ${fl.name}</span><span class="fc-size">${fmtSize(fl.size)}</span>${IS_READONLY?'':`<button type="button" class="fc-remove" data-removefile="${f.id}" data-idx="${i}">إزالة</button>`}</div>
         `).join('')}</div>`;
       } else {
         body += `<input type="url" id="in_${f.id}" data-id="${f.id}" value="${val?String(val).replace(/"/g,'&quot;'):''}" placeholder="https://‎…">`;
@@ -981,6 +981,7 @@ function bindSectionEvents(section){
   });
   document.querySelectorAll('[data-fileinput]').forEach(inp=>{
     inp.addEventListener('change', async e=>{
+      if(IS_READONLY){ showToast('🔒 هذا النموذج مقفل للتعديل حاليًا — تعذّر رفع أي ملف.'); inp.value=''; return; }
       const id=inp.dataset.fileinput;
       const list = state.files[id]||[];
       const fdef = findFieldDef(id);
@@ -1033,6 +1034,7 @@ function bindSectionEvents(section){
   });
   document.querySelectorAll('[data-removefile]').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
+      if(IS_READONLY){ showToast('🔒 هذا النموذج مقفل للتعديل حاليًا — تعذّر حذف أي ملف مرفق.'); return; }
       const id=btn.dataset.removefile, idx=parseInt(btn.dataset.idx);
       const fileEntry = state.files[id][idx];
       state.files[id].splice(idx,1);
