@@ -394,6 +394,7 @@ const LUCIDE_ICONS = {
   "calendar": `<path d="M8 2v3" /> <path d="M16 2v3" /> <rect x="3" y="3" width="18" height="18" rx="2" /> <path d="M3 9h18" />`,
   "mail": `<path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" /> <rect x="2" y="4" width="20" height="16" rx="2" />`,
   "phone": `<path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384" />`,
+  "eye": `<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /> <circle cx="12" cy="12" r="3" />`,
 };
 function icon(name, opts){
   opts = opts || {};
@@ -417,6 +418,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_URvlZnzYTl0CwwVxCikLvA_OeGSzhJh";
 let PROJECT_ID = null;
 let FORM_ID = null;
 let PROJECT_NAME = '';
+let SUBMITTED_COMPLETION_PCT = null; // النسبة المجمَّدة وقت الإرسال — تُعرَض بدل الحساب الحي بعد الإرسال
 let IS_READONLY = false;         // true لو المشروع أصبح غير نشط — يمنع التعديل بدون ما يمنع الدخول للعرض
 let QUALIFICATION_BADGE = null;  // 'ok' | 'none' | null (null = غير منشورة أو غير محسوبة)
 let PUBLISHED_REPORT = null;
@@ -919,7 +921,11 @@ function renderSection(){
   const isLast = sectionIndex === SECTIONS.length - 1;
   const card = document.getElementById('sectionCard');
   const accent = ACCENT_CYCLE[sectionIndex % ACCENT_CYCLE.length];
-  let inner = `<div class="section-head">
+  let inner = '';
+  if(FORM_STATUS === 'submitted'){
+    inner += `<div style="padding:16px 20px 0"><button class="btn btn-ghost btn-sm" id="btnBackToResult">${icon('arrow-right',{size:13})} رجوع لنتيجة الاستيفاء</button></div>`;
+  }
+  inner += `<div class="section-head">
     <div class="section-eyebrow">القسم ${sectionIndex+1} / ${SECTIONS.length}</div>
     <div class="section-title"><span class="section-num-badge" style="background:${accent}">${sectionIndex+1}</span>${section.title}</div>
     <div class="section-desc">${section.desc}</div>
@@ -1079,6 +1085,12 @@ function bindSectionEvents(section){
   if(save) save.addEventListener('click',()=>{ saveDraft(); });
   const submit=document.getElementById('btnSubmit');
   if(submit) submit.addEventListener('click',()=>{ trySubmit(); });
+  const backToResultBtn=document.getElementById('btnBackToResult');
+  if(backToResultBtn) backToResultBtn.addEventListener('click',()=>{
+    showingThankYou = true;
+    renderAll();
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
 }
 function findFieldDef(id){
   for(const s of SECTIONS){ const f=s.fields.find(x=>x.id===id); if(f) return f; }
@@ -1269,7 +1281,7 @@ function refreshLight(){
   scheduleAutosave();
 }
 function updateTopbar(){
-  const pct = overallProgress();
+  const pct = (SUBMITTED_COMPLETION_PCT !== null) ? SUBMITTED_COMPLETION_PCT : overallProgress();
   document.getElementById('progressFill').style.width = pct+'%';
   document.getElementById('progressText').textContent = pct+'% مكتمل';
   document.getElementById('pillProjectId').textContent = getVal('f1_1') || '—';
@@ -1321,11 +1333,21 @@ function renderThankYouScreen(){
       ${PUBLISHED_REPORT ? `<div style="margin-bottom:22px"><button class="btn btn-primary" id="btnGoToReport">${icon('file-text',{size:14})} عرض تقرير مشروعكم</button></div>` : ''}
       ${canEdit
         ? `<button class="btn btn-primary" id="btnEditAfterSubmit">تعديل الإجابات</button>`
-        : `<div class="req-banner" style="display:inline-flex;max-width:420px;text-align:right">${IS_READONLY?'انتهت نافذة التعديل على هذا النموذج — يمكنكم الاطلاع على بياناتكم المُرسَلة، دون إمكانية تعديلها حاليًا.':closed?'تم إغلاق النموذج، ولا يمكن تعديل الإجابات حاليًا.':'تعديل الإجابات بعد الإرسال غير متاح حاليًا — يُرجى التواصل مع فريق البرنامج في حال الحاجة لتحديث بياناتكم.'}</div>`}
+        : `<div>
+            <button class="btn btn-primary" id="btnViewSubmittedData">${icon('eye',{size:14})} عرض بياناتكم المُرسَلة</button>
+            <div class="req-banner" style="display:inline-flex;max-width:420px;text-align:right;margin-top:12px">${IS_READONLY?'انتهت نافذة التعديل على هذا النموذج — يمكنكم الاطلاع على بياناتكم المُرسَلة، دون إمكانية تعديلها حاليًا.':closed?'تم إغلاق النموذج، ولا يمكن تعديل الإجابات حاليًا — يمكنكم الاطلاع على بياناتكم المُرسَلة.':'تعديل الإجابات بعد الإرسال غير متاح حاليًا — يُرجى التواصل مع فريق البرنامج في حال الحاجة لتحديث بياناتكم.'}</div>
+          </div>`}
     </div>
   `;
   const editBtn = document.getElementById('btnEditAfterSubmit');
   if(editBtn) editBtn.addEventListener('click', ()=>{
+    SUBMITTED_COMPLETION_PCT = null; // رجوع للحساب الحي — المشارك بصدد تعديل فعلي الآن
+    showingThankYou = false;
+    renderAll();
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+  const viewDataBtn = document.getElementById('btnViewSubmittedData');
+  if(viewDataBtn) viewDataBtn.addEventListener('click', ()=>{
     showingThankYou = false;
     renderAll();
     window.scrollTo({top:0,behavior:'smooth'});
@@ -1506,6 +1528,7 @@ async function initApp(){
       form = created;
     }
     FORM_ID = form.id;
+    if(form.status === 'submitted') SUBMITTED_COMPLETION_PCT = form.completion_pct;
 
     // 3) الإجابات المحفوظة سابقًا
     const { data: answers } = await SB_AUTH.from('form_answers').select('field_key, value_text, value_json').eq('form_id', FORM_ID);
