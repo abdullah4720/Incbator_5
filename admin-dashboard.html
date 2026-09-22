@@ -1112,6 +1112,103 @@ async function renderComprehensiveReport(){
   document.getElementById('exportReportPptBtn').addEventListener('click', ()=>exportReportPpt(d));
 }
 
+async function runExportJudgingProjectsExcel(classified){
+  if(typeof XLSX === 'undefined'){ showToast('تعذّر تحميل مكتبة Excel'); return; }
+  const btn = document.getElementById('exportJudgingProjectsBtn');
+  const original = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = 'جارٍ التجهيز…';
+
+  try{
+    // المشاريع المرشَّحة للتحكيم = مستوفية رسميًا + مرشّحة للتأهل (نفس منطق
+    // "المؤهَّل للتحكيم" المستخدَم بالإسناد والقبول بصفحة المحكّم بالضبط)
+    const targets = classified.filter(r=>r.docStatus!=='none' || r.candidateWithoutReg);
+    if(!targets.length){ showToast('لا توجد مشاريع مؤهَّلة للتحكيم حاليًا'); btn.disabled=false; btn.innerHTML=original; return; }
+    const formIds = targets.map(r=>r.form_id);
+
+    const CHUNK = 40;
+    const chunks = []; for(let i=0;i<formIds.length;i+=CHUNK) chunks.push(formIds.slice(i,i+CHUNK));
+    const [membersRes, answersRes, filesRes, assignRes, committeesRes, periodsRes] = await Promise.all([
+      Promise.all(chunks.map(c=>sb.from('team_members').select('*').in('form_id', c))),
+      Promise.all(chunks.map(c=>sb.from('form_answers').select('form_id, field_key, value_text, value_json').in('form_id', c))),
+      Promise.all(chunks.map(c=>sb.from('form_files').select('form_id, field_key, file_name').in('form_id', c).is('deleted_at', null))),
+      sb.from('committee_assignments').select('form_id, committee_id, period_id'),
+      sb.from('judging_committees').select('id, name'),
+      sb.from('judging_periods').select('id, name, start_time, end_time'),
+    ]);
+    const allMembers = membersRes.flatMap(r=>r.data||[]);
+    const allAnswers = answersRes.flatMap(r=>r.data||[]);
+    const allFiles = filesRes.flatMap(r=>r.data||[]);
+    const assignByForm = {}; (assignRes.data||[]).forEach(a=>{ assignByForm[a.form_id] = a; });
+    const committeeById = {}; (committeesRes.data||[]).forEach(c=>{ committeeById[c.id] = c.name; });
+    const periodById = {}; (periodsRes.data||[]).forEach(p=>{ periodById[p.id] = p; });
+
+    const statusLabel = { plus:'مستوفٍ ++', commercial_only:'مستوفٍ (سجل تجاري)', ip_only:'مستوفٍ (ملكية فكرية/شراكة)' };
+    const wb = XLSX.utils.book_new();
+
+    // ورقة 1: نظرة عامة
+    const overviewHeader = ['رقم المشروع','اسم المشروع','المسار','المجال','قائد الفريق','جوال القائد','بريد القائد','حالة الاستيفاء','اللجنة','الفترة'];
+    const overviewRows = targets.map(r=>{
+      const a = assignByForm[r.form_id];
+      const period = a && a.period_id ? periodById[a.period_id] : null;
+      return [
+        r.project_id, r.project_name, r.track, r.domain,
+        r.team_leader_name||'', r.team_leader_phone||'', r.team_leader_email||'',
+        r.candidateWithoutReg && r.docStatus==='none' ? 'مرشّح للتأهل' : (statusLabel[r.docStatus]||r.docStatus),
+        a && a.committee_id ? (committeeById[a.committee_id]||'') : '',
+        period ? `${period.name}${period.start_time?` (${period.start_time}${period.end_time?'–'+period.end_time:''})`:''} ` : '',
+      ];
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([overviewHeader, ...overviewRows]), 'نظرة عامة');
+
+    // ورقة 2: أعضاء الفريق
+    const membersHeader = ['رقم المشروع','اسم المشروع','اسم العضو','الدور','التخصص','قائد؟','الجوال','البريد'];
+    const membersRows = [];
+    targets.forEach(r=>{
+      allMembers.filter(m=>m.form_id===r.form_id).forEach(m=>{
+        membersRows.push([r.project_id, r.project_name, m.full_name, m.role_in_project, m.specialization, m.is_leader?'نعم':'لا', m.phone, m.email]);
+      });
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([membersHeader, ...membersRows]), 'أعضاء الفريق');
+
+    // ورقة 3: كل الإجابات
+    const answersByForm = {};
+    allAnswers.forEach(a=>{ (answersByForm[a.form_id]=answersByForm[a.form_id]||{})[a.field_key] = (a.value_text!==null && a.value_text!=='') ? a.value_text : a.value_json; });
+    const answersHeader = ['رقم المشروع','اسم المشروع','القسم','السؤال','الإجابة'];
+    const answersRows = [];
+    targets.forEach(r=>{
+      const av = answersByForm[r.form_id] || {};
+      sections.forEach(sec=>{
+        sec.questions.forEach(q=>{
+          if(!(q.id in av) || av[q.id]===null || av[q.id]==='') return;
+          let val = av[q.id];
+          if(Array.isArray(val)) val = val.join('، ');
+          answersRows.push([r.project_id, r.project_name, sec.title, q.label, val]);
+        });
+      });
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([answersHeader, ...answersRows]), 'الإجابات');
+
+    // ورقة 4: الملفات المرفوعة
+    const filesHeader = ['رقم المشروع','اسم المشروع','الحقل','اسم الملف'];
+    const filesRows = [];
+    targets.forEach(r=>{
+      allFiles.filter(f=>f.form_id===r.form_id).forEach(f=>{
+        const q = sections.flatMap(s=>s.questions).find(qq=>qq.id===f.field_key);
+        filesRows.push([r.project_id, r.project_name, (q?q.label:f.field_key).replace(/^رفع\s+/,''), f.file_name]);
+      });
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([filesHeader, ...filesRows]), 'الملفات المرفوعة');
+
+    XLSX.writeFile(wb, `المشاريع_المرشحة_للتحكيم_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast(`تم تصدير ${targets.length} مشروعًا بنجاح`);
+  } catch(e){
+    console.error(e);
+    showToast('تعذّر التصدير: ' + (e.message||'خطأ غير معروف'));
+  } finally {
+    btn.disabled = false; btn.innerHTML = original;
+  }
+}
+
 function exportReportExcel(d){
   if(typeof XLSX === 'undefined'){ showToast('تعذّر تحميل مكتبة Excel'); return; }
   const wb = XLSX.utils.book_new();
@@ -4622,6 +4719,7 @@ async function renderQualificationTab(showQualifying){
       <div><h2>${showQualifying?'المشاريع المستوفية':'المشاريع غير المستوفية'}</h2>
       <p>يُعتبر المشروع مستوفيًا لو أجاب بـ"نعم" على أي من: وجود سجل تجاري، أو وجود حماية للملكية الفكرية/شراكة حكومية أو خاصة — منفصل عن درجة الذكاء الاصطناعي.</p></div>
       <button class="btn btn-ghost" id="refreshQualBtn">تحديث</button>
+      <button class="btn btn-primary" id="exportJudgingProjectsBtn">${icon('download',{size:13})} تصدير المشاريع المرشّحة للتحكيم</button>
     </div>
 
     <div class="card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
@@ -4695,6 +4793,7 @@ async function renderQualificationTab(showQualifying){
     await renderQualificationTab(showQualifying);
     showToast('تم التحديث');
   });
+  document.getElementById('exportJudgingProjectsBtn').addEventListener('click', ()=>runExportJudgingProjectsExcel(classified));
   document.getElementById('toggleQualPublishBtn').addEventListener('click', async ()=>{
     const publish = !formSettings.qualificationPublished;
     const doToggle = async ()=>{
