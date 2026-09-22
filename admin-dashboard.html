@@ -9,6 +9,7 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
 :root{
   --navy-950:#12103C; --navy-800:#1A1852; --navy-700:#242066;
@@ -445,6 +446,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
   <div class="view" id="view-eligibility"></div>
   <div class="view" id="view-users"></div>
   <div class="view" id="view-announcements"></div>
+  <div class="view" id="view-backups"></div>
   <div class="view" id="view-settings"></div>
 </div>
 </div>
@@ -838,6 +840,7 @@ const TABS = [
   {id:"eligibility", l:"الفرق المؤهّلة للدخول", adminOnly:true},
   {id:"users", l:"المستخدمون والأدوار", adminOnly:true},
   {id:"announcements", l:"التحديثات", adminOnly:true},
+  {id:"backups", l:"النسخ الاحتياطية", adminOnly:true},
   {id:"settings", l:"إعدادات النموذج", adminOnly:true},
 ];
 function visibleTabs(){
@@ -850,7 +853,7 @@ const TAB_GROUPS = [
   { primary: true, tabs: ['dashboard','review','judging'] },
   { id:'verify', label:'التحقق والفرز', tabs: ['shortlist','duplicates','qualifying','candidates','nonqualifying'] },
   { id:'reports', label:'التقارير', tabs: ['report','analytics'] },
-  { id:'admin', label:'الإدارة', tabs: ['builder','eligibility','users','announcements','settings'] },
+  { id:'admin', label:'الإدارة', tabs: ['builder','eligibility','users','announcements','backups','settings'] },
 ];
 
 function renderTabs(){
@@ -1355,7 +1358,7 @@ async function renderJudgingCommittees(){
   // مشاريع مُسندة بالتوزيع الفردي القديم (judge_assignments) لكنها بلا أي
   // إسناد للجنة — تُعتبر "معلَّقة" وتحتاج انتباه الإداري
   const orphanedFormIds = [...new Set((allJudgeAssignments||[]).map(a=>a.form_id))].filter(fid=>!committeeAssignedFormIds.has(fid));
-  const formInfoMap = {}; submittedRows.forEach(r=>{ formInfoMap[r.form_id] = { project_id: r.project_id, project_name: r.project_name }; });
+  const formInfoMap = {}; submittedRows.forEach(r=>{ formInfoMap[r.form_id] = { project_id: r.project_id, project_name: r.project_name, domain: r.domain }; });
 
   content.innerHTML = `
     ${roundSelectorHTML()}
@@ -1435,7 +1438,7 @@ async function renderJudgingCommittees(){
               return `<td class="period-cell" data-committee="${c.id}" data-period="${periodKey==='none'?'':periodKey}" style="vertical-align:top;padding:6px;border:1px dashed var(--line);min-height:60px">
                 ${forms.map(a=>{
                   const info = formInfoMap[a.form_id] || {};
-                  return `<div class="period-chip" draggable="true" data-formid="${a.form_id}" data-fromcommittee="${c.id}" data-fromperiod="${a.period_id||''}" style="background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:4px 8px;margin-bottom:4px;font-size:11.5px;cursor:grab">${escHtml(info.project_id||'')} ${escHtml(info.project_name||'')}</div>`;
+                  return `<div class="period-chip" draggable="true" data-formid="${a.form_id}" data-fromcommittee="${c.id}" data-fromperiod="${a.period_id||''}" style="background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:4px 8px;margin-bottom:4px;font-size:11.5px;cursor:grab">${escHtml(info.project_id||'')} - ${escHtml(info.domain||'—')} - ${escHtml(info.project_name||'')}</div>`;
                 }).join('') || `<div style="font-size:10.5px;color:var(--ink-400);text-align:center;padding:8px 0">—</div>`}
               </td>`;
             };
@@ -3706,6 +3709,154 @@ async function loadAnnouncements(){
   announcementsData = data || [];
 }
 
+/* ---------------- النسخ الاحتياطية ---------------- */
+// كل الجداول المطلوب تضمينها بالنسخة الاحتياطية — نستثني أعمدة كلمات المرور
+// المشفَّرة صراحة من أي جدول فيه حقل دخول مباشر (eligible_projects, judges)
+const BACKUP_TABLES = [
+  { name: 'eligible_projects', exclude: ['password_hash'] },
+  { name: 'verification_forms' },
+  { name: 'form_answers' },
+  { name: 'team_members' },
+  { name: 'form_files' },
+  { name: 'requirement_status' },
+  { name: 'review_notes' },
+  { name: 'participant_reports' },
+  { name: 'form_sections' },
+  { name: 'form_questions' },
+  { name: 'form_settings' },
+  { name: 'announcements' },
+  { name: 'admin_users' },
+  { name: 'judges', exclude: ['password_hash'] },
+  { name: 'judging_committees' },
+  { name: 'committee_members' },
+  { name: 'committee_assignments' },
+  { name: 'judging_periods' },
+  { name: 'judging_criteria' },
+  { name: 'judging_rounds' },
+  { name: 'judge_assignments' },
+  { name: 'judge_evaluations' },
+];
+
+// جلب كل صفوف جدول بالكامل عبر تصفّح مُرقَّم (Supabase تحدّد 1000 صف افتراضيًا
+// لكل طلب) — يضمن نسخة كاملة حتى للجداول الكبيرة مثل form_answers
+async function fetchAllRowsPaginated(tableName){
+  const PAGE = 1000;
+  let all = [], from = 0;
+  while(true){
+    const { data, error } = await sb.from(tableName).select('*').range(from, from+PAGE-1);
+    if(error) throw new Error(`${tableName}: ${error.message}`);
+    all = all.concat(data||[]);
+    if(!data || data.length < PAGE) break;
+    from += PAGE;
+  }
+  return all;
+}
+
+function renderBackupsTab(){
+  const el = document.getElementById('view-backups');
+  el.innerHTML = `
+    <div class="section-title-row">
+      <div><h2>النسخ الاحتياطية</h2><p>تصدير كامل لبيانات المنصة كملفات JSON منظَّمة داخل أرشيف مضغوط — للاحتفاظ بنسخة مستقلة عن قاعدة البيانات.</p></div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <b>نسخة سريعة — المعلومات فقط</b>
+          <div style="font-size:12.5px;color:var(--ink-400);margin-top:4px;max-width:520px">كل الجداول (${BACKUP_TABLES.length} جدولًا): المشاريع، الإجابات، أعضاء الفرق، المحكّمين، اللجان، التقييمات، التقارير، وغيرها — بدون تحميل محتوى الملفات المرفوعة نفسها (بس مساراتها). سريعة، وتاخذ ثوانٍ.</div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="quickBackupBtn">${icon('download',{size:13})} تنزيل النسخة السريعة</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <b>نسخة شاملة — مع الملفات المرفوعة</b>
+          <div style="font-size:12.5px;color:var(--ink-400);margin-top:4px;max-width:520px">كل شيء بالنسخة السريعة + تحميل فعلي لكل ملف مرفوع (PDF وفيديوهات) بداخل نفس الأرشيف. قد تاخذ وقتًا طويلًا حسب عدد وحجم الملفات — ينصح تشغيلها دوريًا (مثلًا كل أسبوع) لا بكل مرة.</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="fullBackupBtn">${icon('download',{size:13})} تنزيل النسخة الشاملة</button>
+      </div>
+    </div>
+
+    <div class="req-banner">تُنشأ النسخة بالكامل بمتصفحك مباشرة (ما تمر بأي خادم خارجي) — احفظها بمكان آمن (قرص محلي أو تخزين سحابي خاص بالبرنامج) بعد التنزيل.</div>
+  `;
+  document.getElementById('quickBackupBtn').addEventListener('click', ()=>runBackup(false));
+  document.getElementById('fullBackupBtn').addEventListener('click', ()=>{
+    openConfirm('النسخة الشاملة تحمّل كل الملفات المرفوعة فعليًا — قد تاخذ عدة دقائق ويكون حجم الملف النهائي كبيرًا. متابعة؟', ()=>runBackup(true));
+  });
+}
+
+async function runBackup(includeFiles){
+  const btn = document.getElementById(includeFiles ? 'fullBackupBtn' : 'quickBackupBtn');
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = 'جارٍ التجهيز…';
+
+  try{
+    const zip = new JSZip();
+    const dataFolder = zip.folder('data');
+    const timestamp = new Date().toISOString().slice(0,19).replace('T','_').replace(/:/g,'-');
+    let fileManifest = [];
+
+    // 1) كل الجداول
+    for(const t of BACKUP_TABLES){
+      btn.innerHTML = `جارٍ جلب ${t.name}…`;
+      let rows;
+      try{ rows = await fetchAllRowsPaginated(t.name); }
+      catch(e){ console.error('تعذّر جلب جدول', t.name, e); rows = []; }
+      if(t.exclude && t.exclude.length){
+        rows = rows.map(r=>{ const c={...r}; t.exclude.forEach(k=>delete c[k]); return c; });
+      }
+      dataFolder.file(`${t.name}.json`, JSON.stringify(rows, null, 2));
+      if(t.name === 'form_files') fileManifest = rows;
+    }
+
+    dataFolder.file('README.txt',
+      `نسخة احتياطية — حاضنة ابتكار 5\n` +
+      `تاريخ الإنشاء: ${new Date().toLocaleString('ar-SA')}\n` +
+      `عدد الجداول: ${BACKUP_TABLES.length}\n` +
+      (includeFiles ? `تشمل الملفات المرفوعة الفعلية (مجلد files/)\n` : `لا تشمل محتوى الملفات — راجع data/form_files.json لمعرفة مساراتها\n`)
+    );
+
+    // 2) الملفات الفعلية (النسخة الشاملة فقط)
+    if(includeFiles && fileManifest.length){
+      closeBatchProgressModal();
+      showBatchProgressModal(fileManifest.length, 'جارٍ تحميل الملفات المرفقة…');
+      const filesFolder = zip.folder('files');
+      let done=0, failed=0;
+      for(const f of fileManifest){
+        if(batchCancelled) break;
+        try{
+          const { data: blob, error } = await sb.storage.from('form-attachments').download(f.storage_path);
+          if(error) throw error;
+          filesFolder.file(f.storage_path, blob);
+        }catch(e){ failed++; console.error('تعذّر تحميل الملف', f.storage_path, e); }
+        done++;
+        updateBatchProgress(done, fileManifest.length, failed);
+      }
+      closeBatchProgressModal();
+      if(batchCancelled){ showToast('تم إلغاء النسخة الشاملة — جرّب النسخة السريعة بدلًا منها'); btn.disabled=false; btn.innerHTML=original; return; }
+    }
+
+    btn.innerHTML = 'جارٍ ضغط الأرشيف…';
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `نسخة-احتياطية-${includeFiles?'شاملة':'سريعة'}-${timestamp}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    showToast('تم إنشاء النسخة الاحتياطية وتنزيلها بنجاح');
+  } catch(e){
+    console.error(e);
+    showToast('تعذّر إنشاء النسخة الاحتياطية: ' + (e.message||'خطأ غير معروف'));
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+
 function renderAnnouncements(){
   const el = document.getElementById('view-announcements');
   const canEdit = currentAdmin && currentAdmin.role === 'admin';
@@ -4936,14 +5087,15 @@ async function confirmBatchEvaluation(){
   });
 }
 
-function showBatchProgressModal(total){
+function showBatchProgressModal(total, title){
   batchCancelled = false;
   const modal = document.getElementById('confirmModal');
   const box = modal.querySelector('.modal-box');
   box.style.maxWidth = '440px';
+  const label = title || 'جارٍ التقييم الدفعي…';
   box.innerHTML = `
-    <h3>${icon('sparkles',{size:15})} جارٍ التقييم الدفعي…</h3>
-    <p id="batchProgressText">جارٍ تقييم 0 من ${total}…</p>
+    <h3>${icon('sparkles',{size:15})} ${label}</h3>
+    <p id="batchProgressText">جارٍ معالجة 0 من ${total}…</p>
     <div style="background:var(--paper);border-radius:8px;height:10px;overflow:hidden;margin:14px 0">
       <div id="batchProgressBar" style="background:var(--teal-600);height:100%;width:0%;transition:width .3s"></div>
     </div>
@@ -4957,7 +5109,7 @@ function showBatchProgressModal(total){
 function updateBatchProgress(done, total, failed){
   const text = document.getElementById('batchProgressText');
   const bar = document.getElementById('batchProgressBar');
-  if(text) text.textContent = `جارٍ تقييم ${done} من ${total}… ${failed?`(${failed} فشل)`:''}`;
+  if(text) text.textContent = `جارٍ معالجة ${done} من ${total}… ${failed?`(${failed} فشل)`:''}`;
   if(bar) bar.style.width = Math.round(done/total*100)+'%';
 }
 function closeBatchProgressModal(){
@@ -6002,6 +6154,7 @@ function renderAll(){
   if(activeTab==='candidates') renderCandidatesTab();
   if(activeTab==='nonqualifying') renderQualificationTab(false);
   if(activeTab==='announcements') renderAnnouncements();
+  if(activeTab==='backups') renderBackupsTab();
   if(activeTab==='review') renderReview();
   if(activeTab==='judging') renderJudgingTab();
   if(activeTab==='builder') renderBuilder();
