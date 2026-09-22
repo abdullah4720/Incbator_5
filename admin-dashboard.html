@@ -446,7 +446,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
   <div class="view" id="view-eligibility"></div>
   <div class="view" id="view-users"></div>
   <div class="view" id="view-announcements"></div>
-  <div class="view" id="view-backups"></div>
+  <div class="view" id="view-datacenter"></div>
   <div class="view" id="view-settings"></div>
 </div>
 </div>
@@ -842,7 +842,7 @@ const TABS = [
   {id:"eligibility", l:"الفرق المؤهّلة للدخول", adminOnly:true},
   {id:"users", l:"المستخدمون والأدوار", adminOnly:true},
   {id:"announcements", l:"التحديثات", adminOnly:true},
-  {id:"backups", l:"النسخ الاحتياطية", adminOnly:true},
+  {id:"datacenter", l:"مركز البيانات", adminOnly:true},
   {id:"settings", l:"إعدادات النموذج", adminOnly:true},
 ];
 function visibleTabs(){
@@ -852,10 +852,10 @@ function visibleTabs(){
 /* تجميع منطقي للتبويبات — العناصر الأساسية تظهر دائمًا بالشريط، والباقي
    يُصنَّف بقوائم منسدلة قصيرة بدل شريط طويل يحتاج تمريرًا أفقيًا */
 const TAB_GROUPS = [
-  { primary: true, tabs: ['dashboard','review','judging'] },
+  { primary: true, tabs: ['dashboard','datacenter','review','judging'] },
   { id:'verify', label:'التحقق والفرز', tabs: ['shortlist','duplicates','qualifying','candidates','nonqualifying'] },
   { id:'reports', label:'التقارير', tabs: ['report','analytics'] },
-  { id:'admin', label:'الإدارة', tabs: ['builder','eligibility','users','announcements','backups','settings'] },
+  { id:'admin', label:'الإدارة', tabs: ['builder','eligibility','users','announcements','settings'] },
 ];
 
 function renderTabs(){
@@ -922,29 +922,99 @@ function donutCSS(){
   });
   return `conic-gradient(${stops.join(',')})`;
 }
-function renderDashboard(){
+async function renderDashboard(){
   const s = DASH_STATS;
   const el = document.getElementById('view-dashboard');
+  el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+
+  // نفس دالة التصنيف المستخدَمة بكل مكان بالنظام (المستوفية، المرشّحة، صفحة
+  // المحكّم، الإسناد) — يضمن تطابق الأرقام هنا مع كل تبويب آخر بالضبط
+  const classified = await computeQualificationClassification();
+  const registeredCount = eligibleProjects.length;
+  const submittedCount = classified.length;
+  // مؤهَّلة للتحكيم = مستوفية + مرشّحة للتأهل معًا (فئة واحدة، كلاهما يدخل التحكيم)
+  const judgingEligibleCount = classified.filter(r=>r.docStatus!=='none' || r.candidateWithoutReg).length;
+  const notQualifyingCount = submittedCount - judgingEligibleCount;
+
+  // التوزيع الديموغرافي — أرقام حقيقية لا نسب، من نفس صفوف المُرسَلة
+  const trackCounts = {}, domainCounts = {};
+  classified.forEach(r=>{
+    const t = r.track || 'غير محدَّد'; trackCounts[t] = (trackCounts[t]||0)+1;
+    const d = r.domain || 'غير محدَّد'; domainCounts[d] = (domainCounts[d]||0)+1;
+  });
+
+  // المدينة والسجل التجاري — من إجابات النموذج مباشرة (f1_9 المدينة، f2_1 السجل)
+  const formIds = classified.map(r=>r.form_id);
+  const CHUNK = 40;
+  const chunks = []; for(let i=0;i<formIds.length;i+=CHUNK) chunks.push(formIds.slice(i,i+CHUNK));
+  const demoAnswersRes = await Promise.all(chunks.map(c=>sb.from('form_answers').select('form_id, field_key, value_text').in('field_key', ['f1_9','f2_1']).in('form_id', c)));
+  const demoAnswers = demoAnswersRes.flatMap(r=>r.data||[]);
+  const cityCounts = {};
+  let commercialRegCount = 0;
+  demoAnswers.forEach(a=>{
+    if(a.field_key==='f1_9'){ const c = a.value_text || 'غير محدَّدة'; cityCounts[c] = (cityCounts[c]||0)+1; }
+    if(a.field_key==='f2_1' && a.value_text==='نعم') commercialRegCount++;
+  });
+  const topCities = Object.entries(cityCounts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const topTracks = Object.entries(trackCounts).sort((a,b)=>b[1]-a[1]);
+  const topDomains = Object.entries(domainCounts).sort((a,b)=>b[1]-a[1]);
+
   el.innerHTML = `
     <div class="section-title-row">
-      <div><h2>لوحة القيادة</h2><p>نظرة عامة على حالة الطلبات المستلمة فعليًا من قاعدة البيانات.</p></div>
+      <div><h2>لوحة القيادة</h2><p>المصدر الموحَّد لكل أرقام المنصة — باقي الصفحات تلتزم بنفس هذي الأرقام.</p></div>
       <button class="btn btn-ghost" id="exportBtn">تصدير Excel / CSV</button>
     </div>
 
-    <div class="grid kpi-row">
+    <div class="ac-title" style="margin-bottom:10px">قمع التسجيل</div>
+    <div class="grid kpi-row" style="margin-bottom:22px">
       <div class="card kpi-card"><div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('clipboard-list',{size:18})}</div>
-        <div class="kval mono">${s.totalTeams}</div><div class="klabel">إجمالي الطلبات المستلمة</div></div>
+        <div class="kval mono">${registeredCount}</div><div class="klabel">مسجَّلة</div>
+        <div class="kdelta flat">مُضافة بالنظام، بغضّ النظر عن الإرسال</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--gold-100);color:#7A5C1E">${icon('file-text',{size:18})}</div>
+        <div class="kval mono">${submittedCount}</div><div class="klabel">مُرسَلة</div>
+        <div class="kdelta flat">أرسلت النموذج فعليًا</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">${icon('check-check',{size:18})}</div>
+        <div class="kval mono">${judgingEligibleCount}</div><div class="klabel">مؤهَّلة للتحكيم</div>
+        <div class="kdelta flat">مستوفية + مرشّحة للتأهل معًا</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">${icon('x',{size:18})}</div>
+        <div class="kval mono">${notQualifyingCount}</div><div class="klabel">غير مستوفية</div>
+        <div class="kdelta flat">نواقص متعددة</div></div>
+    </div>
+
+    <div class="ac-title" style="margin-bottom:10px">التوزيع الديموغرافي (للمشاريع المُرسَلة)</div>
+    <div class="two-col-layout" style="margin-bottom:22px">
+      <div class="card">
+        <div style="font-weight:700;font-size:13px;margin-bottom:10px">حسب المسار</div>
+        ${topTracks.map(([k,v])=>`<div class="bar-row"><div class="br-head"><span>${escHtml(k)}</span><b>${v}</b></div>
+          <div class="br-track"><div class="br-fill" style="width:${submittedCount?Math.round(v/submittedCount*100):0}%;background:var(--teal-600)"></div></div></div>`).join('')}
+        <div style="font-weight:700;font-size:13px;margin:16px 0 10px">حسب المجال</div>
+        ${topDomains.map(([k,v])=>`<div class="bar-row"><div class="br-head"><span>${escHtml(k)}</span><b>${v}</b></div>
+          <div class="br-track"><div class="br-fill" style="width:${submittedCount?Math.round(v/submittedCount*100):0}%;background:var(--purple)"></div></div></div>`).join('')}
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-weight:700;font-size:13px">أعلى المدن مشاركة</div>
+          <div style="font-size:12px;color:var(--ink-400)">عبر ${s.cities} مدينة</div>
+        </div>
+        ${topCities.map(([k,v])=>`<div class="bar-row"><div class="br-head"><span>${escHtml(k)}</span><b>${v}</b></div>
+          <div class="br-track"><div class="br-fill" style="width:${topCities[0]?Math.round(v/topCities[0][1]*100):0}%;background:var(--gold-500,#C99A2E)"></div></div></div>`).join('')}
+        <div style="font-weight:700;font-size:13px;margin:16px 0 10px">لديهم سجل تجاري</div>
+        <div class="bar-row"><div class="br-head"><span>من إجمالي المُرسَلة</span><b>${commercialRegCount} من ${submittedCount}</b></div>
+          <div class="br-track"><div class="br-fill" style="width:${submittedCount?Math.round(commercialRegCount/submittedCount*100):0}%;background:var(--success)"></div></div></div>
+      </div>
+    </div>
+
+    <div class="ac-title" style="margin-bottom:10px">إجمالي المشاركين</div>
+    <div class="grid kpi-row" style="margin-bottom:22px">
       <div class="card kpi-card"><div class="kicon" style="background:var(--gold-100);color:#7A5C1E">${icon('users',{size:18})}</div>
-        <div class="kval mono">${s.totalParticipants.toLocaleString('en-US')}</div><div class="klabel">إجمالي المشاركين</div>
+        <div class="kval mono">${s.totalParticipants.toLocaleString('en-US')}</div><div class="klabel">إجمالي المشاركين (أفراد)</div>
         <div class="kdelta flat">عبر ${s.cities} مدينة</div></div>
-      <div class="card kpi-card"><div class="kicon" style="background:var(--success-100);color:var(--success)">${icon('check',{size:18})}</div>
-        <div class="kval mono">${s.totalTeams ? Math.round(s.readiness.ready/s.totalTeams*100) : 0}%</div><div class="klabel">مستوفٍ للانتقال بالكامل</div></div>
-      <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">${icon('hourglass',{size:18})}</div>
-        <div class="kval mono">${s.daysLeft}</div><div class="klabel">أيام متبقية على الموعد النهائي</div>
-        <div class="kdelta down">${formSettings.deadline ? 'الموعد: '+new Date(formSettings.deadline).toLocaleDateString('ar-SA') : 'لم يُحدَّد موعد بعد'}</div></div>
       <div class="card kpi-card"><div class="kicon" style="background:var(--purple-100);color:var(--purple)">${icon('paperclip',{size:18})}</div>
         <div class="kval mono">${s.totalFiles}</div><div class="klabel">ملف مرفوع</div>
         <div class="kdelta flat">${s.totalFilesSizeMb} م.ب إجمالًا</div></div>
+      <div class="card kpi-card"><div class="kicon" style="background:var(--danger-100);color:var(--danger)">${icon('hourglass',{size:18})}</div>
+        <div class="kval mono">${s.daysLeft}</div><div class="klabel">أيام متبقية على الموعد النهائي</div>
+        <div class="kdelta down">${formSettings.deadline ? 'الموعد: '+new Date(formSettings.deadline).toLocaleDateString('ar-SA') : 'لم يُحدَّد موعد بعد'}</div></div>
     </div>
 
     <div class="two-col-layout">
@@ -1112,9 +1182,9 @@ async function renderComprehensiveReport(){
   document.getElementById('exportReportPptBtn').addEventListener('click', ()=>exportReportPpt(d));
 }
 
-async function runExportJudgingProjectsExcel(classified){
+async function runExportJudgingProjectsExcel(classified, btnId){
   if(typeof XLSX === 'undefined'){ showToast('تعذّر تحميل مكتبة Excel'); return; }
-  const btn = document.getElementById('exportJudgingProjectsBtn');
+  const btn = document.getElementById(btnId || 'exportJudgingProjectsBtn');
   const original = btn.innerHTML;
   btn.disabled = true; btn.innerHTML = 'جارٍ التجهيز…';
 
@@ -3925,13 +3995,67 @@ async function fetchAllRowsPaginated(tableName){
   return all;
 }
 
-function renderBackupsTab(){
-  const el = document.getElementById('view-backups');
+async function renderDataCenterTab(){
+  const el = document.getElementById('view-datacenter');
+  el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+
+  const [{count: registeredCount}, {count: submittedCountDb}, {count: committeeAssignedCount}, {count: evaluatedCount}] = await Promise.all([
+    sb.from('eligible_projects').select('*', {count:'exact', head:true}),
+    sb.from('verification_forms').select('*', {count:'exact', head:true}).eq('status','submitted'),
+    sb.from('committee_assignments').select('form_id', {count:'exact', head:true}),
+    sb.from('judge_evaluations').select('*', {count:'exact', head:true}).eq('is_submitted', true),
+  ]);
+  const classified = await computeQualificationClassification();
+  // مؤهَّلة للتحكيم = مستوفية + مرشّحة للتأهل معًا (فئة واحدة، نفس منطق لوحة القيادة بالضبط)
+  const judgingEligibleCount = classified.filter(r=>r.docStatus!=='none' || r.candidateWithoutReg).length;
+
   el.innerHTML = `
     <div class="section-title-row">
-      <div><h2>النسخ الاحتياطية</h2><p>تصدير كامل لبيانات المنصة كملفات JSON منظَّمة داخل أرشيف مضغوط — للاحتفاظ بنسخة مستقلة عن قاعدة البيانات.</p></div>
+      <div><h2>مركز البيانات</h2><p>كل بيانات وتصديرات المنصة بمكان واحد — للحصول على أي معلومة بسرعة بدل التنقّل بين التبويبات.</p></div>
     </div>
 
+    <div class="grid kpi-row" style="margin-bottom:22px">
+      <div class="card kpi-card"><div class="kval mono">${registeredCount||0}</div><div class="klabel">مسجَّلة</div></div>
+      <div class="card kpi-card"><div class="kval mono">${submittedCountDb||0}</div><div class="klabel">مُرسَلة</div></div>
+      <div class="card kpi-card"><div class="kval mono">${judgingEligibleCount}</div><div class="klabel">مؤهَّلة للتحكيم</div></div>
+      <div class="card kpi-card"><div class="kval mono">${committeeAssignedCount||0}</div><div class="klabel">مُسنَدة للجان</div></div>
+      <div class="card kpi-card"><div class="kval mono">${evaluatedCount||0}</div><div class="klabel">تقييمات مُرسَلة</div></div>
+    </div>
+
+    <div class="ac-title" style="margin-bottom:10px">📋 بيانات المشاركين</div>
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <b>المشاريع المرشّحة للتحكيم</b>
+          <div style="font-size:12.5px;color:var(--ink-400);margin-top:4px;max-width:520px">ملف Excel بأربع أوراق: نظرة عامة، أعضاء الفريق، كل الإجابات، والملفات المرفوعة — للمشاريع المستوفية والمرشّحة للتأهل بس.</div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="dcExportJudgingProjectsBtn">${icon('download',{size:13})} تصدير Excel</button>
+      </div>
+    </div>
+
+    <div class="ac-title" style="margin-bottom:10px">⚖️ بيانات التحكيم</div>
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <b>النتائج والمراكز</b>
+          <div style="font-size:12.5px;color:var(--ink-400);margin-top:4px">درجات كل مشروع، الترتيب النهائي، وتفاصيل كل معيار — لأي جولة تحكيم.</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="dcGotoRankingBtn">الذهاب لتصدير النتائج ←</button>
+      </div>
+    </div>
+
+    <div class="ac-title" style="margin-bottom:10px">📊 تقارير شاملة</div>
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+        <div>
+          <b>التقرير الشامل للمنصة</b>
+          <div style="font-size:12.5px;color:var(--ink-400);margin-top:4px">إحصاءات عامة، نسب الاستيفاء لكل متطلب، توزيع المسارات، وأعلى المشاريع تقييمًا.</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="dcGotoReportBtn">الذهاب للتقرير الشامل ←</button>
+      </div>
+    </div>
+
+    <div class="ac-title" style="margin-bottom:10px">💾 نسخ احتياطية</div>
     <div class="card" style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
         <div>
@@ -3952,8 +4076,11 @@ function renderBackupsTab(){
       </div>
     </div>
 
-    <div class="req-banner">تُنشأ النسخة بالكامل بمتصفحك مباشرة (ما تمر بأي خادم خارجي) — احفظها بمكان آمن (قرص محلي أو تخزين سحابي خاص بالبرنامج) بعد التنزيل.</div>
+    <div class="req-banner">كل التصديرات تُنشأ بمتصفحك مباشرة (ما تمر بأي خادم خارجي) — احفظها بمكان آمن بعد التنزيل.</div>
   `;
+  document.getElementById('dcExportJudgingProjectsBtn').addEventListener('click', ()=>runExportJudgingProjectsExcel(classified, 'dcExportJudgingProjectsBtn'));
+  document.getElementById('dcGotoRankingBtn').addEventListener('click', ()=>{ activeTab='judging'; judgingSubtab='ranking'; renderTabs(); renderAll(); });
+  document.getElementById('dcGotoReportBtn').addEventListener('click', ()=>{ activeTab='report'; renderTabs(); renderAll(); });
   document.getElementById('quickBackupBtn').addEventListener('click', ()=>runBackup(false));
   document.getElementById('fullBackupBtn').addEventListener('click', ()=>{
     openConfirm('النسخة الشاملة تحمّل كل الملفات المرفوعة فعليًا — قد تاخذ عدة دقائق ويكون حجم الملف النهائي كبيرًا. متابعة؟', ()=>runBackup(true));
@@ -6348,7 +6475,7 @@ function renderAll(){
   if(activeTab==='candidates') renderCandidatesTab();
   if(activeTab==='nonqualifying') renderQualificationTab(false);
   if(activeTab==='announcements') renderAnnouncements();
-  if(activeTab==='backups') renderBackupsTab();
+  if(activeTab==='datacenter') renderDataCenterTab();
   if(activeTab==='review') renderReview();
   if(activeTab==='judging') renderJudgingTab();
   if(activeTab==='builder') renderBuilder();
