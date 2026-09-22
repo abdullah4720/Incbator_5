@@ -1217,6 +1217,7 @@ let CURRENT_ADMIN_ROUND_ID = null;
 const JUDGING_SUBTABS = [
   {id:'rounds', l:'الجولات'},
   {id:'criteria', l:'المعايير'},
+  {id:'periods', l:'الفترات'},
   {id:'committees', l:'اللجان والتعيين'},
   {id:'judges', l:'المحكّمون'},
   {id:'results', l:'النتائج المجمّعة'},
@@ -1240,6 +1241,7 @@ async function renderJudgingTab(){
   });
   if(judgingSubtab==='summary') renderJudgingSummary();
   else if(judgingSubtab==='rounds') renderJudgingRounds();
+  else if(judgingSubtab==='periods') renderJudgingPeriods();
   else if(judgingSubtab==='committees') renderJudgingCommittees();
   else if(judgingSubtab==='criteria') renderJudgingCriteria();
   else if(judgingSubtab==='judges') renderJudgingJudges();
@@ -1987,6 +1989,83 @@ function openRoundModal(existing){
     if(error){ showToast('تعذّر الحفظ: '+error.message); return; }
     modal.classList.remove('show'); restoreConfirmModal();
     showToast('تم الحفظ'); JUDGING_ROUNDS_CACHE=[]; renderJudgingRounds();
+  });
+}
+
+/* ---------------- فترات التحكيم ---------------- */
+let JUDGING_PERIODS_CACHE = [];
+async function renderJudgingPeriods(){
+  const content = document.getElementById('judgingSubContent');
+  await ensureRoundsLoaded();
+  if(!CURRENT_ADMIN_ROUND_ID){ content.innerHTML = roundSelectorHTML(); return; }
+
+  const { data, error } = await sb.from('judging_periods').select('*').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index');
+  if(error){ content.innerHTML = `<div class="empty-hint">تعذّر التحميل: ${error.message}</div>`; return; }
+  JUDGING_PERIODS_CACHE = data || [];
+
+  content.innerHTML = `
+    ${roundSelectorHTML()}
+    <div class="req-banner" style="margin-bottom:16px">قسّم يوم التحكيم لفترات (عدد حر) — كل الفترات تشترك بنفس اللجان، والفرق بينها أي المشاريع تُحكَّم بأي فترة. هذا يساعد بتوزيع حضور المشاركين بدل ما يجون كلهم دفعة وحدة.</div>
+    <div style="text-align:left;margin-bottom:14px"><button class="btn btn-primary btn-sm" id="addPeriodBtn">+ إضافة فترة</button></div>
+    ${JUDGING_PERIODS_CACHE.length===0 ? `<div class="empty-hint">لا توجد فترات بعد لهذه الجولة</div>` : `
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>الفترة</th><th>من</th><th>إلى</th><th></th></tr></thead>
+      <tbody>${JUDGING_PERIODS_CACHE.map(p=>`<tr>
+        <td><b>${escHtml(p.name)}</b></td>
+        <td class="mono">${p.start_time?escHtml(p.start_time):'—'}</td>
+        <td class="mono">${p.end_time?escHtml(p.end_time):'—'}</td>
+        <td>
+          <button class="icon-btn" data-editperiod="${p.id}" title="تعديل">${icon('pencil',{size:13})}</button>
+          <button class="icon-btn danger" data-delperiod="${p.id}" title="حذف">${icon('trash-2',{size:13})}</button>
+        </td>
+      </tr>`).join('')}</tbody>
+    </table></div></div>`}
+  `;
+  document.getElementById('addPeriodBtn').addEventListener('click', ()=>openPeriodModal(null));
+  content.querySelectorAll('[data-editperiod]').forEach(b=>{
+    b.addEventListener('click', ()=>openPeriodModal(JUDGING_PERIODS_CACHE.find(p=>p.id==b.dataset.editperiod)));
+  });
+  content.querySelectorAll('[data-delperiod]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      openConfirm('حذف الفترة يزيل ربطها بأي مشاريع مُسنَدة لها (تبقى مُسنَدة للجنتها، بس بدون فترة محدَّدة). متابعة؟', async ()=>{
+        const { error } = await sb.from('judging_periods').delete().eq('id', b.dataset.delperiod);
+        if(error){ showToast('تعذّر الحذف: '+error.message); return; }
+        showToast('تم الحذف'); renderJudgingPeriods();
+      });
+    });
+  });
+}
+
+function openPeriodModal(existing){
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '420px';
+  box.innerHTML = `
+    <h3>${existing?'تعديل فترة':'إضافة فترة جديدة'}</h3>
+    <div class="field-inline"><label class="flabel">اسم الفترة</label><input type="text" id="periodName" value="${existing?escHtml(existing.name):''}" placeholder="مثال: الفترة الأولى"></div>
+    <div style="display:flex;gap:10px">
+      <div class="field-inline" style="flex:1"><label class="flabel">من</label><input type="text" id="periodStart" value="${existing?escHtml(existing.start_time||''):''}" placeholder="09:00"></div>
+      <div class="field-inline" style="flex:1"><label class="flabel">إلى</label><input type="text" id="periodEnd" value="${existing?escHtml(existing.end_time||''):''}" placeholder="10:00"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="periodCancel">إلغاء</button>
+      <button class="btn btn-primary" id="periodSave">حفظ</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('periodCancel').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('periodSave').addEventListener('click', async ()=>{
+    const name = document.getElementById('periodName').value.trim();
+    const start = document.getElementById('periodStart').value.trim();
+    const end = document.getElementById('periodEnd').value.trim();
+    if(!name){ showToast('اكتب اسم الفترة'); return; }
+    const payload = { name, start_time: start||null, end_time: end||null };
+    let error;
+    if(existing){ ({ error } = await sb.from('judging_periods').update(payload).eq('id', existing.id)); }
+    else { ({ error } = await sb.from('judging_periods').insert({ ...payload, round_id: CURRENT_ADMIN_ROUND_ID, order_index: JUDGING_PERIODS_CACHE.length }).select().single()); }
+    if(error){ showToast('تعذّر الحفظ: '+error.message); return; }
+    modal.classList.remove('show'); restoreConfirmModal();
+    showToast('تم الحفظ'); renderJudgingPeriods();
   });
 }
 
