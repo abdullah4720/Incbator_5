@@ -1113,7 +1113,7 @@ function fileCardHTML(f, questions){
   else if(['mp4','mov','avi','webm'].includes(ext)){ iconName='video'; bg='rgba(107,79,160,.14)'; fg='var(--purple-500)'; }
   else if(['jpg','jpeg','png','gif','webp'].includes(ext)){ iconName='image'; bg='var(--gold-100)'; fg='var(--gold-500)'; }
   const q = (questions||[]).find(qq=>qq.field_key===f.field_key);
-  const displayLabel = q ? q.label : f.file_name;
+  const displayLabel = (q ? q.label : f.file_name || '').replace(/^رفع\s+/, '');
   return `<a href="#" class="jd-file-card" data-viewfile="${escHtmlJD(f.storage_path)}">
     <div class="jd-file-icon" style="background:${bg};color:${fg}">${icon(iconName,{size:18})}</div>
     <div class="jd-file-name">${escHtmlJD(displayLabel)}</div>

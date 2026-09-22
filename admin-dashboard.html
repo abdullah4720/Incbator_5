@@ -1470,7 +1470,7 @@ async function renderJudgingCommittees(){
     });
   });
   content.querySelectorAll('[data-editmembers]').forEach(b=>{
-    b.addEventListener('click', ()=>openCommitteeMembersModal(JUDGING_COMMITTEES_CACHE.find(c=>c.id==b.dataset.editmembers), membersByCommittee[b.dataset.editmembers]||[], allJudges||[]));
+    b.addEventListener('click', ()=>openCommitteeMembersModal(JUDGING_COMMITTEES_CACHE.find(c=>c.id==b.dataset.editmembers), membersByCommittee[b.dataset.editmembers]||[], allJudges||[], membersByCommittee, JUDGING_COMMITTEES_CACHE));
   });
   content.querySelectorAll('[data-assignprojects]').forEach(b=>{
     b.addEventListener('click', ()=>openAssignProjectsToCommitteeModal(JUDGING_COMMITTEES_CACHE.find(c=>c.id==b.dataset.assignprojects), projectsByCommittee[b.dataset.assignprojects]||[], submittedRows, membersByCommittee[b.dataset.assignprojects]||[]));
@@ -1478,7 +1478,7 @@ async function renderJudgingCommittees(){
   content.querySelectorAll('[data-swapjudge]').forEach(b=>{
     b.addEventListener('click', ()=>{
       const [committeeId, oldJudgeId] = b.dataset.swapjudge.split('|');
-      openSwapJudgeModal(committeeId, oldJudgeId, allJudges||[], membersByCommittee[committeeId]||[], projectsByCommittee[committeeId]||[]);
+      openSwapJudgeModal(committeeId, oldJudgeId, allJudges||[], membersByCommittee[committeeId]||[], projectsByCommittee[committeeId]||[], membersByCommittee, JUDGING_COMMITTEES_CACHE);
     });
   });
 
@@ -1788,32 +1788,52 @@ function openAssignProjectsToCommitteeModal(committee, currentFormIds, submitted
 
 /* استبدال محكّم بآخر داخل لجنة — ينقل تكليفاته الفردية لكل مشاريع اللجنة،
    بدون حذف أي تقييم سابق أرسله المحكّم القديم فعليًا (يبقى سجلًا تاريخيًا) */
-function openSwapJudgeModal(committeeId, oldJudgeId, allJudges, currentMemberIds, projectFormIds){
+async function openSwapJudgeModal(committeeId, oldJudgeId, allJudges, currentMemberIds, projectFormIds, membersByCommittee, allCommittees){
   const modal = document.getElementById('confirmModal');
   const box = modal.querySelector('.modal-box');
   box.style.maxWidth = '400px';
-  const candidates = allJudges.filter(j=>!currentMemberIds.includes(j.id));
+  box.innerHTML = `<h3>استبدال محكّم</h3><div class="empty-hint">جارٍ التحميل…</div>`;
+  modal.classList.add('show');
+
+  // نستبعد كمان أي محكّم عضو بلجنة أخرى أصلًا — نفس قاعدة منع الازدواج
+  const busyJudgeIds = new Set();
+  Object.entries(membersByCommittee||{}).forEach(([cid, jids])=>{
+    if(String(cid) === String(committeeId)) return;
+    (jids||[]).forEach(jid=>busyJudgeIds.add(jid));
+  });
+  const candidates = allJudges.filter(j=>!currentMemberIds.includes(j.id) && !busyJudgeIds.has(j.id));
+
+  // المشاريع اللي المحكّم القديم خلّص تقييمها وأرسله فعليًا — هذي تبقى له
+  // كما هي، ولا تُنقَل للمحكّم الجديد (نحافظ على التقييمات المُرسَلة سليمة)
+  let alreadyJudgedFormIds = new Set();
+  if(projectFormIds.length){
+    const { data: submittedEvals } = await sb.from('judge_evaluations').select('form_id')
+      .eq('judge_id', oldJudgeId).eq('round_id', CURRENT_ADMIN_ROUND_ID).eq('is_submitted', true).in('form_id', projectFormIds);
+    alreadyJudgedFormIds = new Set((submittedEvals||[]).map(e=>e.form_id));
+  }
+  const transferableFormIds = projectFormIds.filter(fid=>!alreadyJudgedFormIds.has(fid));
+
   box.innerHTML = `
     <h3>استبدال محكّم</h3>
-    <p>اختر المحكّم البديل — ينتقل له تكليف كل مشاريع هذه اللجنة (${projectFormIds.length} مشروعًا) بدلًا من المحكّم الحالي.</p>
-    <select id="swapJudgeSelect" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;margin:10px 0">
+    <p>اختر المحكّم البديل — ينتقل له تكليف ${transferableFormIds.length} مشروعًا لسه ما قُيِّمت من أصل ${projectFormIds.length}.
+    ${alreadyJudgedFormIds.size ? `<br><span style="color:var(--success)">${alreadyJudgedFormIds.size} مشروعًا خلّص المحكّم الحالي تقييمها وأرسلها — تبقى له كما هي، ما تُنقَل.</span>` : ''}</p>
+    ${candidates.length ? `<select id="swapJudgeSelect" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;margin:10px 0">
       ${candidates.map(j=>`<option value="${j.id}">${escHtml(j.full_name)}</option>`).join('')}
-    </select>
+    </select>` : `<div class="empty-hint">لا يوجد محكّم متاح — الباقون كلهم أعضاء بلجان أخرى أصلًا</div>`}
     <div class="modal-actions">
       <button class="btn btn-ghost" id="swapCancel">إلغاء</button>
-      <button class="btn btn-primary" id="swapConfirm">استبدال</button>
+      <button class="btn btn-primary" id="swapConfirm" ${candidates.length?'':'disabled'}>استبدال</button>
     </div>
   `;
-  modal.classList.add('show');
   document.getElementById('swapCancel').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
   document.getElementById('swapConfirm').addEventListener('click', async ()=>{
     const newJudgeId = document.getElementById('swapJudgeSelect').value;
     if(!newJudgeId){ showToast('اختر محكّمًا'); return; }
     await sb.from('committee_members').delete().eq('committee_id', committeeId).eq('judge_id', oldJudgeId);
     await sb.from('committee_members').insert({ committee_id: committeeId, judge_id: newJudgeId });
-    if(projectFormIds.length){
-      await sb.from('judge_assignments').delete().eq('judge_id', oldJudgeId).eq('round_id', CURRENT_ADMIN_ROUND_ID).in('form_id', projectFormIds);
-      const newRows = projectFormIds.map(fid=>({ judge_id: newJudgeId, form_id: fid, round_id: CURRENT_ADMIN_ROUND_ID, assigned_by: currentAdmin.id }));
+    if(transferableFormIds.length){
+      await sb.from('judge_assignments').delete().eq('judge_id', oldJudgeId).eq('round_id', CURRENT_ADMIN_ROUND_ID).in('form_id', transferableFormIds);
+      const newRows = transferableFormIds.map(fid=>({ judge_id: newJudgeId, form_id: fid, round_id: CURRENT_ADMIN_ROUND_ID, assigned_by: currentAdmin.id }));
       await sb.from('judge_assignments').upsert(newRows, { onConflict: 'judge_id,form_id,round_id' });
     }
     modal.classList.remove('show'); restoreConfirmModal();
@@ -1869,17 +1889,29 @@ function openCommitteeModal(existing){
   });
 }
 
-function openCommitteeMembersModal(committee, currentMemberIds, allJudges){
+function openCommitteeMembersModal(committee, currentMemberIds, allJudges, membersByCommittee, allCommittees){
   const modal = document.getElementById('confirmModal');
   const box = modal.querySelector('.modal-box');
   box.style.maxWidth = '440px';
+  // خريطة: محكّم → اسم اللجنة الأخرى اللي هو عضو فيها حاليًا (إن وُجدت) —
+  // محكّم ما يقدر يكون بلجنتين بنفس الوقت، لأن كل اللجان تشتغل بكل الفترات
+  const otherCommitteeByJudge = {};
+  Object.entries(membersByCommittee||{}).forEach(([cid, jids])=>{
+    if(String(cid) === String(committee.id)) return;
+    const otherCommittee = (allCommittees||[]).find(c=>String(c.id)===String(cid));
+    (jids||[]).forEach(jid=>{ otherCommitteeByJudge[jid] = otherCommittee ? otherCommittee.name : 'لجنة أخرى'; });
+  });
   box.innerHTML = `
     <h3>أعضاء لجنة "${escHtml(committee.name)}"</h3>
+    <div class="req-banner" style="margin-bottom:10px">المحكّم اللي عضو بلجنة ثانية أصلًا يظهر معطَّلًا — لازم تشيله من لجنته الحالية أولًا قبل ما تضيفه هنا (كل اللجان تشتغل بكل الفترات، فما يقدر يكون بمكانين بنفس الوقت).</div>
     <div style="max-height:280px;overflow-y:auto;margin:12px 0">
-      ${allJudges.map(j=>`<label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px">
-        <input type="checkbox" class="committee-member-cb" value="${j.id}" ${currentMemberIds.includes(j.id)?'checked':''}>
-        ${escHtml(j.full_name)}
-      </label>`).join('')}
+      ${allJudges.map(j=>{
+        const blocked = otherCommitteeByJudge[j.id] && !currentMemberIds.includes(j.id);
+        return `<label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;${blocked?'opacity:.5':''}">
+        <input type="checkbox" class="committee-member-cb" value="${j.id}" ${currentMemberIds.includes(j.id)?'checked':''} ${blocked?'disabled':''}>
+        ${escHtml(j.full_name)}${blocked?` <span style="color:var(--danger);font-size:11px">(عضو بـ${escHtml(otherCommitteeByJudge[j.id])})</span>`:''}
+      </label>`;
+      }).join('')}
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="commMembersCancel">إلغاء</button>
@@ -1890,6 +1922,9 @@ function openCommitteeMembersModal(committee, currentMemberIds, allJudges){
   document.getElementById('commMembersCancel').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
   document.getElementById('commMembersSave').addEventListener('click', async ()=>{
     const selectedIds = Array.from(box.querySelectorAll('.committee-member-cb:checked')).map(cb=>cb.value);
+    // تحقق أخير قبل الحفظ (دفاع إضافي، مو فقط تعطيل الواجهة)
+    const conflict = selectedIds.find(jid=>otherCommitteeByJudge[jid]);
+    if(conflict){ showToast('تعذّر الحفظ: محكّم مُختار عضو بلجنة أخرى أصلًا'); return; }
     await sb.from('committee_members').delete().eq('committee_id', committee.id);
     if(selectedIds.length){
       const { error } = await sb.from('committee_members').insert(selectedIds.map(jid=>({ committee_id: committee.id, judge_id: jid })));
