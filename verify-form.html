@@ -418,6 +418,9 @@ const SUPABASE_ANON_KEY = "sb_publishable_URvlZnzYTl0CwwVxCikLvA_OeGSzhJh";
 let PROJECT_ID = null;
 let FORM_ID = null;
 let PROJECT_NAME = '';
+let ASSIGNED_COMMITTEE_NAME = null;
+let ASSIGNED_PERIOD = null; // { name, start_time, end_time }
+let JUDGING_CRITERIA_LIST = [];
 let SUBMITTED_COMPLETION_PCT = null; // النسبة المجمَّدة وقت الإرسال — تُعرَض بدل الحساب الحي بعد الإرسال
 let IS_READONLY = false;         // true لو المشروع أصبح غير نشط — يمنع التعديل بدون ما يمنع الدخول للعرض
 let QUALIFICATION_BADGE = null;  // 'ok' | 'none' | null (null = غير منشورة أو غير محسوبة)
@@ -1315,6 +1318,25 @@ function renderThankYouScreen(){
     <div style="font-size:13.5px;color:var(--ink-900);line-height:2;margin-top:14px">مع خالص التقدير،<br>فريق حاضنة ابتكار</div>
   </div>`;
 
+  // رسالة مستقلة تمامًا عن خطاب التأهل أعلاه — تظهر فقط لو تحدَّد إسناد
+  // اللجنة/الفترة فعليًا، أو لو معايير التحكيم منشورة
+  const judgingSessionDetails = (ASSIGNED_COMMITTEE_NAME || ASSIGNED_PERIOD || JUDGING_CRITERIA_LIST.length) ? `
+  <div style="max-width:480px;margin:0 auto 22px;padding:20px 22px;border-radius:12px;background:#fff;border:1px solid var(--line);text-align:right">
+    <div style="font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;font-size:14px;margin-bottom:12px">${icon('users',{size:14})} تفاصيل جلسة تحكيمكم</div>
+    ${(ASSIGNED_COMMITTEE_NAME || ASSIGNED_PERIOD) ? `<div style="font-size:13px;color:var(--ink-900);line-height:2.1;margin-bottom:${JUDGING_CRITERIA_LIST.length?'16px':'0'}">
+      👥 <b>لجنتكم:</b> ${ASSIGNED_COMMITTEE_NAME ? escHtml(ASSIGNED_COMMITTEE_NAME) : 'سيتم تحديدها لاحقًا'}<br>
+      ⏱️ <b>فترتكم المحدَّدة:</b> ${ASSIGNED_PERIOD ? `${escHtml(ASSIGNED_PERIOD.name)}${ASSIGNED_PERIOD.start_time?` (${escHtml(ASSIGNED_PERIOD.start_time)}${ASSIGNED_PERIOD.end_time?'–'+escHtml(ASSIGNED_PERIOD.end_time):''})`:''}` : 'سيتم تحديدها لاحقًا'}
+    </div>` : ''}
+    ${JUDGING_CRITERIA_LIST.length ? `
+    <div style="font-weight:700;color:var(--navy-800);font-size:12.5px;margin-bottom:8px">معايير التحكيم</div>
+    <div style="font-size:12.5px;color:var(--ink-900);line-height:1.9">
+      ${JUDGING_CRITERIA_LIST.map(c=>`<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--line)">
+        <div><b>${escHtml(c.label)}</b> <span style="color:var(--ink-400)">(الوزن: ${c.max_score})</span></div>
+        ${c.description ? `<div style="color:var(--ink-600);margin-top:2px">${escHtml(c.description)}</div>` : ''}
+      </div>`).join('')}
+    </div>` : ''}
+  </div>` : '';
+
   const notQualifiedMessage = `<div style="font-size:13.5px;color:var(--ink-900);max-width:480px;margin:0 auto 22px;line-height:2;text-align:right;padding:20px 22px;border-radius:12px;background:var(--paper);border:1px solid var(--line)">
     <div>عزيزي المشارك في حاضنة ابتكار في نسختها الخامسة،</div>
     <div style="margin-top:8px">نشكر لكم مشاركتكم وحرصكم وجهودكم خلال مراحل حاضنة ابتكار في نسختها الخامسة، ونقدِّر ما تم تقديمه من أفكار ومشاريع مميزة. ونفيدكم بأن مشروعكم لم يتأهَّل إلى المرحلة الثالثة: تقييم وتحكيم المشاريع، والتي تخضع لاشتراطات ومعايير ومتطلبات محدَّدة للانتقال إليها.</div>
@@ -1331,7 +1353,7 @@ function renderThankYouScreen(){
       <div style="max-width:420px;margin:0 auto 22px;padding:14px 18px;border-radius:12px;background:${QUALIFICATION_BADGE==='ok'?'var(--success-100)':'var(--danger-100)'};color:${QUALIFICATION_BADGE==='ok'?'var(--success)':'var(--danger)'};text-align:center">
         <div style="font-size:14px;font-weight:800;font-family:'Cairo',sans-serif">${QUALIFICATION_BADGE==='ok'?'مشروعكم متأهِّل للانتقال إلى مرحلة التحكيم':'مشروعكم غير متأهِّل حاليًا للانتقال إلى مرحلة التحكيم'}</div>
       </div>
-      ${QUALIFICATION_BADGE==='ok' ? qualifiedDetails : notQualifiedMessage}` : ''}
+      ${QUALIFICATION_BADGE==='ok' ? qualifiedDetails + judgingSessionDetails : notQualifiedMessage}` : ''}
       ${PUBLISHED_REPORT ? `<div style="margin-bottom:22px"><button class="btn btn-primary" id="btnGoToReport">${icon('file-text',{size:14})} عرض تقرير مشروعكم</button></div>` : ''}
       ${canEdit
         ? `<button class="btn btn-primary" id="btnEditAfterSubmit">تعديل الإجابات</button>`
@@ -1593,8 +1615,9 @@ async function initApp(){
     // (حتى قبل جاهزية التقرير الكامل)، أو تلقائيًا لو التقرير نُشر أصلًا
     let qualificationPublished = false;
     try{
-      const { data: settingsRow } = await SB.from('form_settings').select('qualification_status_published').eq('id', 1).maybeSingle();
+      const { data: settingsRow } = await SB.from('form_settings').select('qualification_status_published, judging_info_published').eq('id', 1).maybeSingle();
       qualificationPublished = !!(settingsRow && settingsRow.qualification_status_published);
+      var judgingInfoPublished = !!(settingsRow && settingsRow.judging_info_published);
     } catch(e){ console.error('تعذّر جلب إعداد نشر الاستيفاء:', e); }
 
     if((qualificationPublished || PUBLISHED_REPORT) && form.status === 'submitted'){
@@ -1639,6 +1662,27 @@ async function initApp(){
           QUALIFICATION_BADGE = candidateWithoutReg ? 'ok' : 'none';
         }
       } catch(e){ console.error('تعذّر حساب حالة الاستيفاء:', e); }
+
+      // لو المشروع متأهل، نجلب إسناد اللجنة/الفترة (إن وُجد) ومعايير
+      // التحكيم — تُعرَض بالخطاب الموجَّه للفرق المتأهلة
+      if(QUALIFICATION_BADGE === 'ok' && judgingInfoPublished){
+        try{
+          const { data: activeRound } = await SB.from('judging_rounds').select('id').eq('is_active', true).maybeSingle();
+          if(activeRound){
+            const { data: assignment } = await SB.from('committee_assignments').select('committee_id, period_id').eq('form_id', FORM_ID).eq('round_id', activeRound.id).maybeSingle();
+            if(assignment){
+              const [{data: committee}, {data: period}] = await Promise.all([
+                assignment.committee_id ? SB.from('judging_committees').select('name').eq('id', assignment.committee_id).maybeSingle() : Promise.resolve({data:null}),
+                assignment.period_id ? SB.from('judging_periods').select('name, start_time, end_time').eq('id', assignment.period_id).maybeSingle() : Promise.resolve({data:null}),
+              ]);
+              ASSIGNED_COMMITTEE_NAME = committee ? committee.name : null;
+              ASSIGNED_PERIOD = period || null;
+            }
+            const { data: criteria } = await SB.from('judging_criteria').select('label, description, max_score').eq('round_id', activeRound.id).eq('is_active', true).order('order_index');
+            JUDGING_CRITERIA_LIST = criteria || [];
+          }
+        } catch(e){ console.error('تعذّر جلب بيانات اللجنة/الفترة/المعايير:', e); }
+      }
     }
 
     if(form.status === 'submitted'){

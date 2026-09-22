@@ -734,6 +734,7 @@ let formSettings = {
   isOpen: true, allowEdit: true, notifyBefore48: true, notifyBefore24: true,
   maxPdfMb: 10, maxVideoMb: 200, maxVideoMinutes: 5, maxFilesPerField: 5,
   qualificationPublished: false,
+  judgingInfoPublished: false,
 };
 
 /* ---------------- تحميل جميع بيانات لوحة التحكم من Supabase ---------------- */
@@ -782,6 +783,7 @@ async function loadFormSettings(){
     maxPdfMb: data.max_pdf_mb, maxVideoMb: data.max_video_mb,
     maxVideoMinutes: data.max_video_minutes, maxFilesPerField: data.max_files_per_field,
     qualificationPublished: !!data.qualification_status_published,
+    judgingInfoPublished: !!data.judging_info_published,
   };
 }
 async function loadAllAdminData(){
@@ -1381,6 +1383,7 @@ async function renderJudgingCommittees(){
         <span style="color:var(--success);font-size:12.5px">${committeeAssignedFormIds.size ? '✓' : ''} ${committeeAssignedFormIds.size} من ${totalSubmittedProjects} مشروعًا مستوفيًا مسنَد</span>
       </div>
       <button class="btn btn-primary btn-sm" id="autoAssignProjectsBtn">${icon('sparkles',{size:13})} إسناد تلقائي</button>
+      ${committeeAssignedFormIds.size ? `<button class="btn btn-ghost btn-sm" id="resetAllAssignmentsBtn" style="color:var(--danger)">${icon('trash-2',{size:13})} إعادة تعيين الإسناد بالكامل</button>` : ''}
     </div>
 
     ${orphanedFormIds.length ? `<div class="req-banner" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
@@ -1456,6 +1459,8 @@ async function renderJudgingCommittees(){
   document.getElementById('addCommitteeBtn').addEventListener('click', ()=>openCommitteeModal(null));
   document.getElementById('autoFormCommitteesBtn').addEventListener('click', ()=>openAutoFormCommitteesModal(allJudges||[]));
   document.getElementById('autoAssignProjectsBtn').addEventListener('click', ()=>openAutoAssignBasisModal(JUDGING_COMMITTEES_CACHE, membersByCommittee, submittedRows, projectsByCommittee, committeeAssignedFormIds));
+  const resetAllBtn = document.getElementById('resetAllAssignmentsBtn');
+  if(resetAllBtn) resetAllBtn.addEventListener('click', ()=>confirmResetAllAssignments(committeeAssignedFormIds.size));
   document.getElementById('openProgressBtn').addEventListener('click', ()=>{ judgingSubtab='progress'; renderJudgingTab(); });
   const orphanBtn = document.getElementById('viewOrphanedBtn');
   if(orphanBtn) orphanBtn.addEventListener('click', ()=>openOrphanedAssignmentsModal(orphanedFormIds, submittedRows));
@@ -1537,6 +1542,42 @@ async function runAutoAssignPeriods(committeeAssignments){
       if(error) failCount++; else okCount++;
     }
     showToast(`تم توزيع ${okCount} مشروعًا على الفترات${failCount?` (فشل ${failCount})`:''}`);
+    renderJudgingCommittees();
+  });
+}
+
+/* إعادة تعيين كاملة: تحذف كل إسناد اللجان والفترات لهذي الجولة، ويرجع كل
+   مشروع "غير مُسند" تمامًا — تمهيدًا لتشغيل الإسناد التلقائي من الصفر */
+async function confirmResetAllAssignments(assignedCount){
+  const { data: submittedEvals } = await sb.from('judge_evaluations').select('form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID).eq('is_submitted', true);
+  const submittedCount = (submittedEvals||[]).length;
+
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '460px';
+  box.innerHTML = `
+    <h3 style="color:var(--danger)">${icon('trash-2',{size:15})} إعادة تعيين الإسناد بالكامل</h3>
+    <p>سيُحذف إسناد ${assignedCount} مشروعًا (اللجنة والفترة معًا) لهذي الجولة — يرجع كل مشروع "غير مُسند" تمامًا، وكأن الإسناد ما صار من الأصل. إجراء لا يمكن التراجع عنه.</p>
+    ${submittedCount ? `<div class="req-banner" style="background:var(--danger-100);color:var(--danger)"><b>تنبيه:</b>&nbsp;فيه ${submittedCount} تقييمًا مُرسَلًا فعليًا لهذي الجولة — التقييمات نفسها ما تُحذف وتبقى محفوظة، بس المحكّم يفقد ربطه المباشر بالمشروع لحد ما تعيد الإسناد.</div>` : ''}
+    <div class="field-inline" style="margin-top:14px">
+      <label class="flabel">للتأكيد، اكتب <b>تصفير</b> بالمربع أدناه</label>
+      <input type="text" id="resetAssignConfirmInput" placeholder="تصفير">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="resetAssignCancelBtn">إلغاء</button>
+      <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)" id="resetAssignConfirmBtn">تصفير الإسناد نهائيًا</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('resetAssignCancelBtn').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('resetAssignConfirmBtn').addEventListener('click', async ()=>{
+    const typed = document.getElementById('resetAssignConfirmInput').value.trim();
+    if(typed !== 'تصفير'){ showToast('اكتب "تصفير" بالضبط للتأكيد'); return; }
+    const { error: e1 } = await sb.from('committee_assignments').delete().eq('round_id', CURRENT_ADMIN_ROUND_ID);
+    const { error: e2 } = await sb.from('judge_assignments').delete().eq('round_id', CURRENT_ADMIN_ROUND_ID);
+    modal.classList.remove('show'); restoreConfirmModal();
+    if(e1 || e2){ showToast('تعذّر التصفير: ' + (e1?.message || e2?.message)); return; }
+    showToast('تم تصفير كل الإسناد بنجاح');
     renderJudgingCommittees();
   });
 }
@@ -4590,6 +4631,13 @@ async function renderQualificationTab(showQualifying){
       </div>
       <button class="btn ${formSettings.qualificationPublished?'btn-ghost':'btn-primary'} btn-sm" id="toggleQualPublishBtn">${formSettings.qualificationPublished?'إلغاء النشر':'نشر الحالة الآن'}</button>
     </div>
+    <div class="card" style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div>
+        <b>نشر معلومات التحكيم للمشاركين (اللجنة، الفترة، المعايير)</b>
+        <div style="font-size:12px;color:var(--ink-400);margin-top:2px">${formSettings.judgingInfoPublished ? 'منشورة — كل مشارك متأهِّل يشوف اللجنة والفترة المُسنَدة له ومعايير التحكيم' : 'غير منشورة حاليًا — مستقلة تمامًا عن حالة الاستيفاء والتقرير، تحكّم متى يشوف المشاركون تفاصيل جلسة تحكيمهم'}</div>
+      </div>
+      <button class="btn ${formSettings.judgingInfoPublished?'btn-ghost':'btn-primary'} btn-sm" id="toggleJudgingInfoPublishBtn">${formSettings.judgingInfoPublished?'إلغاء النشر':'نشر معلومات التحكيم'}</button>
+    </div>
     <div class="req-banner" style="margin-bottom:16px">
       <b>ملاحظة:</b>&nbsp;هذا مفتاح مستقل عن "نشر التقرير" — يعطي المشارك النتيجة السريعة فورًا (متأهِّل/غير متأهِّل) دون انتظار توليد التقرير الكامل بالذكاء الاصطناعي، اللي يقدر يُضاف لاحقًا من صفحة الطلب التفصيلية (زر "نشر للمشارك") ليُثري نفس الصفحة بتفاصيل أوسع.
     </div>
@@ -4657,6 +4705,18 @@ async function renderQualificationTab(showQualifying){
       renderQualificationTab(showQualifying);
     };
     if(publish){ openConfirm('نشر حالة الاستيفاء يعني كل مشارك مُرسِل يقدر يشوف "متأهِّل" أو "غير متأهِّل" فورًا بصفحته الخاصة. متابعة؟', doToggle); }
+    else { doToggle(); }
+  });
+  document.getElementById('toggleJudgingInfoPublishBtn').addEventListener('click', async ()=>{
+    const publish = !formSettings.judgingInfoPublished;
+    const doToggle = async ()=>{
+      const { error } = await sb.from('form_settings').update({ judging_info_published: publish }).eq('id', 1);
+      if(error){ showToast('تعذّر التحديث: '+error.message); return; }
+      formSettings.judgingInfoPublished = publish;
+      showToast(publish ? 'تم نشر معلومات التحكيم' : 'تم إلغاء النشر');
+      renderQualificationTab(showQualifying);
+    };
+    if(publish){ openConfirm('نشر معلومات التحكيم يعني كل مشارك متأهِّل ومُسنَد للجنة/فترة يقدر يشوف تفاصيلها ومعايير التحكيم فورًا بصفحته الخاصة. متابعة؟', doToggle); }
     else { doToggle(); }
   });
   el.querySelectorAll('[data-openreview]').forEach(b=>{
