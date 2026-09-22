@@ -1329,16 +1329,18 @@ async function renderJudgingCommittees(){
   if(!reviewFormsRaw.length) await loadReviewList();
   if(!eligibleProjects.length) await loadEligibleProjects();
 
-  const [{data: committees}, {data: allMembers}, {data: allJudges}, {data: committeeAssignments}, {data: allJudgeAssignments}, submittedRowsResult] = await Promise.all([
+  const [{data: committees}, {data: allMembers}, {data: allJudges}, {data: committeeAssignments}, {data: allJudgeAssignments}, {data: periods}, submittedRowsResult] = await Promise.all([
     sb.from('judging_committees').select('*').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
     sb.from('committee_members').select('committee_id, judge_id'),
     sb.from('judges').select('id, full_name').eq('is_active', true).order('full_name'),
-    sb.from('committee_assignments').select('committee_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+    sb.from('committee_assignments').select('committee_id, form_id, period_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
     sb.from('judge_assignments').select('judge_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+    sb.from('judging_periods').select('*').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
     getQualifyingSubmittedRows().catch(err=>{ console.error('تعذّر جلب المشاريع المستوفية:', err); return []; }),
   ]);
   const submittedRows = submittedRowsResult || [];
   JUDGING_COMMITTEES_CACHE = committees || [];
+  JUDGING_PERIODS_CACHE = periods || [];
   const judgeMap = {}; (allJudges||[]).forEach(j=>{ judgeMap[j.id] = j.full_name; });
   const membersByCommittee = {};
   (allMembers||[]).forEach(m=>{ (membersByCommittee[m.committee_id] = membersByCommittee[m.committee_id]||[]).push(m.judge_id); });
@@ -1353,6 +1355,7 @@ async function renderJudgingCommittees(){
   // مشاريع مُسندة بالتوزيع الفردي القديم (judge_assignments) لكنها بلا أي
   // إسناد للجنة — تُعتبر "معلَّقة" وتحتاج انتباه الإداري
   const orphanedFormIds = [...new Set((allJudgeAssignments||[]).map(a=>a.form_id))].filter(fid=>!committeeAssignedFormIds.has(fid));
+  const formInfoMap = {}; submittedRows.forEach(r=>{ formInfoMap[r.form_id] = { project_id: r.project_id, project_name: r.project_name }; });
 
   content.innerHTML = `
     ${roundSelectorHTML()}
@@ -1413,6 +1416,37 @@ async function renderJudgingCommittees(){
         ${projectFormIds.length ? `<div style="font-size:12.5px;color:var(--teal-600);font-weight:600">${projectFormIds.length} مشروعًا مسنَدًا — بترتيب التحكيم</div>` : ''}
       </div>`;
     }).join('')}
+
+    <div class="ac-title" style="margin:24px 0 12px">توزيع المشاريع على الفترات</div>
+    ${JUDGING_PERIODS_CACHE.length===0 ? `<div class="empty-hint">لا توجد فترات لهذه الجولة بعد — أضِفها من تبويب "الفترات" أولًا.</div>` : `
+    <div class="req-banner" style="margin-bottom:14px">اسحب أي بطاقة مشروع لخانة ثانية عشان تغيّر لجنتها أو فترتها. "توزيع تلقائي على الفترات" يوزّع بس المشاريع اللي بعمود "بدون فترة" — ما يلمس لجانها.</div>
+    <div style="text-align:left;margin-bottom:12px"><button class="btn btn-primary btn-sm" id="autoAssignPeriodsBtn">${icon('sparkles',{size:13})} توزيع تلقائي على الفترات</button></div>
+    <div class="card" style="margin-bottom:24px;overflow-x:auto">
+      <table class="period-grid" style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th style="text-align:right;padding:8px;font-size:12px;color:var(--ink-400);white-space:nowrap">اللجنة \\ الفترة</th>
+          <th style="text-align:right;padding:8px;font-size:12px;color:var(--ink-400);min-width:160px">بدون فترة</th>
+          ${JUDGING_PERIODS_CACHE.map(p=>`<th style="text-align:right;padding:8px;font-size:12px;color:var(--navy-800);min-width:160px">${escHtml(p.name)}${p.start_time?`<div style="font-weight:400;color:var(--ink-400);font-size:10.5px">${escHtml(p.start_time)}${p.end_time?'–'+escHtml(p.end_time):''}</div>`:''}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+          ${JUDGING_COMMITTEES_CACHE.map(c=>{
+            const cellFor = (periodKey)=>{
+              const forms = (committeeAssignments||[]).filter(a=>a.committee_id===c.id && (periodKey==='none' ? !a.period_id : a.period_id==periodKey));
+              return `<td class="period-cell" data-committee="${c.id}" data-period="${periodKey==='none'?'':periodKey}" style="vertical-align:top;padding:6px;border:1px dashed var(--line);min-height:60px">
+                ${forms.map(a=>{
+                  const info = formInfoMap[a.form_id] || {};
+                  return `<div class="period-chip" draggable="true" data-formid="${a.form_id}" data-fromcommittee="${c.id}" data-fromperiod="${a.period_id||''}" style="background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:4px 8px;margin-bottom:4px;font-size:11.5px;cursor:grab">${escHtml(info.project_id||'')} ${escHtml(info.project_name||'')}</div>`;
+                }).join('') || `<div style="font-size:10.5px;color:var(--ink-400);text-align:center;padding:8px 0">—</div>`}
+              </td>`;
+            };
+            return `<tr><td style="padding:8px;font-weight:700;font-size:12.5px;vertical-align:top;white-space:nowrap">${escHtml(c.name)}</td>
+              ${cellFor('none')}
+              ${JUDGING_PERIODS_CACHE.map(p=>cellFor(p.id)).join('')}
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`}
   `;
   bindRoundSelector(renderJudgingCommittees);
 
@@ -1443,6 +1477,64 @@ async function renderJudgingCommittees(){
       const [committeeId, oldJudgeId] = b.dataset.swapjudge.split('|');
       openSwapJudgeModal(committeeId, oldJudgeId, allJudges||[], membersByCommittee[committeeId]||[], projectsByCommittee[committeeId]||[]);
     });
+  });
+
+  // سحب وإفلات شبكة الفترات — نقل مشروع بين أي خانتين (لجنة و/أو فترة)
+  let dragFormId = null, dragFromCommittee = null, dragFromPeriod = null;
+  content.querySelectorAll('.period-chip').forEach(chip=>{
+    chip.addEventListener('dragstart', ()=>{
+      dragFormId = chip.dataset.formid;
+      dragFromCommittee = chip.dataset.fromcommittee;
+      dragFromPeriod = chip.dataset.fromperiod;
+      chip.style.opacity = '0.4';
+    });
+    chip.addEventListener('dragend', ()=>{ chip.style.opacity = '1'; });
+  });
+  content.querySelectorAll('.period-cell').forEach(cell=>{
+    cell.addEventListener('dragover', e=>{ e.preventDefault(); cell.style.background = 'var(--teal-100)'; });
+    cell.addEventListener('dragleave', ()=>{ cell.style.background = ''; });
+    cell.addEventListener('drop', async e=>{
+      e.preventDefault();
+      cell.style.background = '';
+      if(!dragFormId) return;
+      const toCommittee = cell.dataset.committee, toPeriod = cell.dataset.period || null;
+      if(toCommittee===dragFromCommittee && (toPeriod||'')===(dragFromPeriod||'')) return; // نفس الخانة، ما فيه تغيير
+      const { error } = await sb.from('committee_assignments')
+        .update({ committee_id: toCommittee, period_id: toPeriod })
+        .eq('form_id', dragFormId).eq('committee_id', dragFromCommittee);
+      if(error){ showToast('تعذّر النقل: '+error.message); return; }
+      showToast('تم النقل');
+      renderJudgingCommittees();
+    });
+  });
+  const autoAssignPeriodsBtn = document.getElementById('autoAssignPeriodsBtn');
+  if(autoAssignPeriodsBtn) autoAssignPeriodsBtn.addEventListener('click', ()=>runAutoAssignPeriods(committeeAssignments||[]));
+}
+
+/* توزيع تلقائي للفترات فقط — يوزّع كل إسناد "بدون فترة" على الفترات المتاحة
+   بالتساوي داخل كل لجنة، بدون ما يغيّر لجنة أي مشروع */
+async function runAutoAssignPeriods(committeeAssignments){
+  if(!JUDGING_PERIODS_CACHE.length){ showToast('أضِف فترة واحدة على الأقل أولًا'); return; }
+  const unassigned = committeeAssignments.filter(a=>!a.period_id);
+  if(!unassigned.length){ showToast('كل المشاريع المُسنَدة للجان عندها فترة محدَّدة أصلًا'); return; }
+
+  openConfirm(`سيُوزَّع ${unassigned.length} مشروعًا بلا فترة على الفترات المتاحة (${JUDGING_PERIODS_CACHE.length}) بالتساوي، داخل كل لجنة على حدة — بدون أي تغيير للجنتها. متابعة؟`, async ()=>{
+    // عدّاد حمل مستقل لكل لجنة، لتوزيع متوازن داخل كل لجنة على حدة
+    const loadByCommittee = {};
+    committeeAssignments.filter(a=>a.period_id).forEach(a=>{
+      loadByCommittee[a.committee_id] = loadByCommittee[a.committee_id] || {};
+      loadByCommittee[a.committee_id][a.period_id] = (loadByCommittee[a.committee_id][a.period_id]||0)+1;
+    });
+    let okCount = 0, failCount = 0;
+    for(const a of unassigned){
+      const load = loadByCommittee[a.committee_id] = loadByCommittee[a.committee_id] || {};
+      const chosenPeriod = [...JUDGING_PERIODS_CACHE].sort((x,y)=>(load[x.id]||0)-(load[y.id]||0))[0];
+      load[chosenPeriod.id] = (load[chosenPeriod.id]||0)+1;
+      const { error } = await sb.from('committee_assignments').update({ period_id: chosenPeriod.id }).eq('form_id', a.form_id).eq('committee_id', a.committee_id);
+      if(error) failCount++; else okCount++;
+    }
+    showToast(`تم توزيع ${okCount} مشروعًا على الفترات${failCount?` (فشل ${failCount})`:''}`);
+    renderJudgingCommittees();
   });
 }
 
@@ -1534,10 +1626,28 @@ async function runAutoAssignProjects(committees, membersByCommittee, submittedRo
   const newRows = submittedRows.filter(r=>!committeeAssignedFormIds.has(r.form_id));
   if(!newRows.length){ showToast('كل المشاريع المستوفية مُسندة أصلًا — لا يوجد جديد للتوزيع'); return; }
 
+  // نجلب الفترات وتوزيعها الحالي — عشان نوزّع أي مشروع جديد على أقل فترة
+  // حملًا داخل نفس اللجنة اللي بيُسنَد لها، بنفس لحظة إسناد اللجنة
+  const { data: periods } = await sb.from('judging_periods').select('*').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index');
+  const { data: existingPeriodAssignments } = await sb.from('committee_assignments').select('committee_id, period_id').eq('round_id', CURRENT_ADMIN_ROUND_ID);
+  const periodLoadByCommittee = {};
+  (existingPeriodAssignments||[]).filter(a=>a.period_id).forEach(a=>{
+    periodLoadByCommittee[a.committee_id] = periodLoadByCommittee[a.committee_id] || {};
+    periodLoadByCommittee[a.committee_id][a.period_id] = (periodLoadByCommittee[a.committee_id][a.period_id]||0)+1;
+  });
+  const pickPeriod = (committeeId)=>{
+    if(!periods || !periods.length) return null;
+    const load = periodLoadByCommittee[committeeId] = periodLoadByCommittee[committeeId] || {};
+    const chosen = [...periods].sort((x,y)=>(load[x.id]||0)-(load[y.id]||0))[0];
+    load[chosen.id] = (load[chosen.id]||0)+1;
+    return chosen.id;
+  };
+
   const matchLabel = matchField === 'track' ? 'المسار' : matchField === 'domain' ? 'المجال' : null;
   const covered = matchField ? [...new Set(committees.filter(c=>c[matchField]).map(c=>c[matchField]))] : [];
   const basisNote = matchLabel ? ` بأولوية لتطابق ${matchLabel}${covered.length?` (${covered.join('، ')})`:''}،` : ' توزيعًا عامًا بحسب الحمل فقط،';
-  openConfirm(`سيُسنَد ${newRows.length} مشروعًا جديدًا (غير المُسندة سابقًا) على اللجان،${basisNote} ويُنشئ تكليفًا فرديًا لكل عضو. الإسناد الحالي يبقى بدون أي تغيير. متابعة؟`, async ()=>{
+  const periodNote = (periods && periods.length) ? ' ويوزّعها كذلك على الفترات المتاحة بالتوازن،' : '';
+  openConfirm(`سيُسنَد ${newRows.length} مشروعًا جديدًا (غير المُسندة سابقًا) على اللجان،${basisNote}${periodNote} ويُنشئ تكليفًا فرديًا لكل عضو. الإسناد الحالي يبقى بدون أي تغيير. متابعة؟`, async ()=>{
     // نبدأ عدّاد الحمل من العدد الحالي الفعلي لكل لجنة — يضمن توازنًا صحيحًا
     // حتى مع التشغيل المتكرر بدل إعادة الصفر في كل مرة
     const currentLoad = {};
@@ -1564,8 +1674,9 @@ async function runAutoAssignProjects(committees, membersByCommittee, submittedRo
       candidates = [...candidates].sort((a,b)=>currentLoad[a.id]-currentLoad[b.id]);
       const committee = candidates[0];
       currentLoad[committee.id]++;
+      const periodId = pickPeriod(committee.id);
 
-      committeeAssignRows.push({ committee_id: committee.id, form_id: r.form_id, round_id: CURRENT_ADMIN_ROUND_ID, assigned_by: currentAdmin.id });
+      committeeAssignRows.push({ committee_id: committee.id, form_id: r.form_id, round_id: CURRENT_ADMIN_ROUND_ID, assigned_by: currentAdmin.id, period_id: periodId });
       (membersByCommittee[committee.id]||[]).forEach(jid=>{
         judgeAssignRows.push({ judge_id: jid, form_id: r.form_id, round_id: CURRENT_ADMIN_ROUND_ID, assigned_by: currentAdmin.id });
       });
