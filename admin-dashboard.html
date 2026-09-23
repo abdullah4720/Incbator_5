@@ -2809,6 +2809,40 @@ function openCriterionModal(existing){
 }
 
 /* ---------------- المحكّمون ---------------- */
+/* حذف محكّم بالكامل — قاعدة البيانات مبنية بحذف متسلسل (CASCADE) على عضوية
+   اللجان والتكليفات الفردية والتقييمات، فحذف صف judges وحده كافٍ لحذف كل
+   ما يرتبط به تلقائيًا. إجراء لا رجعة فيه بالكامل. */
+function confirmDeleteJudge(judge, assignCount, evalCount){
+  if(!judge) return;
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '440px';
+  box.innerHTML = `
+    <h3 style="color:var(--danger)">${icon('trash-2',{size:15})} حذف المحكّم نهائيًا</h3>
+    <p>سيُحذف "<b>${escHtml(judge.full_name)}</b>" نهائيًا من النظام — يشمل الحذف تلقائيًا: عضويته بأي لجنة، كل تكليفاته الفردية (${assignCount} مشروعًا)، ${evalCount ? `<b>وكل تقييماته المُرسَلة (${evalCount})</b>` : 'وليس له أي تقييمات مُرسَلة حاليًا'}. إجراء لا يمكن التراجع عنه إطلاقًا.</p>
+    ${evalCount ? `<div class="req-banner" style="background:var(--danger-100);color:var(--danger)"><b>تنبيه شديد:</b>&nbsp;هذا المحكّم له ${evalCount} تقييمًا مُرسَلًا فعليًا — ستُفقد هذي الدرجات نهائيًا بلا أي طريقة لاسترجاعها.</div>` : ''}
+    <div class="field-inline" style="margin-top:14px">
+      <label class="flabel">للتأكيد، اكتب <b>حذف</b> بالمربع أدناه</label>
+      <input type="text" id="deleteJudgeConfirmInput" placeholder="حذف">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="deleteJudgeCancelBtn">إلغاء</button>
+      <button class="btn btn-primary" style="background:var(--danger);border-color:var(--danger)" id="deleteJudgeConfirmBtn">حذف نهائيًا</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('deleteJudgeCancelBtn').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('deleteJudgeConfirmBtn').addEventListener('click', async ()=>{
+    const typed = document.getElementById('deleteJudgeConfirmInput').value.trim();
+    if(typed !== 'حذف'){ showToast('اكتب "حذف" بالضبط للتأكيد'); return; }
+    const { error } = await sb.from('judges').delete().eq('id', judge.id);
+    modal.classList.remove('show'); restoreConfirmModal();
+    if(error){ showToast('تعذّر الحذف: '+error.message); return; }
+    showToast(`تم حذف "${judge.full_name}" نهائيًا`);
+    renderJudgingJudges();
+  });
+}
+
 async function renderJudgingJudges(){
   const content = document.getElementById('judgingSubContent');
   content.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
@@ -2848,12 +2882,16 @@ async function renderJudgingJudges(){
           <button class="btn btn-ghost btn-sm" data-manageassign="${j.id}">إدارة الإسناد</button>
           <button class="btn btn-ghost btn-sm" data-resetjudge="${j.id}">تصفير كلمة المرور</button>
           <button class="btn btn-ghost btn-sm" data-togglejudge="${j.id}">${j.is_active?'إيقاف':'تفعيل'}</button>
+          <button class="btn btn-ghost btn-sm" data-deletejudge="${j.id}" style="color:var(--danger)">${icon('trash-2',{size:12})} حذف</button>
         </td>
       </tr>`).join('')}</tbody>
     </table></div></div>`}
   `;
   bindRoundSelector(renderJudgingJudges);
   document.getElementById('addJudgeBtn').addEventListener('click', ()=>openJudgeModal(null));
+  content.querySelectorAll('[data-deletejudge]').forEach(b=>{
+    b.addEventListener('click', ()=>confirmDeleteJudge(JUDGES_CACHE.find(j=>j.id===b.dataset.deletejudge), assignCountByJudge[b.dataset.deletejudge]||0, evalCountByJudge[b.dataset.deletejudge]||0));
+  });
   content.querySelectorAll('[data-editjudge]').forEach(b=>{
     b.addEventListener('click', ()=>openJudgeModal(JUDGES_CACHE.find(j=>j.id===b.dataset.editjudge)));
   });
