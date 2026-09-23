@@ -1553,6 +1553,7 @@ async function renderJudgingCommittees(){
         <span style="color:var(--success);font-size:12.5px">${committeeAssignedFormIds.size ? '✓' : ''} ${committeeAssignedFormIds.size} من ${totalSubmittedProjects} مشروعًا مستوفيًا مسنَد</span>
       </div>
       <button class="btn btn-primary btn-sm" id="autoAssignProjectsBtn">${icon('sparkles',{size:13})} إسناد تلقائي</button>
+      ${committeeAssignedFormIds.size ? `<button class="btn btn-ghost btn-sm" id="rebalanceCommitteesBtn">${icon('sparkles',{size:13})} إعادة توزيع اللجان فقط (بدون تغيير الفترات)</button>` : ''}
       ${committeeAssignedFormIds.size ? `<button class="btn btn-ghost btn-sm" id="resetAllAssignmentsBtn" style="color:var(--danger)">${icon('trash-2',{size:13})} إعادة تعيين الإسناد بالكامل</button>` : ''}
     </div>
 
@@ -1629,6 +1630,8 @@ async function renderJudgingCommittees(){
   document.getElementById('addCommitteeBtn').addEventListener('click', ()=>openCommitteeModal(null));
   document.getElementById('autoFormCommitteesBtn').addEventListener('click', ()=>openAutoFormCommitteesModal(allJudges||[]));
   document.getElementById('autoAssignProjectsBtn').addEventListener('click', ()=>openAutoAssignBasisModal(JUDGING_COMMITTEES_CACHE, membersByCommittee, submittedRows, projectsByCommittee, committeeAssignedFormIds));
+  const rebalanceBtn = document.getElementById('rebalanceCommitteesBtn');
+  if(rebalanceBtn) rebalanceBtn.addEventListener('click', ()=>openRebalanceCommitteesModal(JUDGING_COMMITTEES_CACHE, membersByCommittee, committeeAssignments||[], submittedRows));
   const resetAllBtn = document.getElementById('resetAllAssignmentsBtn');
   if(resetAllBtn) resetAllBtn.addEventListener('click', ()=>confirmResetAllAssignments(committeeAssignedFormIds.size));
   document.getElementById('openProgressBtn').addEventListener('click', ()=>{ judgingSubtab='progress'; renderJudgingTab(); });
@@ -1901,6 +1904,107 @@ async function runAutoAssignProjects(committees, membersByCommittee, submittedRo
     const { error: e2 } = await sb.from('judge_assignments').upsert(judgeAssignRows, { onConflict: 'judge_id,form_id,round_id' });
     if(e2){ showToast('تعذّر إسناد المحكّمين: '+e2.message); return; }
     showToast(`تم إسناد ${newRows.length} مشروعًا جديدًا`);
+    renderJudgingCommittees();
+  });
+}
+
+function openRebalanceCommitteesModal(committees, membersByCommittee, committeeAssignments, submittedRows){
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '440px';
+  const tracksCovered = [...new Set(committees.filter(c=>c.track).map(c=>c.track))];
+  const domainsCovered = [...new Set(committees.filter(c=>c.domain).map(c=>c.domain))];
+  box.innerHTML = `
+    <h3>${icon('sparkles',{size:15})} إعادة توزيع اللجان — اختر الأساس</h3>
+    <p>يعيد توزيع كل المشاريع المُسندة حاليًا (${committeeAssignments.length}) على اللجان بتوازن، <b>بدون أي تغيير على الفترات</b> — كل مشروع يبقى بنفس فترته المُبلَّغة، تتغيّر لجنته فقط. أي مشروع له تقييم مُرسَل فعليًا يُستثنى تلقائيًا ويبقى بلجنته الحالية.</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin:14px 0">
+      <label style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--line);border-radius:8px;cursor:pointer">
+        <input type="radio" name="rebalanceBasis" value="track" checked>
+        <div><b>حسب المسار</b><div style="font-size:11.5px;color:var(--ink-400)">${tracksCovered.length ? `لجان مخصَّصة: ${tracksCovered.join('، ')}` : 'لا توجد لجان مخصَّصة بمسار حاليًا — سيعمل كتوزيع عام'}</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--line);border-radius:8px;cursor:pointer">
+        <input type="radio" name="rebalanceBasis" value="domain">
+        <div><b>حسب المجال</b><div style="font-size:11.5px;color:var(--ink-400)">${domainsCovered.length ? `لجان مخصَّصة: ${domainsCovered.join('، ')}` : 'لا توجد لجان مخصَّصة بمجال حاليًا — سيعمل كتوزيع عام'}</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;padding:10px;border:1px solid var(--line);border-radius:8px;cursor:pointer">
+        <input type="radio" name="rebalanceBasis" value="general">
+        <div><b>عام</b><div style="font-size:11.5px;color:var(--ink-400)">توزيع متساوٍ بحسب الحمل فقط، بدون أي مراعاة للمسار أو المجال</div></div>
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="rebalanceBasisCancel">إلغاء</button>
+      <button class="btn btn-primary" id="rebalanceBasisConfirm">متابعة</button>
+    </div>
+  `;
+  modal.classList.add('show');
+  document.getElementById('rebalanceBasisCancel').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+  document.getElementById('rebalanceBasisConfirm').addEventListener('click', ()=>{
+    const basis = box.querySelector('input[name="rebalanceBasis"]:checked').value;
+    modal.classList.remove('show'); restoreConfirmModal();
+    runRebalanceCommittees(committees, membersByCommittee, committeeAssignments, submittedRows, basis === 'general' ? null : basis);
+  });
+}
+
+async function runRebalanceCommittees(committees, membersByCommittee, committeeAssignments, submittedRows, matchField){
+  if(!committees.length){ showToast('شكّل لجنة واحدة على الأقل أولًا'); return; }
+  const projInfoByForm = {}; submittedRows.forEach(r=>{ projInfoByForm[r.form_id] = r; });
+
+  // نستثني أي مشروع له تقييم مُرسَل فعليًا من أي محكّم — نفس درس حماية
+  // التقييمات المُرسَلة المطبَّق على استبدال المحكّم الفردي
+  const formIds = committeeAssignments.map(a=>a.form_id);
+  const CHUNK = 40; const chunks = [];
+  for(let i=0;i<formIds.length;i+=CHUNK) chunks.push(formIds.slice(i,i+CHUNK));
+  const evalResults = await Promise.all(chunks.map(c=>sb.from('judge_evaluations').select('form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID).eq('is_submitted', true).in('form_id', c)));
+  const evaluatedFormIds = new Set(evalResults.flatMap(r=>r.data||[]).map(e=>e.form_id));
+
+  const movable = committeeAssignments.filter(a=>!evaluatedFormIds.has(a.form_id));
+  const skippedCount = committeeAssignments.length - movable.length;
+  if(!movable.length){ showToast('كل المشاريع المُسندة لها تقييمات مُرسَلة بالفعل — لا يوجد شيء يمكن إعادة توزيعه'); return; }
+
+  openConfirm(`سيُعاد توزيع ${movable.length} مشروعًا على اللجان (الفترات ثابتة تمامًا لكل مشروع)${skippedCount?`، وسيُستثنى ${skippedCount} مشروعًا له تقييم مُرسَل فعليًا` : ''}. متابعة؟`, async ()=>{
+    const committeesByValue = {};
+    const generalCommittees = [];
+    committees.forEach(c=>{
+      const val = matchField ? c[matchField] : null;
+      if(val){ (committeesByValue[val] = committeesByValue[val]||[]).push(c); }
+      else { generalCommittees.push(c); }
+    });
+    // عدّاد حمل مستقل يبدأ من صفر لكل اللجان — نعيد توزيع الكل من جديد،
+    // بدل الإضافة فوق التوزيع الحالي غير المتوازن أصلًا
+    const currentLoad = {}; committees.forEach(c=>{ currentLoad[c.id] = 0; });
+
+    const updates = [];
+    movable.forEach(a=>{
+      const info = projInfoByForm[a.form_id] || {};
+      const projVal = matchField ? info[matchField] : null;
+      let candidates = projVal ? (committeesByValue[projVal] || []) : [];
+      if(!candidates.length) candidates = generalCommittees;
+      if(!candidates.length) candidates = committees;
+      candidates = [...candidates].sort((x,y)=>currentLoad[x.id]-currentLoad[y.id]);
+      const newCommittee = candidates[0];
+      currentLoad[newCommittee.id]++;
+      if(String(newCommittee.id) !== String(a.committee_id)){
+        updates.push({ form_id: a.form_id, from_committee: a.committee_id, to_committee: newCommittee.id, period_id: a.period_id });
+      }
+    });
+
+    if(!updates.length){ showToast('التوزيع الحالي متوازن أصلًا حسب هذا الأساس — لا تغيير مطلوب'); return; }
+
+    let okCount = 0, failCount = 0;
+    for(const u of updates){
+      // نحدّث سطر إسناد اللجنة (يبقي الفترة كما هي تمامًا — عمود period_id لم يُلمَس)
+      const { error: e1 } = await sb.from('committee_assignments').update({ committee_id: u.to_committee }).eq('form_id', u.form_id).eq('committee_id', u.from_committee);
+      if(e1){ failCount++; continue; }
+      // ننقل تكليف المحكّمين الفرديين: نحذف أعضاء اللجنة القديمة، نضيف أعضاء الجديدة
+      await sb.from('judge_assignments').delete().eq('form_id', u.form_id).eq('round_id', CURRENT_ADMIN_ROUND_ID).in('judge_id', membersByCommittee[u.from_committee]||[]);
+      const newJudgeRows = (membersByCommittee[u.to_committee]||[]).map(jid=>({ judge_id: jid, form_id: u.form_id, round_id: CURRENT_ADMIN_ROUND_ID, assigned_by: currentAdmin.id }));
+      if(newJudgeRows.length){
+        const { error: e2 } = await sb.from('judge_assignments').upsert(newJudgeRows, { onConflict: 'judge_id,form_id,round_id' });
+        if(e2){ failCount++; continue; }
+      }
+      okCount++;
+    }
+    showToast(`تم نقل ${okCount} مشروعًا بين اللجان${failCount?` (فشل ${failCount})`:''}${skippedCount?` — استُثني ${skippedCount} له تقييم مُرسَل`:''}`);
     renderJudgingCommittees();
   });
 }
