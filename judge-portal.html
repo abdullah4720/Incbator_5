@@ -49,13 +49,25 @@ body{
 
 /* ---------------- تبويبات علوية بشكل حبوب + شارة الجولة ---------------- */
 .jd-round-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(201,162,75,.18);border:1px solid rgba(201,162,75,.4);color:var(--gold-500);font-size:11.5px;font-weight:600;border-radius:999px;padding:4px 12px;margin-top:4px;}
+.jd-progress-banner{display:flex;justify-content:space-between;align-items:center;gap:16px;background:linear-gradient(135deg,var(--navy-800),#1a2456);border-radius:16px;padding:18px 22px;margin:18px 0;color:#fff;}
+.jd-pb-greeting{font-size:16px;font-weight:800;font-family:'Cairo',sans-serif;}
+.jd-pb-sub{font-size:12.5px;color:rgba(255,255,255,.75);margin-top:4px;}
+.jd-pb-ring-wrap{flex-shrink:0;}
+.jd-pb-ring{width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+.jd-pb-ring-inner{width:46px;height:46px;border-radius:50%;background:var(--navy-800);display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:800;color:#fff;}
 .jd-tabs-row{display:flex;gap:8px;max-width:920px;margin:0 auto 20px;padding:0 20px;flex-wrap:wrap;}
 .jd-tab-pill{background:#fff;border:1px solid var(--line);border-radius:999px;padding:10px 20px;font-size:13px;font-weight:600;color:var(--ink-600);cursor:pointer;font-family:'IBM Plex Sans Arabic',sans-serif;transition:all .15s;display:flex;align-items:center;gap:7px;}
 .jd-tab-pill:hover{border-color:var(--teal-500);}
 .jd-tab-pill.active{background:var(--navy-800);color:#fff;border-color:var(--navy-800);}
 .jd-round-select{padding:8px 14px;border:1px solid var(--line);border-radius:10px;font-family:inherit;font-size:12.5px;background:#fff;}
 .jd-build-footer{position:fixed;bottom:8px;left:14px;font-size:10px;color:var(--ink-400);font-family:'IBM Plex Mono',monospace;opacity:.6;}
-.jd-cert-page{background:#fff;border:1px solid var(--line);border-radius:16px;padding:48px;max-width:720px;margin:0 auto;text-align:center;position:relative;}
+.jd-cert-page{background:#fff;border:3px solid var(--gold-500);border-radius:4px;padding:6px;max-width:720px;margin:0 auto;position:relative;}
+.jd-cert-inner{border:1px solid var(--gold-500);border-radius:2px;padding:44px 40px;text-align:center;position:relative;background:linear-gradient(180deg,#fff 0%,#FFFDF7 100%);}
+.jd-cert-corner{position:absolute;width:22px;height:22px;border-color:var(--gold-500);}
+.jd-cert-corner.tl{top:8px;inset-inline-start:8px;border-top:2px solid;border-inline-start:2px solid;}
+.jd-cert-corner.tr{top:8px;inset-inline-end:8px;border-top:2px solid;border-inline-end:2px solid;}
+.jd-cert-corner.bl{bottom:8px;inset-inline-start:8px;border-bottom:2px solid;border-inline-start:2px solid;}
+.jd-cert-corner.br{bottom:8px;inset-inline-end:8px;border-bottom:2px solid;border-inline-end:2px solid;}
 .jd-cert-page::before{content:'';position:absolute;inset:14px;border:2px solid var(--gold-500);border-radius:10px;pointer-events:none;}
 
 .brand-row{display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:26px;}
@@ -307,6 +319,40 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
 </div>
 
 <div id="judgeDashboard" style="display:none">
+  <div id="jdOnboardingOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:200;align-items:center;justify-content:center;padding:20px">
+    <div style="background:#fff;border-radius:18px;max-width:440px;width:100%;overflow:hidden">
+      <div style="background:linear-gradient(135deg,var(--navy-800),#1a2456);padding:24px;text-align:center;color:#fff">
+        <div style="font-size:32px;margin-bottom:8px">👋</div>
+        <div style="font-size:18px;font-weight:800;font-family:'Cairo',sans-serif">أهلًا بك في بوابة التحكيم</div>
+      </div>
+      <div style="padding:22px 24px">
+        <div style="display:flex;gap:12px;margin-bottom:16px">
+          <div style="flex-shrink:0;width:32px;height:32px;border-radius:8px;background:var(--teal-100);color:var(--teal-600);display:flex;align-items:center;justify-content:center" data-icon="users"></div>
+          <div><b style="font-size:13.5px">الفرق والتقييم</b><div style="font-size:12.5px;color:var(--ink-400);margin-top:2px">مشاريعك المُسندة رسميًا — هنا تسجّل الدرجات وترسل تقييمك</div></div>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:16px">
+          <div style="flex-shrink:0;width:32px;height:32px;border-radius:8px;background:var(--gold-100);color:#7A5C1E;display:flex;align-items:center;justify-content:center" data-icon="folder"></div>
+          <div><b style="font-size:13.5px">كل المشاريع</b><div style="font-size:12.5px;color:var(--ink-400);margin-top:2px">تصفّح جميع مشاريع الجولة، حتى غير المُسندة إليك، للاطلاع فقط</div></div>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:20px">
+          <div style="flex-shrink:0;width:32px;height:32px;border-radius:8px;background:#EDE7F6;color:var(--purple-500);display:flex;align-items:center;justify-content:center" data-icon="award"></div>
+          <div><b style="font-size:13.5px">شهاداتي</b><div style="font-size:12.5px;color:var(--ink-400);margin-top:2px">شهادة تحكيمك الرسمية بعد إتمام تقييماتك</div></div>
+        </div>
+        <button class="btn btn-primary" id="jdOnboardingCloseBtn" style="width:100%">ابدأ التحكيم</button>
+      </div>
+    </div>
+  </div>
+  <div id="jdQuickPreviewOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:200;align-items:center;justify-content:center;padding:20px">
+    <div style="background:#fff;border-radius:16px;max-width:380px;width:100%;padding:22px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+        <div style="font-weight:800;font-size:15px;color:var(--navy-800);font-family:'Cairo',sans-serif" id="jdQpName"></div>
+        <button type="button" id="jdQpCloseBtn" style="background:none;border:none;color:var(--ink-400);cursor:pointer;font-size:18px;line-height:1">✕</button>
+      </div>
+      <div class="mono" style="font-size:12.5px;color:var(--ink-400);margin-bottom:10px" id="jdQpMeta"></div>
+      <div id="jdQpStatus" style="margin-bottom:18px"></div>
+      <button class="btn btn-primary" id="jdQpOpenFullBtn" style="width:100%">فتح التفاصيل الكاملة والتقييم</button>
+    </div>
+  </div>
   <div class="jd-topbar-outer">
     <div class="jd-topbar-inner">
       <div class="jd-brand-mark">
@@ -371,6 +417,7 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
   </div>
 
   <div style="max-width:920px;margin:0 auto;padding:0 20px">
+  <div id="jdProgressBanner"></div>
   <div id="jdListView">
     <div id="jdFellowJudgesCard" class="jd-section-card" style="display:none"></div>
     <div id="jdCriteriaSummaryCard" class="jd-section-card" style="display:none"></div>
@@ -453,6 +500,7 @@ const LUCIDE_ICONS = {
   "rocket": `<path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" /> <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09" /> <path d="M9 12a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.4 22.4 0 0 1-4 2z" /> <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 .05 5 .05" />`,
   "briefcase": `<path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /> <rect width="20" height="14" x="2" y="6" rx="2" />`,
   "search": `<path d="m21 21-4.34-4.34" /> <circle cx="11" cy="11" r="8" />`,
+  "eye": `<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" /> <circle cx="12" cy="12" r="3" />`,
   "crown": `<path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z" /> <path d="M5 21h14" />`,
   "hourglass": `<path d="M5 22h14" /> <path d="M5 2h14" /> <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" /> <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" />`,
   "chevron-right": `<path d="m9 18 6-6-6-6" />`,
@@ -642,6 +690,7 @@ let JD_ACTIVE_TAB = 'teams';
 function injectStaticIcons(){
   document.getElementById('jdRoundBadgeIcon').innerHTML = icon('trophy',{size:11});
   document.querySelectorAll('.jd-tab-icon').forEach(el=>{ el.innerHTML = icon(el.dataset.icon,{size:14}); });
+  document.querySelectorAll('#jdOnboardingOverlay [data-icon]').forEach(el=>{ el.innerHTML = icon(el.dataset.icon,{size:16}); });
 }
 
 async function enterDashboard(){
@@ -656,6 +705,7 @@ async function enterDashboard(){
     window.location.reload();
   });
   document.getElementById('jdBackBtn').addEventListener('click', showListView);
+  document.getElementById('jdQpCloseBtn').addEventListener('click', ()=>{ document.getElementById('jdQuickPreviewOverlay').style.display = 'none'; });
   document.querySelectorAll('[data-jtab]').forEach(btn=>{
     btn.addEventListener('click', ()=>switchJudgeTab(btn.dataset.jtab));
   });
@@ -667,6 +717,17 @@ async function enterDashboard(){
 
   await loadJudgingRounds();
   await refreshCurrentTab();
+
+  // نافذة ترحيبية تظهر مرة واحدة فقط لكل محكّم — تُحفَظ محليًا بالمتصفح
+  const onboardKey = `jd_onboarding_seen_${CURRENT_JUDGE_ID}`;
+  if(!localStorage.getItem(onboardKey)){
+    const overlay = document.getElementById('jdOnboardingOverlay');
+    overlay.style.display = 'flex';
+    document.getElementById('jdOnboardingCloseBtn').addEventListener('click', ()=>{
+      overlay.style.display = 'none';
+      localStorage.setItem(onboardKey, '1');
+    });
+  }
 }
 
 async function loadJudgingRounds(){
@@ -770,8 +831,12 @@ function buildFilterBarHTML(rows, showStatusFilter, matchedCount, filters, idPre
   const diag = (!tracks.length && !domains.length && rows.length>0)
     ? `<div style="background:var(--danger-100);color:var(--danger);border-radius:8px;padding:8px 12px;font-size:11.5px;margin-bottom:10px">⚠ تشخيص: يوجد ${rows.length} مشروعًا لكن بلا بيانات مسار/مجال قابلة للفلترة — على الأغلب صلاحيات القراءة (RLS) لسه ما انطبقت. افتح Console (F12) وابحث عن سطر يبدأ بـ"[بوابة المحكّم]".</div>`
     : '';
-  return `${diag}<div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
-    <input type="text" id="${idPrefix}FilterSearch" placeholder="بحث بالاسم أو رقم المشروع…" value="${escHtmlJD(filters.search)}" class="jd-round-select" style="flex:1;min-width:180px">
+  return `${diag}
+  <div style="position:relative;margin-bottom:12px">
+    <span style="position:absolute;inset-inline-start:14px;top:50%;transform:translateY(-50%);color:var(--ink-400);pointer-events:none">${icon('search',{size:16})}</span>
+    <input type="text" id="${idPrefix}FilterSearch" placeholder="ابحث بالاسم أو رقم المشروع…" value="${escHtmlJD(filters.search)}" style="width:100%;padding:13px 42px 13px 16px;border:1.5px solid var(--line);border-radius:12px;font-size:14px;background:#fff">
+  </div>
+  <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
     <select id="${idPrefix}FilterTrack" class="jd-round-select">
       <option value="" ${filters.track===''?'selected':''}>كل المسارات${tracks.length?'':' (لا يوجد)'}</option>
       ${tracks.map(t=>`<option value="${escHtmlJD(t)}" ${filters.track===t?'selected':''}>${escHtmlJD(t)}</option>`).join('')}
@@ -893,6 +958,29 @@ async function loadFellowJudges(){
 
 let JD_STATUS_TAB = 'all';
 
+/* لوحة ترحيب وتقدّم شخصية — أول انطباع يشوفه المحكّم، يعطيه صورة سريعة
+   واضحة عن موقعه من عمله بدون ما يحسب يدويًا */
+function renderJdProgressBanner(total, done){
+  const el = document.getElementById('jdProgressBanner');
+  if(!el) return;
+  if(!total){ el.innerHTML = ''; return; }
+  const pct = Math.round(done/total*100);
+  const firstName = (CURRENT_JUDGE_NAME||'').split(' ')[0] || '';
+  el.innerHTML = `
+    <div class="jd-progress-banner">
+      <div class="jd-pb-text">
+        <div class="jd-pb-greeting">أهلًا ${escHtmlJD(firstName)} 👋</div>
+        <div class="jd-pb-sub">${done===total && total>0 ? 'أنجزت كل مشاريعك المُسندة — عمل رائع!' : `أنجزت ${done} من ${total} مشروعًا مُسندًا إليك`}</div>
+      </div>
+      <div class="jd-pb-ring-wrap">
+        <div class="jd-pb-ring" style="background:conic-gradient(var(--teal-600) ${pct*3.6}deg, rgba(255,255,255,.25) 0deg)">
+          <div class="jd-pb-ring-inner">${pct}%</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 async function loadProjectLists(){
   const assignedGrid = document.getElementById('jdAssignedGrid');
   const otherGrid = document.getElementById('jdOtherGrid');
@@ -930,6 +1018,8 @@ async function loadProjectLists(){
   const evalMap = {}; (myEvals||[]).forEach(e=>{ evalMap[e.form_id] = e.is_submitted; });
   const formMap = {}; (forms||[]).forEach(f=>{ formMap[f.id] = { ...f, ...(projMap[f.project_id]||{}), domain: domainMap[f.id], evaluated: !!evalMap[f.id] }; });
 
+  renderJdProgressBanner(myFormIds.length, myFormIds.filter(id=>evalMap[id]).length);
+
   // فلاتر المسار/المجال أولًا، ثم تبويب الحالة (الكل/بانتظار/تم) فوقها كطبقة إضافية
   const filteredMyAll = applyJdFilters(myFormIds.map(id=>formMap[id]).filter(Boolean), JD_FILTERS_TEAMS);
   const filteredOtherIds = applyJdFilters(otherFormIds.map(id=>formMap[id]).filter(Boolean), JD_FILTERS_TEAMS).map(p=>p.id);
@@ -961,7 +1051,8 @@ async function loadProjectLists(){
   const cardHTML = (formId)=>{
     const p = formMap[formId];
     if(!p) return '';
-    return `<div class="jd-pcard" data-openproject="${formId}">
+    return `<div class="jd-pcard" data-openproject="${formId}" style="position:relative">
+      <button type="button" class="jd-quickview-btn" data-quickview="${formId}" title="معاينة سريعة" style="position:absolute;top:12px;left:12px;width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center;color:var(--ink-400);z-index:2">${icon('eye',{size:14})}</button>
       <div class="pname">${escHtmlJD(p.project_name||p.project_id)}</div>
       <div class="pmeta mono">${escHtmlJD(p.project_id)} — ${escHtmlJD(p.track||'')}</div>
       ${p.evaluated ? `<span class="jd-badge submitted">✓ تم تقييمه</span>` : `<span class="jd-badge draft">لم يُقيَّم بعد</span>`}
@@ -974,6 +1065,24 @@ async function loadProjectLists(){
   document.querySelectorAll('[data-openproject]').forEach(el=>{
     el.addEventListener('click', ()=>openProjectDetail(el.dataset.openproject, formMap[el.dataset.openproject]));
   });
+  document.querySelectorAll('[data-quickview]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      openQuickPreview(formMap[btn.dataset.quickview]);
+    });
+  });
+}
+
+/* معاينة سريعة خفيفة — نظرة خاطفة بدون مغادرة القائمة، بزر ينقل للتفاصيل
+   الكاملة لمن يحتاج التعمّق فعليًا */
+function openQuickPreview(p){
+  if(!p) return;
+  const overlay = document.getElementById('jdQuickPreviewOverlay');
+  document.getElementById('jdQpName').textContent = p.project_name || p.project_id;
+  document.getElementById('jdQpMeta').textContent = `${p.project_id} — ${p.track||'—'}${p.domain?' — '+p.domain:''}`;
+  document.getElementById('jdQpStatus').innerHTML = p.evaluated ? `<span class="jd-badge submitted">✓ تم تقييمه</span>` : `<span class="jd-badge draft">لم يُقيَّم بعد</span>`;
+  overlay.style.display = 'flex';
+  document.getElementById('jdQpOpenFullBtn').onclick = ()=>{ overlay.style.display='none'; openProjectDetail(p.id, p); };
 }
 
 /* ---------------- كل المشاريع (استعراض فقط، بدون تسجيل درجات) ---------------- */
@@ -1091,17 +1200,28 @@ async function loadCertificateView(){
       <button class="btn btn-primary btn-sm" id="jdPrintCertBtn" style="width:auto;padding:10px 20px">${icon('download',{size:13})} تنزيل PDF</button>
     </div>
     <div class="jd-cert-page" id="jdCertPrintable">
-      <div style="font-size:12px;letter-spacing:2px;color:var(--gold-500);font-weight:700;margin-bottom:6px">شهادة شكر وتقدير</div>
-      <div style="font-size:22px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:18px">حاضنة ابتكار 5</div>
-      <div style="font-size:14px;color:var(--ink-600);margin-bottom:8px">تتقدَّم حاضنة الابتكار بجامعة القصيم بخالص الشكر والتقدير إلى</div>
-      <div style="font-size:26px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin:14px 0;border-bottom:2px solid var(--gold-500);display:inline-block;padding-bottom:6px">${escHtmlJD(CURRENT_JUDGE_NAME)}</div>
-      <div style="font-size:14px;color:var(--ink-600);line-height:2;max-width:520px;margin:14px auto">
-        لمشاركته كمحكّم ضمن برنامج حاضنة ابتكار 5، وتقييمه ${count||0} مشروعًا بمهنية وحرص على تطوير المشاريع الريادية المشارِكة.
+      <div class="jd-cert-inner">
+        <div class="jd-cert-corner tl"></div><div class="jd-cert-corner tr"></div>
+        <div class="jd-cert-corner bl"></div><div class="jd-cert-corner br"></div>
+        <div id="jdCertLogoSlot" style="display:flex;justify-content:center;margin-bottom:18px"></div>
+        <div style="font-size:12px;letter-spacing:3px;color:var(--gold-500);font-weight:700;margin-bottom:6px">شهادة شكر وتقدير</div>
+        <div style="font-size:22px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:18px">حاضنة ابتكار 5</div>
+        <div style="font-size:14px;color:var(--ink-600);margin-bottom:8px">تتقدَّم حاضنة الابتكار بجامعة القصيم بخالص الشكر والتقدير إلى</div>
+        <div style="font-size:26px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin:14px 0;border-bottom:2px solid var(--gold-500);display:inline-block;padding-bottom:6px">${escHtmlJD(CURRENT_JUDGE_NAME)}</div>
+        <div style="font-size:14px;color:var(--ink-600);line-height:2;max-width:520px;margin:14px auto">
+          لمشاركته كمحكّم ضمن برنامج حاضنة ابتكار 5، وتقييمه ${count||0} مشروعًا بمهنية وحرص على تطوير المشاريع الريادية المشارِكة.
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px;padding-top:16px;border-top:1px solid var(--line)">
+          <div style="text-align:right"><div style="font-size:10.5px;color:var(--ink-400)">التاريخ</div><div style="font-size:12.5px;color:var(--ink-600);font-weight:600">${today}</div></div>
+          <div style="text-align:left"><div style="font-size:10.5px;color:var(--ink-400)">رقم الشهادة</div><div style="font-size:12.5px;color:var(--ink-600);font-weight:600;font-family:monospace">IB5-${String(CURRENT_JUDGE_ID||'').slice(0,8).toUpperCase()}</div></div>
+        </div>
       </div>
-      <div style="margin-top:30px;font-size:12px;color:var(--ink-400)">${today}</div>
     </div>
   `;
   document.getElementById('jdPrintCertBtn').addEventListener('click', ()=>window.print());
+  const logoSlot = document.getElementById('jdCertLogoSlot');
+  const sourceLogo = document.querySelector('.jd-logo-svg');
+  if(logoSlot && sourceLogo){ const clone = sourceLogo.cloneNode(true); clone.style.height = '48px'; clone.style.width = 'auto'; logoSlot.appendChild(clone); }
 }
 
 /* يحدد أيقونة ولون بطاقة الملف حسب امتداده، ويعرض عنوان السؤال (مثل "السجل
