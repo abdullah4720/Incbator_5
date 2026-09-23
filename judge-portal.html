@@ -1052,7 +1052,7 @@ async function loadProjectLists(){
     const p = formMap[formId];
     if(!p) return '';
     return `<div class="jd-pcard" data-openproject="${formId}" style="position:relative">
-      <button type="button" class="jd-quickview-btn" data-quickview="${formId}" title="معاينة سريعة" style="position:absolute;top:12px;left:12px;width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center;color:var(--ink-400);z-index:2">${icon('eye',{size:14})}</button>
+      <button type="button" class="jd-quickview-btn" data-quickview="${formId}" title="معاينة سريعة" style="position:absolute;top:10px;left:10px;width:36px;height:36px;border-radius:9px;border:1px solid var(--line);background:#fff;display:flex;align-items:center;justify-content:center;color:var(--ink-400);z-index:2">${icon('eye',{size:16})}</button>
       <div class="pname">${escHtmlJD(p.project_name||p.project_id)}</div>
       <div class="pmeta mono">${escHtmlJD(p.project_id)} — ${escHtmlJD(p.track||'')}</div>
       ${p.evaluated ? `<span class="jd-badge submitted">✓ تم تقييمه</span>` : `<span class="jd-badge draft">لم يُقيَّم بعد</span>`}
@@ -1436,14 +1436,25 @@ function renderScoringForm(existingEval, isAssigned, presentation){
     return `
     <div class="jd-crit-row" style="flex-direction:column;align-items:stretch;gap:10px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div><div class="jd-crit-label">${escHtmlJD(c.label)}</div>${c.description?`<div class="jd-crit-desc">${escHtmlJD(c.description)}</div>`:''}</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="jd-crit-label">${escHtmlJD(c.label)}</div>
+          ${c.description ? `<button type="button" class="jd-crit-info-btn" data-critinfo="${c.id}" title="عرض وصف المعيار" style="width:26px;height:26px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--ink-400);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;cursor:pointer">${icon('info',{size:14})}</button>` : ''}
+        </div>
         <div class="jd-score-max" style="white-space:nowrap">الوزن ${weight}%</div>
       </div>
+      ${c.description ? `<div class="jd-crit-desc" id="jdCritDesc${c.id}" style="display:none">${escHtmlJD(c.description)}</div>` : ''}
       <div class="jd-score-btns" data-critid="${c.id}" data-max="5">
         ${btns.map(n=>`<button type="button" class="jd-score-btn ${current===n?'selected':''}" data-val="${n}">${n}</button>`).join('')}
       </div>
     </div>`;
   }).join('');
+
+  document.querySelectorAll('[data-critinfo]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const desc = document.getElementById('jdCritDesc'+btn.dataset.critinfo);
+      if(desc) desc.style.display = desc.style.display==='none' ? 'block' : 'none';
+    });
+  });
 
   document.querySelectorAll('.jd-score-btns').forEach(wrap=>{
     wrap.querySelectorAll('.jd-score-btn').forEach(btn=>{
