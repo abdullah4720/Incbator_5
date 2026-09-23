@@ -5625,12 +5625,13 @@ async function loadReviewDetail(projectId){
   try{
     const { data: form, error: formErr } = await sb.from('verification_forms').select('*').eq('project_id', projectId).maybeSingle();
     if(formErr || !form){ reviewDetail = null; return; }
-    const [{data: answers}, {data: members}, {data: files}, {data: reqRows}, {data: notes}] = await Promise.all([
+    const [{data: answers}, {data: members}, {data: files}, {data: reqRows}, {data: notes}, {data: presentation}] = await Promise.all([
       sb.from('form_answers').select('field_key, value_text, value_json').eq('form_id', form.id),
       sb.from('team_members').select('*').eq('form_id', form.id).order('order_index'),
       sb.from('form_files').select('*').eq('form_id', form.id).is('deleted_at', null),
       sb.from('requirement_status').select('*').eq('form_id', form.id),
       sb.from('review_notes').select('*').eq('form_id', form.id).order('created_at', {ascending:false}),
+      sb.from('judging_presentations').select('*').eq('form_id', form.id).maybeSingle(),
     ]);
 
     // تحقق من تكرار أي ملف من ملفات هذا الطلب مع طلب مختلف تمامًا (بعد معرفة
@@ -5646,7 +5647,7 @@ async function loadReviewDetail(projectId){
       (otherMatches||[]).forEach(m=>crossDupHashes.add(m.file_hash));
     }
 
-    reviewDetail = { form, answers: answers||[], members: members||[], files: files||[], reqRows: reqRows||[], notes: notes||[], crossDupHashes };
+    reviewDetail = { form, answers: answers||[], members: members||[], files: files||[], reqRows: reqRows||[], notes: notes||[], crossDupHashes, presentation: presentation||null };
   } catch(e){
     showToast('تعذّر تحميل تفاصيل الطلب: '+(e.message||'خطأ غير معروف'));
     reviewDetail = null;
@@ -5972,15 +5973,29 @@ function teamTabHTML(){
 }
 
 function filesTabHTML(){
-  const { files, crossDupHashes } = reviewDetail;
-  if(!files.length) return `<div class="empty-hint">لا توجد ملفات مرفوعة</div>`;
+  const { files, crossDupHashes, presentation } = reviewDetail;
+  const presentationHTML = presentation ? `
+    <div class="card" style="margin-bottom:16px;border:2px solid var(--teal-600)">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="kicon" style="background:var(--teal-100);color:var(--teal-600)">${icon('file-text',{size:18})}</div>
+          <div>
+            <b>ملف العرض التقديمي للتحكيم</b>
+            <div style="font-size:12px;color:var(--ink-400);margin-top:2px">${escHtml(presentation.file_name)} — رُفع بتاريخ ${new Date(presentation.uploaded_at).toLocaleDateString('ar-SA')}</div>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm" data-viewpresentation="1">فتح الملف</button>
+      </div>
+    </div>` : `<div class="req-banner" style="margin-bottom:16px">لم يرفع الفريق بعد ملف العرض التقديمي للتحكيم (منفصل عن ملفات نموذج التحقق).</div>`;
+
+  if(!files.length) return presentationHTML + `<div class="empty-hint">لا توجد ملفات تحقق مرفوعة</div>`;
   const iconFor = (mime)=> (mime||'').includes('video') ? icon('video',{size:22}) : icon('file-text',{size:22});
 
   // رصد التكرار داخل نفس الطلب: نفس بصمة الملف مستخدمة لأكثر من حقل
   const hashCounts = {};
   files.forEach(f=>{ if(f.file_hash) hashCounts[f.file_hash] = (hashCounts[f.file_hash]||0) + 1; });
 
-  return `<div class="file-grid">${files.map((f,i)=>{
+  return presentationHTML + `<div class="file-grid">${files.map((f,i)=>{
     const isDupSameForm = f.file_hash && hashCounts[f.file_hash] > 1;
     const isDupOtherForm = f.file_hash && crossDupHashes && crossDupHashes.has(f.file_hash);
     const flagged = isDupSameForm || isDupOtherForm;
@@ -5997,7 +6012,16 @@ function filesTabHTML(){
   `;}).join('')}</div>`;
 }
 function bindFileButtons(){
-  const { files } = reviewDetail;
+  const { files, presentation } = reviewDetail;
+  const presBtn = document.querySelector('[data-viewpresentation]');
+  if(presBtn) presBtn.addEventListener('click', async ()=>{
+    const original = presBtn.textContent;
+    presBtn.disabled = true; presBtn.textContent = 'جارٍ التحضير…';
+    const { data, error } = await sb.storage.from('form-attachments').createSignedUrl(presentation.storage_path, 300);
+    presBtn.disabled = false; presBtn.textContent = original;
+    if(error || !data){ showToast('تعذّر فتح الملف: '+(error?.message||'')); return; }
+    window.open(data.signedUrl, '_blank');
+  });
   document.querySelectorAll('[data-viewfile]').forEach(b=>{
     b.addEventListener('click', async ()=>{
       const f = files[parseInt(b.dataset.viewfile)];

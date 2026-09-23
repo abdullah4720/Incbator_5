@@ -1154,13 +1154,14 @@ async function openProjectDetail(formId, projInfo){
   document.getElementById('jdDetailAssignedBadge').style.display = JD_ASSIGNED_FORM_IDS.has(formId) ? 'inline-flex' : 'none';
   document.getElementById('jdInfoSections').innerHTML = `<div class="jd-empty">جارٍ التحميل…</div>`;
 
-  const [{data: answers}, {data: questions}, {data: sections}, {data: files}, {data: members}, {data: existingEval}] = await Promise.all([
+  const [{data: answers}, {data: questions}, {data: sections}, {data: files}, {data: members}, {data: existingEval}, {data: presentation}] = await Promise.all([
     sb.from('form_answers').select('field_key, value_text, value_json').eq('form_id', formId),
     sb.from('form_questions').select('field_key, label, type, section_id, order_index').eq('is_active', true).order('order_index'),
     sb.from('form_sections').select('id, title, order_index').order('order_index'),
     sb.from('form_files').select('field_key, file_name, storage_path').eq('form_id', formId).is('deleted_at', null),
     sb.from('team_members').select('full_name, specialization, is_leader').eq('form_id', formId).order('order_index'),
     sb.from('judge_evaluations').select('*').eq('judge_id', CURRENT_JUDGE_ID).eq('form_id', formId).eq('round_id', CURRENT_ROUND_ID).maybeSingle(),
+    sb.from('judging_presentations').select('file_name, storage_path, uploaded_at').eq('form_id', formId).maybeSingle(),
   ]);
 
   const avMap = {}; (answers||[]).forEach(a=>{ avMap[a.field_key] = a.value_json!==null ? a.value_json : a.value_text; });
@@ -1179,6 +1180,16 @@ async function openProjectDetail(formId, projInfo){
   const domainValue = avMap['f1_4'] || null;
 
   let sectionsHTML = '';
+  if(presentation){
+    sectionsHTML += `
+      <div class="jd-section-card" style="border:2px solid var(--teal-600)">
+        <div class="jd-section-head"><div class="jd-section-icon" style="background:var(--teal-100);color:var(--teal-600)">${icon('file-text',{size:15})}</div><div class="jd-section-head-title">ملف العرض التقديمي للتحكيم</div></div>
+        <div class="jd-file-grid"><a href="#" class="jd-file-card" data-viewfile="${escHtmlJD(presentation.storage_path)}">
+          <div class="jd-file-icon" style="background:var(--danger-100);color:var(--danger)">${icon('file-text',{size:18})}</div>
+          <div class="jd-file-name">${escHtmlJD(presentation.file_name)}</div>
+        </a></div>
+      </div>`;
+  }
 
   // 0) نظرة عامة سريعة — ملخص بلمحة قبل التفاصيل الكاملة
   sectionsHTML += `
@@ -1243,10 +1254,10 @@ async function openProjectDetail(formId, projInfo){
   });
 
   const isAssigned = JD_ASSIGNED_FORM_IDS.has(formId);
-  renderScoringForm(existingEval, isAssigned);
+  renderScoringForm(existingEval, isAssigned, presentation);
 }
 
-function renderScoringForm(existingEval, isAssigned){
+function renderScoringForm(existingEval, isAssigned, presentation){
   const scoringCard = document.getElementById('jdScoringCard');
   if(!isAssigned){
     scoringCard.innerHTML = `
@@ -1276,6 +1287,7 @@ function renderScoringForm(existingEval, isAssigned){
   const scores = existingEval ? (existingEval.scores||{}) : {};
   scoringCard.innerHTML = `
     <div style="font-weight:700;color:var(--navy-800);margin-bottom:4px;font-size:14px">تسجيل الدرجات</div>
+    ${presentation ? `<a href="#" data-viewfile="${escHtmlJD(presentation.storage_path)}" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;background:var(--teal-100);color:var(--teal-700,#0E5C5B);text-decoration:none;font-size:12.5px;font-weight:700;margin-bottom:12px">${icon('file-text',{size:14})} ملف العرض التقديمي للتحكيم — ${escHtmlJD(presentation.file_name)}</a>` : `<div style="padding:10px 12px;border-radius:10px;background:var(--paper);color:var(--ink-400);font-size:12px;margin-bottom:12px">${icon('file-text',{size:14})} لم يرفع الفريق ملف العرض التقديمي للتحكيم بعد</div>`}
     <div style="font-size:12px;color:var(--ink-400);margin-bottom:14px">${JD_CRITERIA.length ? `${JD_CRITERIA.length} معايير — اختر درجة من 1 إلى 5 لكل معيار حسب وزنه` : 'لم يتم إعداد معايير تحكيم بعد — تواصل مع فريق البرنامج.'}</div>
     <div id="jdCriteriaList"></div>
     <div id="jdProgressBar" class="jd-progress-bar"></div>
@@ -1290,6 +1302,12 @@ function renderScoringForm(existingEval, isAssigned){
     </div>
     <div id="jdSubmittedNote" style="display:${existingEval && existingEval.is_submitted ? 'inline-flex' : 'none'};margin-top:10px" class="jd-badge submitted">✓ تم إرسال تقييمك النهائي لهذا المشروع</div>
   `;
+  const presLink = scoringCard.querySelector('[data-viewfile]');
+  if(presLink) presLink.addEventListener('click', async e=>{
+    e.preventDefault();
+    const { data } = await sb.storage.from('form-attachments').createSignedUrl(presLink.dataset.viewfile, 300);
+    if(data) window.open(data.signedUrl, '_blank');
+  });
 
   document.getElementById('jdCriteriaList').innerHTML = JD_CRITERIA.map(c=>{
     const weight = Math.round(parseFloat(c.max_score)/totalMax*100);
