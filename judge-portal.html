@@ -425,9 +425,6 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
     <div class="jd-section-title" id="jdAssignedTitle">المشاريع المُسندة إليك رسميًا</div>
     <div id="jdStatusPills" class="jd-tabs-row" style="padding:0;margin-bottom:14px"></div>
     <div class="jd-project-grid" id="jdAssignedGrid"><div class="jd-empty">جارٍ التحميل…</div></div>
-
-    <div class="jd-section-title" id="jdOtherTitle">باقي مشاريع جولة التحكيم</div>
-    <div class="jd-project-grid" id="jdOtherGrid"></div>
   </div>
 
   <div id="jdAllProjectsView" style="display:none">
@@ -983,35 +980,28 @@ function renderJdProgressBanner(total, done){
 
 async function loadProjectLists(){
   const assignedGrid = document.getElementById('jdAssignedGrid');
-  const otherGrid = document.getElementById('jdOtherGrid');
   const filterSlot = document.getElementById('jdTeamsFilterBar');
-  if(!CURRENT_ROUND_ID){ assignedGrid.innerHTML = `<div class="jd-empty">لا توجد جولات تحكيم مُعدَّة بعد.</div>`; otherGrid.innerHTML=''; filterSlot.innerHTML=''; return; }
+  if(!CURRENT_ROUND_ID){ assignedGrid.innerHTML = `<div class="jd-empty">لا توجد جولات تحكيم مُعدَّة بعد.</div>`; filterSlot.innerHTML=''; return; }
 
   loadFellowJudges();
 
   const { data: myAssignments } = await sb.from('judge_assignments').select('form_id').eq('judge_id', CURRENT_JUDGE_ID).eq('round_id', CURRENT_ROUND_ID);
-  const { data: allAssignments } = await sb.from('judge_assignments').select('form_id').eq('round_id', CURRENT_ROUND_ID);
-
   const myFormIds = [...new Set((myAssignments||[]).map(a=>a.form_id))];
-  const allFormIds = [...new Set((allAssignments||[]).map(a=>a.form_id))];
-  JD_ASSIGNED_FORM_IDS = new Set(myFormIds);
-  const otherFormIds = allFormIds.filter(id=>!JD_ASSIGNED_FORM_IDS.has(id));
+  JD_ASSIGNED_FORM_IDS = new Set(myFormIds); // يبقى مطلوبًا: يحدّد صلاحية التقييم بتبويب "كل المشاريع" أيضًا
 
-  if(!allFormIds.length){
+  if(!myFormIds.length){
     filterSlot.innerHTML = '';
     document.getElementById('jdStatusPills').innerHTML = '';
     document.getElementById('jdAssignedTitle').textContent = 'المشاريع المُسندة إليك رسميًا (0)';
-    document.getElementById('jdOtherTitle').textContent = 'باقي مشاريع جولة التحكيم (0)';
-    assignedGrid.innerHTML = `<div class="jd-empty">لا توجد مشاريع بهذه الجولة بعد — تواصل مع فريق البرنامج.</div>`;
-    otherGrid.innerHTML = '';
+    assignedGrid.innerHTML = `<div class="jd-empty">لا مشاريع مُسندة إليك بعد — تواصل مع فريق البرنامج.</div>`;
     return;
   }
 
-  const forms = await chunkedInQuery(allFormIds, c=>sb.from('verification_forms').select('id, project_id, status').in('id', c));
+  const forms = await chunkedInQuery(myFormIds, c=>sb.from('verification_forms').select('id, project_id, status').in('id', c));
   const projectIds = [...new Set((forms||[]).map(f=>f.project_id))];
   const [projects, domainMap, {data: myEvals}, {data: periodAssignments}, {data: periodsRaw}] = await Promise.all([
     chunkedInQuery(projectIds, c=>sb.from('eligible_projects').select('project_id, project_name, track').in('project_id', c)),
-    fetchDomainsForForms(allFormIds),
+    fetchDomainsForForms(myFormIds),
     sb.from('judge_evaluations').select('form_id, is_submitted').eq('judge_id', CURRENT_JUDGE_ID).eq('round_id', CURRENT_ROUND_ID),
     sb.from('committee_assignments').select('form_id, period_id').eq('round_id', CURRENT_ROUND_ID),
     sb.from('judging_periods').select('id, name, start_time, end_time, order_index').eq('round_id', CURRENT_ROUND_ID).order('order_index'),
@@ -1026,12 +1016,11 @@ async function loadProjectLists(){
 
   // فلاتر المسار/المجال أولًا، ثم تبويب الحالة (الكل/بانتظار/تم) فوقها كطبقة إضافية
   const filteredMyAll = applyJdFilters(myFormIds.map(id=>formMap[id]).filter(Boolean), JD_FILTERS_TEAMS);
-  const filteredOtherIds = applyJdFilters(otherFormIds.map(id=>formMap[id]).filter(Boolean), JD_FILTERS_TEAMS).map(p=>p.id);
 
   const pendingCount = filteredMyAll.filter(p=>!p.evaluated).length;
   const evaluatedCount = filteredMyAll.filter(p=>p.evaluated).length;
 
-  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), true, filteredMyAll.length + filteredOtherIds.length, JD_FILTERS_TEAMS, 'jdTeams');
+  filterSlot.innerHTML = buildFilterBarHTML(Object.values(formMap), true, filteredMyAll.length, JD_FILTERS_TEAMS, 'jdTeams');
   bindFilterBar(loadProjectLists, JD_FILTERS_TEAMS, 'jdTeams');
 
   document.getElementById('jdStatusPills').innerHTML = `
@@ -1050,7 +1039,6 @@ async function loadProjectLists(){
   });
 
   document.getElementById('jdAssignedTitle').textContent = `المشاريع المُسندة إليك رسميًا (${myFormIds.length})`;
-  document.getElementById('jdOtherTitle').textContent = `باقي مشاريع جولة التحكيم (${otherFormIds.length})`;
 
   const cardHTML = (formId)=>{
     const p = formMap[formId];
@@ -1082,7 +1070,6 @@ async function loadProjectLists(){
       <div class="jd-project-grid" style="grid-column:1 / -1">${groups[pid].map(p=>cardHTML(p.id)).join('')}</div>`;
     }).join('');
   }
-  otherGrid.innerHTML = filteredOtherIds.length ? filteredOtherIds.map(cardHTML).join('') : `<div class="jd-empty">لا توجد مشاريع أخرى مطابقة.</div>`;
 
   document.querySelectorAll('[data-openproject]').forEach(el=>{
     el.addEventListener('click', ()=>openProjectDetail(el.dataset.openproject, formMap[el.dataset.openproject]));
