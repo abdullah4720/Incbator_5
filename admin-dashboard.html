@@ -1555,6 +1555,7 @@ async function renderJudgingCommittees(){
       </div>
       <button class="btn btn-primary btn-sm" id="autoAssignProjectsBtn">${icon('sparkles',{size:13})} إسناد تلقائي</button>
       ${committeeAssignedFormIds.size ? `<button class="btn btn-ghost btn-sm" id="rebalanceCommitteesBtn">${icon('sparkles',{size:13})} إعادة توزيع اللجان فقط (بدون تغيير الفترات)</button>` : ''}
+      ${committeeAssignedFormIds.size ? `<button class="btn btn-ghost btn-sm" id="syncJudgeAssignmentsBtn">${icon('rotate-ccw',{size:13})} تدقيق ومزامنة تكليف المحكّمين</button>` : ''}
       ${committeeAssignedFormIds.size ? `<button class="btn btn-ghost btn-sm" id="resetAllAssignmentsBtn" style="color:var(--danger)">${icon('trash-2',{size:13})} إعادة تعيين الإسناد بالكامل</button>` : ''}
     </div>
 
@@ -1633,6 +1634,8 @@ async function renderJudgingCommittees(){
   document.getElementById('autoAssignProjectsBtn').addEventListener('click', ()=>openAutoAssignBasisModal(JUDGING_COMMITTEES_CACHE, membersByCommittee, submittedRows, projectsByCommittee, committeeAssignedFormIds));
   const rebalanceBtn = document.getElementById('rebalanceCommitteesBtn');
   if(rebalanceBtn) rebalanceBtn.addEventListener('click', ()=>openRebalanceCommitteesModal(JUDGING_COMMITTEES_CACHE, membersByCommittee, committeeAssignments||[], submittedRows));
+  const syncBtn = document.getElementById('syncJudgeAssignmentsBtn');
+  if(syncBtn) syncBtn.addEventListener('click', ()=>runSyncJudgeAssignments(JUDGING_COMMITTEES_CACHE, membersByCommittee, committeeAssignments||[]));
   const resetAllBtn = document.getElementById('resetAllAssignmentsBtn');
   if(resetAllBtn) resetAllBtn.addEventListener('click', ()=>confirmResetAllAssignments(committeeAssignedFormIds.size));
   document.getElementById('openProgressBtn').addEventListener('click', ()=>{ judgingSubtab='progress'; renderJudgingTab(); });
@@ -2008,6 +2011,71 @@ async function runRebalanceCommittees(committees, membersByCommittee, committeeA
     showToast(`تم نقل ${okCount} مشروعًا بين اللجان${failCount?` (فشل ${failCount})`:''}${skippedCount?` — استُثني ${skippedCount} له تقييم مُرسَل`:''}`);
     renderJudgingCommittees();
   }, 'إعادة التوزيع');
+}
+
+/* تدقيق ومزامنة تكليف المحكّمين — يكشف أي تعارض بين عضوية اللجنة الحالية
+   وتكليف judge_assignments الفردي الفعلي (قد ينشأ من تعديلات يدوية قديمة،
+   أو أعضاء أُضيفوا/أُزيلوا من لجنة بعد إسناد مشاريعها)، ويصلحه: يضيف الناقص
+   ويحذف الزائد (المشاريع اللي عندها تقييم مُرسَل تُستثنى من الحذف حمايةً لها) */
+async function runSyncJudgeAssignments(committees, membersByCommittee, committeeAssignments){
+  if(!committeeAssignments.length){ showToast('لا يوجد إسناد لجان بعد'); return; }
+  const btn = document.getElementById('syncJudgeAssignmentsBtn');
+  const original = btn.innerHTML; btn.disabled = true; btn.innerHTML = 'جارٍ التدقيق…';
+
+  try{
+    const formIds = [...new Set(committeeAssignments.map(a=>a.form_id))];
+    const CHUNK = 40; const chunks = [];
+    for(let i=0;i<formIds.length;i+=CHUNK) chunks.push(formIds.slice(i,i+CHUNK));
+    const [currentRes, evalRes] = await Promise.all([
+      Promise.all(chunks.map(c=>sb.from('judge_assignments').select('judge_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID).in('form_id', c))),
+      Promise.all(chunks.map(c=>sb.from('judge_evaluations').select('judge_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID).eq('is_submitted', true).in('form_id', c))),
+    ]);
+    const currentAssignments = currentRes.flatMap(r=>r.data||[]);
+    const evaluatedPairs = new Set(evalRes.flatMap(r=>r.data||[]).map(e=>`${e.judge_id}|${e.form_id}`));
+
+    // المجموعة الصحيحة المتوقَّعة: كل (عضو لجنة × مشروع مُسنَد لنفس لجنته)
+    const expectedPairs = new Set();
+    committeeAssignments.forEach(a=>{
+      (membersByCommittee[a.committee_id]||[]).forEach(jid=>{ expectedPairs.add(`${jid}|${a.form_id}`); });
+    });
+    const currentPairsSet = new Set(currentAssignments.map(a=>`${a.judge_id}|${a.form_id}`));
+
+    const toAdd = [...expectedPairs].filter(p=>!currentPairsSet.has(p)).map(p=>{ const [judge_id, form_id] = p.split('|'); return { judge_id, form_id }; });
+    // الزائد الحقيقي: تكليف حالي غير متوقَّع، ومالوش تقييم مُرسَل (حماية)
+    const toRemove = currentAssignments.filter(a=>{
+      const key = `${a.judge_id}|${a.form_id}`;
+      return !expectedPairs.has(key) && !evaluatedPairs.has(key);
+    });
+    const protectedStaleCount = currentAssignments.filter(a=>{
+      const key = `${a.judge_id}|${a.form_id}`;
+      return !expectedPairs.has(key) && evaluatedPairs.has(key);
+    }).length;
+
+    if(!toAdd.length && !toRemove.length){
+      showToast('كل تكليفات المحكّمين متطابقة مع عضوية اللجان — لا تعارض');
+      return;
+    }
+
+    openConfirm(`التدقيق كشف: ${toAdd.length} تكليفًا ناقصًا سيُضاف، و${toRemove.length} تكليفًا زائدًا (غير مرتبط بعضوية أي لجنة حاليًا) سيُحذف${protectedStaleCount?`، مع استثناء ${protectedStaleCount} تكليفًا زائدًا محميًّا لوجود تقييم مُرسَل عليه` : ''}. متابعة؟`, async ()=>{
+      let addOk=0, addFail=0, delOk=0, delFail=0;
+      if(toAdd.length){
+        const rows = toAdd.map(p=>({ judge_id: p.judge_id, form_id: p.form_id, round_id: CURRENT_ADMIN_ROUND_ID, assigned_by: currentAdmin.id }));
+        const { error, data } = await sb.from('judge_assignments').upsert(rows, { onConflict: 'judge_id,form_id,round_id' }).select();
+        if(error){ addFail = rows.length; } else { addOk = (data||rows).length; }
+      }
+      for(const a of toRemove){
+        const { error } = await sb.from('judge_assignments').delete().eq('judge_id', a.judge_id).eq('form_id', a.form_id).eq('round_id', CURRENT_ADMIN_ROUND_ID);
+        if(error) delFail++; else delOk++;
+      }
+      showToast(`تمت المزامنة: أُضيف ${addOk}${addFail?` (فشل ${addFail})`:''}، حُذف ${delOk}${delFail?` (فشل ${delFail})`:''}`);
+      renderJudgingCommittees();
+    }, 'مزامنة');
+  } catch(e){
+    console.error(e);
+    showToast('تعذّر التدقيق: ' + (e.message||'خطأ غير معروف'));
+  } finally {
+    btn.disabled = false; btn.innerHTML = original;
+  }
 }
 
 async function openOrphanedAssignmentsModal(orphanedFormIds, submittedRows){
