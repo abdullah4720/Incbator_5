@@ -1009,14 +1009,18 @@ async function loadProjectLists(){
 
   const forms = await chunkedInQuery(allFormIds, c=>sb.from('verification_forms').select('id, project_id, status').in('id', c));
   const projectIds = [...new Set((forms||[]).map(f=>f.project_id))];
-  const [projects, domainMap, {data: myEvals}] = await Promise.all([
+  const [projects, domainMap, {data: myEvals}, {data: periodAssignments}, {data: periodsRaw}] = await Promise.all([
     chunkedInQuery(projectIds, c=>sb.from('eligible_projects').select('project_id, project_name, track').in('project_id', c)),
     fetchDomainsForForms(allFormIds),
     sb.from('judge_evaluations').select('form_id, is_submitted').eq('judge_id', CURRENT_JUDGE_ID).eq('round_id', CURRENT_ROUND_ID),
+    sb.from('committee_assignments').select('form_id, period_id').eq('round_id', CURRENT_ROUND_ID),
+    sb.from('judging_periods').select('id, name, start_time, end_time, order_index').eq('round_id', CURRENT_ROUND_ID).order('order_index'),
   ]);
   const projMap = {}; (projects||[]).forEach(p=>{ projMap[p.project_id] = p; });
   const evalMap = {}; (myEvals||[]).forEach(e=>{ evalMap[e.form_id] = e.is_submitted; });
-  const formMap = {}; (forms||[]).forEach(f=>{ formMap[f.id] = { ...f, ...(projMap[f.project_id]||{}), domain: domainMap[f.id], evaluated: !!evalMap[f.id] }; });
+  const periodByForm = {}; (periodAssignments||[]).forEach(a=>{ periodByForm[a.form_id] = a.period_id; });
+  const periodsById = {}; (periodsRaw||[]).forEach(p=>{ periodsById[p.id] = p; });
+  const formMap = {}; (forms||[]).forEach(f=>{ formMap[f.id] = { ...f, ...(projMap[f.project_id]||{}), domain: domainMap[f.id], evaluated: !!evalMap[f.id], period_id: periodByForm[f.id]||null }; });
 
   renderJdProgressBanner(myFormIds.length, myFormIds.filter(id=>evalMap[id]).length);
 
@@ -1059,7 +1063,25 @@ async function loadProjectLists(){
     </div>`;
   };
 
-  assignedGrid.innerHTML = statusFiltered.length ? statusFiltered.map(p=>cardHTML(p.id)).join('') : `<div class="jd-empty">لا توجد مشاريع مطابقة ضمن هذا التصنيف.</div>`;
+  if(!statusFiltered.length){
+    assignedGrid.innerHTML = `<div class="jd-empty">لا توجد مشاريع مطابقة ضمن هذا التصنيف.</div>`;
+  } else {
+    // تجميع حسب الفترة — بترتيب الفترات الزمني، ثم "بدون فترة محدَّدة" بالنهاية
+    const groups = {};
+    statusFiltered.forEach(p=>{ (groups[p.period_id||'none'] = groups[p.period_id||'none']||[]).push(p); });
+    const orderedPeriodIds = Object.keys(groups).filter(k=>k!=='none').sort((a,b)=>{
+      const pa = periodsById[a], pb = periodsById[b];
+      return (pa?pa.order_index:0) - (pb?pb.order_index:0);
+    });
+    if(groups['none']) orderedPeriodIds.push('none');
+
+    assignedGrid.innerHTML = orderedPeriodIds.map(pid=>{
+      const period = periodsById[pid];
+      const label = period ? `${escHtmlJD(period.name)}${period.start_time?` <span style="font-weight:400;color:var(--ink-400)">(${escHtmlJD(period.start_time)}${period.end_time?'–'+escHtmlJD(period.end_time):''})</span>`:''}` : 'بدون فترة محدَّدة بعد';
+      return `<div class="jd-period-group-header" style="grid-column:1 / -1;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;font-size:13.5px;margin:18px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--gold-500)">${label} <span style="font-weight:400;color:var(--ink-400);font-size:12px">(${groups[pid].length})</span></div>
+      <div class="jd-project-grid" style="grid-column:1 / -1">${groups[pid].map(p=>cardHTML(p.id)).join('')}</div>`;
+    }).join('');
+  }
   otherGrid.innerHTML = filteredOtherIds.length ? filteredOtherIds.map(cardHTML).join('') : `<div class="jd-empty">لا توجد مشاريع أخرى مطابقة.</div>`;
 
   document.querySelectorAll('[data-openproject]').forEach(el=>{
@@ -1300,16 +1322,6 @@ async function openProjectDetail(formId, projInfo){
   const domainValue = avMap['f1_4'] || null;
 
   let sectionsHTML = '';
-  if(presentation){
-    sectionsHTML += `
-      <div class="jd-section-card" style="border:2px solid var(--teal-600)">
-        <div class="jd-section-head"><div class="jd-section-icon" style="background:var(--teal-100);color:var(--teal-600)">${icon('file-text',{size:15})}</div><div class="jd-section-head-title">ملف العرض التقديمي للتحكيم</div></div>
-        <div class="jd-file-grid"><a href="#" class="jd-file-card" data-viewfile="${escHtmlJD(presentation.storage_path)}">
-          <div class="jd-file-icon" style="background:var(--danger-100);color:var(--danger)">${icon('file-text',{size:18})}</div>
-          <div class="jd-file-name">${escHtmlJD(presentation.file_name)}</div>
-        </a></div>
-      </div>`;
-  }
 
   // 0) نظرة عامة سريعة — ملخص بلمحة قبل التفاصيل الكاملة
   sectionsHTML += `
