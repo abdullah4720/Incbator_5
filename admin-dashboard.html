@@ -815,13 +815,14 @@ function showToast(msg){
   window._toastTimer=setTimeout(()=>t.classList.remove('show'),2600);
 }
 function uid(prefix){ return prefix+"_"+Math.random().toString(36).slice(2,8); }
-function openConfirm(text, onOk){
+function openConfirm(text, onOk, okLabel){
   restoreConfirmModal();
   document.getElementById('confirmText').textContent = text;
   const modal = document.getElementById('confirmModal');
   modal.classList.add('show');
   const ok = document.getElementById('confirmOk');
   const cancel = document.getElementById('confirmCancel');
+  ok.textContent = okLabel || 'حذف';
   const cleanup = ()=>{ modal.classList.remove('show'); ok.onclick=null; cancel.onclick=null; };
   ok.onclick = async ()=>{ await onOk(); cleanup(); };
   cancel.onclick = cleanup;
@@ -1716,7 +1717,7 @@ async function runAutoAssignPeriods(committeeAssignments){
     }
     showToast(`تم توزيع ${okCount} مشروعًا على الفترات${failCount?` (فشل ${failCount})`:''}`);
     renderJudgingCommittees();
-  });
+  }, 'توزيع');
 }
 
 /* إعادة تعيين كاملة: تحذف كل إسناد اللجان والفترات لهذي الجولة، ويرجع كل
@@ -1905,7 +1906,7 @@ async function runAutoAssignProjects(committees, membersByCommittee, submittedRo
     if(e2){ showToast('تعذّر إسناد المحكّمين: '+e2.message); return; }
     showToast(`تم إسناد ${newRows.length} مشروعًا جديدًا`);
     renderJudgingCommittees();
-  });
+  }, 'إسناد');
 }
 
 function openRebalanceCommitteesModal(committees, membersByCommittee, committeeAssignments, submittedRows){
@@ -2006,7 +2007,7 @@ async function runRebalanceCommittees(committees, membersByCommittee, committeeA
     }
     showToast(`تم نقل ${okCount} مشروعًا بين اللجان${failCount?` (فشل ${failCount})`:''}${skippedCount?` — استُثني ${skippedCount} له تقييم مُرسَل`:''}`);
     renderJudgingCommittees();
-  });
+  }, 'إعادة التوزيع');
 }
 
 async function openOrphanedAssignmentsModal(orphanedFormIds, submittedRows){
@@ -3613,7 +3614,7 @@ function renderEligibility(){
       eligibleProjects.forEach(p=>{ p.edit_locked = true; });
       renderEligTbody(); updateBulkLockSummary();
       showToast('تم قفل التعديل لكل الفرق');
-    });
+    }, 'قفل التعديل');
   });
   document.getElementById('bulkUnlockBtn').addEventListener('click', ()=>{
     openConfirm(`سيُلغى قفل التعديل عن كل الفرق (${eligibleProjects.length} فريقًا) دفعة واحدة. متابعة؟`, async ()=>{
@@ -3622,7 +3623,7 @@ function renderEligibility(){
       eligibleProjects.forEach(p=>{ p.edit_locked = false; });
       renderEligTbody(); updateBulkLockSummary();
       showToast('تم إلغاء قفل التعديل عن كل الفرق');
-    });
+    }, 'إلغاء القفل');
   });
 
   document.getElementById('eligSearch').addEventListener('input', e=>{ eligFilter.q=e.target.value; renderEligTbody(); });
@@ -3707,7 +3708,7 @@ function resetParticipantPassword(projectId){
     p.has_password = false;
     renderEligTbody();
     showToast(`تم مسح كلمة مرور "${p.project_name}" — سيُنشئ الفريق كلمة مرور جديدة عند دخوله القادم`);
-  });
+  }, 'مسح كلمة المرور');
 }
 
 /* ---------------- إضافة / تعديل فريق واحد ---------------- */
