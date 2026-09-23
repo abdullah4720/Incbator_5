@@ -423,6 +423,7 @@ let ASSIGNED_PERIOD = null; // { name, start_time, end_time }
 let JUDGING_CRITERIA_LIST = [];
 let JUDGING_PRESENTATION = null; // { file_name, storage_path, uploaded_at } أو null
 let PRESENTATION_DEADLINE_PASSED = false;
+let PRESENTATION_DEADLINE_AT = null; // القيمة الفعلية للموعد، تُعرَض للمشارك
 let SUBMITTED_COMPLETION_PCT = null; // النسبة المجمَّدة وقت الإرسال — تُعرَض بدل الحساب الحي بعد الإرسال
 let IS_READONLY = false;         // true لو المشروع أصبح غير نشط — يمنع التعديل بدون ما يمنع الدخول للعرض
 let QUALIFICATION_BADGE = null;  // 'ok' | 'none' | null (null = غير منشورة أو غير محسوبة)
@@ -1340,11 +1341,12 @@ function renderThankYouScreen(){
     ${ASSIGNED_COMMITTEE_NAME ? `
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--line)">
       <div style="font-weight:700;color:var(--navy-800);font-size:12.5px;margin-bottom:8px">${icon('file-text',{size:13})} ملف العرض التقديمي للتحكيم</div>
+      ${(PRESENTATION_DEADLINE_AT && !PRESENTATION_DEADLINE_PASSED) ? `<div style="font-size:11.5px;color:var(--amber,#B8860B);margin-bottom:10px">⏰ آخر موعد للرفع أو الاستبدال: ${new Date(PRESENTATION_DEADLINE_AT).toLocaleDateString('ar-SA')} — ${new Date(PRESENTATION_DEADLINE_AT).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</div>` : ''}
       ${JUDGING_PRESENTATION ? `
       <div class="file-chip" style="margin-bottom:8px"><span class="fc-name">${icon('file-text',{size:13})} ${escHtml(JUDGING_PRESENTATION.file_name)}</span>${PRESENTATION_DEADLINE_PASSED ? '' : `<button type="button" class="fc-remove" id="btnReplacePresentation">استبدال</button>`}</div>
       <div style="font-size:11px;color:var(--ink-400)">تم الرفع بتاريخ ${new Date(JUDGING_PRESENTATION.uploaded_at).toLocaleDateString('ar-SA')}${PRESENTATION_DEADLINE_PASSED ? ' — انتهى موعد الاستبدال' : ''}</div>
       ` : PRESENTATION_DEADLINE_PASSED ? `
-      <div class="req-banner" style="background:var(--danger-100);color:var(--danger)">انتهى الموعد النهائي لرفع ملف العرض التقديمي، ولم يُرفع أي ملف بعد. تواصلوا مع فريق البرنامج إذا احتجتم استثناءً.</div>
+      <div class="req-banner" style="background:var(--danger-100);color:var(--danger)">انتهى الموعد النهائي لرفع ملف العرض التقديمي (${PRESENTATION_DEADLINE_AT ? new Date(PRESENTATION_DEADLINE_AT).toLocaleDateString('ar-SA') : ''})، ولم يُرفع أي ملف بعد. تواصلوا مع فريق البرنامج إذا احتجتم استثناءً.</div>
       ` : `
       <div class="file-drop" id="presentationDropZone">
         <div class="fi-title">اضغطوا لرفع ملف العرض التقديمي (PDF)</div>
@@ -1734,6 +1736,7 @@ async function initApp(){
               JUDGING_PRESENTATION = pres || null;
               const { data: presSettings } = await SB.from('form_settings').select('presentation_deadline_at').eq('id', 1).maybeSingle();
               if(presSettings && presSettings.presentation_deadline_at){
+                PRESENTATION_DEADLINE_AT = presSettings.presentation_deadline_at;
                 PRESENTATION_DEADLINE_PASSED = new Date() > new Date(presSettings.presentation_deadline_at);
               }
             }
