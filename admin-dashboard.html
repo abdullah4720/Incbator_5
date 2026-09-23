@@ -730,7 +730,7 @@ let pendingImportRows = []; // معاينة قبل التأكيد النهائي
 
 /* ---------------- إعدادات النموذج (تُحمَّل من Supabase) ---------------- */
 let formSettings = {
-  programName: "", formTitle: "", deadline: "",
+  programName: "", formTitle: "", deadline: "", presentationDeadline: "",
   isOpen: true, allowEdit: true, notifyBefore48: true, notifyBefore24: true,
   maxPdfMb: 10, maxVideoMb: 200, maxVideoMinutes: 5, maxFilesPerField: 5,
   qualificationPublished: false,
@@ -778,6 +778,7 @@ async function loadFormSettings(){
   formSettings = {
     programName: data.program_name, formTitle: data.form_title,
     deadline: data.deadline_at ? new Date(data.deadline_at).toISOString().slice(0,16) : "",
+    presentationDeadline: data.presentation_deadline_at ? new Date(data.presentation_deadline_at).toISOString().slice(0,16) : "",
     isOpen: data.is_open, allowEdit: data.allow_edit_after_submit,
     notifyBefore48: data.notify_before_48h, notifyBefore24: data.notify_before_24h,
     maxPdfMb: data.max_pdf_mb, maxVideoMb: data.max_video_mb,
@@ -1391,6 +1392,7 @@ const JUDGING_SUBTABS = [
   {id:'criteria', l:'المعايير'},
   {id:'periods', l:'الفترات'},
   {id:'committees', l:'اللجان والتعيين'},
+  {id:'presentations', l:'ملفات العروض'},
   {id:'judges', l:'المحكّمون'},
   {id:'results', l:'النتائج المجمّعة'},
   {id:'progress', l:'سير التحكيم'},
@@ -1415,6 +1417,7 @@ async function renderJudgingTab(){
   else if(judgingSubtab==='rounds') renderJudgingRounds();
   else if(judgingSubtab==='periods') renderJudgingPeriods();
   else if(judgingSubtab==='committees') renderJudgingCommittees();
+  else if(judgingSubtab==='presentations') renderJudgingPresentationsTab();
   else if(judgingSubtab==='criteria') renderJudgingCriteria();
   else if(judgingSubtab==='judges') renderJudgingJudges();
   else if(judgingSubtab==='assignment') renderJudgingAssignment();
@@ -2424,6 +2427,137 @@ function openPeriodModal(existing){
     modal.classList.remove('show'); restoreConfirmModal();
     showToast('تم الحفظ'); renderJudgingPeriods();
   });
+}
+
+/* ---------------- ملفات العروض التقديمية — عرض مفلتَر + تصدير للميسّرين ---------------- */
+let PRESENTATIONS_FILTER = { track: '', committeeId: '' };
+async function renderJudgingPresentationsTab(){
+  const content = document.getElementById('judgingSubContent');
+  await ensureRoundsLoaded();
+  if(!CURRENT_ADMIN_ROUND_ID){ content.innerHTML = roundSelectorHTML(); return; }
+  content.innerHTML = `${roundSelectorHTML()}<div class="empty-hint">جارٍ التحميل…</div>`;
+
+  const [{data: committees}, {data: assignments}, {data: presentations}, classified] = await Promise.all([
+    sb.from('judging_committees').select('id, name, track, domain').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
+    sb.from('committee_assignments').select('form_id, committee_id, period_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+    sb.from('judging_presentations').select('form_id, file_name, storage_path, uploaded_at'),
+    computeQualificationClassification(),
+  ]);
+  const { data: periods } = await sb.from('judging_periods').select('id, name').eq('round_id', CURRENT_ADMIN_ROUND_ID);
+  const committeeById = {}; (committees||[]).forEach(c=>{ committeeById[c.id] = c; });
+  const periodById = {}; (periods||[]).forEach(p=>{ periodById[p.id] = p; });
+  const presByForm = {}; (presentations||[]).forEach(p=>{ presByForm[p.form_id] = p; });
+  const infoByForm = {}; classified.forEach(r=>{ infoByForm[r.form_id] = r; });
+
+  // فقط المشاريع المُسندة فعليًا للجان بهذي الجولة — نطاق التحكيم الفعلي
+  let rows = (assignments||[]).map(a=>{
+    const info = infoByForm[a.form_id] || {};
+    const committee = committeeById[a.committee_id];
+    return {
+      form_id: a.form_id, project_id: info.project_id||'', project_name: info.project_name||'',
+      track: info.track||'', committeeName: committee?committee.name:'—', committeeId: a.committee_id,
+      periodName: a.period_id && periodById[a.period_id] ? periodById[a.period_id].name : '—',
+      presentation: presByForm[a.form_id] || null,
+    };
+  });
+
+  const tracks = [...new Set(rows.map(r=>r.track).filter(Boolean))];
+  if(PRESENTATIONS_FILTER.track) rows = rows.filter(r=>r.track===PRESENTATIONS_FILTER.track);
+  if(PRESENTATIONS_FILTER.committeeId) rows = rows.filter(r=>String(r.committeeId)===String(PRESENTATIONS_FILTER.committeeId));
+  const uploadedCount = rows.filter(r=>r.presentation).length;
+
+  content.innerHTML = `
+    ${roundSelectorHTML()}
+    <div class="req-banner" style="margin-bottom:14px">قائمة موحَّدة بكل ملفات العروض التقديمية للمشاريع المُسندة للتحكيم — للتنظيم وتسهيل الوصول للميسّرين أمام كل لجنة.</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
+      <select id="presFilterTrack" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px">
+        <option value="">كل المسارات</option>
+        ${tracks.map(t=>`<option value="${escHtml(t)}" ${PRESENTATIONS_FILTER.track===t?'selected':''}>${escHtml(t)}</option>`).join('')}
+      </select>
+      <select id="presFilterCommittee" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px">
+        <option value="">كل اللجان</option>
+        ${(committees||[]).map(c=>`<option value="${c.id}" ${String(PRESENTATIONS_FILTER.committeeId)===String(c.id)?'selected':''}>${escHtml(c.name)}</option>`).join('')}
+      </select>
+      <span style="font-size:12.5px;color:var(--ink-400)">${uploadedCount} من ${rows.length} مرفوع ضمن الفلتر الحالي</span>
+      <div style="flex:1"></div>
+      <button class="btn btn-ghost btn-sm" id="exportPresLinksBtn">${icon('download',{size:13})} Excel (روابط سريعة)</button>
+      <button class="btn btn-primary btn-sm" id="exportPresZipBtn">${icon('download',{size:13})} ZIP منظَّم حسب اللجنة</button>
+    </div>
+
+    ${rows.length===0 ? `<div class="empty-hint">لا توجد مشاريع مُسندة للجان ضمن هذا الفلتر</div>` : `
+    <div class="card"><div class="table-wrap"><table>
+      <thead><tr><th>رقم المشروع</th><th>الاسم</th><th>المسار</th><th>اللجنة</th><th>الفترة</th><th>الملف</th><th></th></tr></thead>
+      <tbody>${rows.map(r=>`<tr>
+        <td class="mono">${escHtml(r.project_id)}</td>
+        <td>${escHtml(r.project_name)}</td>
+        <td>${escHtml(r.track)}</td>
+        <td>${escHtml(r.committeeName)}</td>
+        <td>${escHtml(r.periodName)}</td>
+        <td>${r.presentation ? `<span class="badge ok">${icon('check',{size:10})} مرفوع</span>` : `<span class="badge no">لم يُرفع</span>`}</td>
+        <td>${r.presentation ? `<button class="btn btn-ghost btn-sm" data-openpres="${escHtml(r.presentation.storage_path)}">فتح</button>` : ''}</td>
+      </tr>`).join('')}</tbody>
+    </table></div></div>`}
+  `;
+  document.getElementById('presFilterTrack').addEventListener('change', e=>{ PRESENTATIONS_FILTER.track = e.target.value; renderJudgingPresentationsTab(); });
+  document.getElementById('presFilterCommittee').addEventListener('change', e=>{ PRESENTATIONS_FILTER.committeeId = e.target.value; renderJudgingPresentationsTab(); });
+  content.querySelectorAll('[data-openpres]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const { data, error } = await sb.storage.from('form-attachments').createSignedUrl(b.dataset.openpres, 300);
+      if(error || !data){ showToast('تعذّر فتح الملف'); return; }
+      window.open(data.signedUrl, '_blank');
+    });
+  });
+  document.getElementById('exportPresLinksBtn').addEventListener('click', ()=>runExportPresentationLinks(rows));
+  document.getElementById('exportPresZipBtn').addEventListener('click', ()=>runExportPresentationZip(rows));
+}
+
+async function runExportPresentationLinks(rows){
+  const uploaded = rows.filter(r=>r.presentation);
+  if(!uploaded.length){ showToast('لا توجد ملفات مرفوعة ضمن الفلتر الحالي'); return; }
+  const btn = document.getElementById('exportPresLinksBtn');
+  const original = btn.innerHTML; btn.disabled = true; btn.innerHTML = 'جارٍ التجهيز…';
+  try{
+    // روابط بصلاحية 48 ساعة — تكفي مدة فعالية التحكيم عادةً
+    const rowsWithLinks = await Promise.all(uploaded.map(async r=>{
+      const { data } = await sb.storage.from('form-attachments').createSignedUrl(r.presentation.storage_path, 172800);
+      return [r.project_id, r.project_name, r.track, r.committeeName, r.periodName, r.presentation.file_name, data ? data.signedUrl : ''];
+    }));
+    const header = ['رقم المشروع','الاسم','المسار','اللجنة','الفترة','اسم الملف','رابط الفتح (صالح 48 ساعة)'];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, ...rowsWithLinks]), 'ملفات العروض');
+    XLSX.writeFile(wb, `ملفات_العروض_التقديمية_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast(`تم تصدير ${uploaded.length} رابطًا بنجاح`);
+  } catch(e){ console.error(e); showToast('تعذّر التصدير: '+(e.message||'')); }
+  finally{ btn.disabled = false; btn.innerHTML = original; }
+}
+
+async function runExportPresentationZip(rows){
+  const uploaded = rows.filter(r=>r.presentation);
+  if(!uploaded.length){ showToast('لا توجد ملفات مرفوعة ضمن الفلتر الحالي'); return; }
+  if(typeof JSZip === 'undefined'){ showToast('تعذّر تحميل مكتبة الضغط'); return; }
+  showBatchProgressModal(uploaded.length, 'جارٍ تحميل ملفات العروض…');
+  const zip = new JSZip();
+  let done=0, failed=0;
+  for(const r of uploaded){
+    if(batchCancelled) break;
+    try{
+      const { data: blob, error } = await sb.storage.from('form-attachments').download(r.presentation.storage_path);
+      if(error) throw error;
+      const safeCommittee = (r.committeeName||'بدون_لجنة').replace(/[\\/:*?"<>|]/g,'_');
+      const ext = (r.presentation.file_name.split('.').pop()||'pdf');
+      zip.folder(safeCommittee).file(`${r.project_id}_${(r.project_name||'').replace(/[\\/:*?"<>|]/g,'_')}.${ext}`, blob);
+    }catch(e){ failed++; console.error(e); }
+    done++; updateBatchProgress(done, uploaded.length, failed);
+  }
+  closeBatchProgressModal();
+  if(batchCancelled){ showToast('تم إلغاء التنزيل'); return; }
+  const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{level:6} });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `ملفات_العروض_حسب_اللجنة_${new Date().toISOString().slice(0,10)}.zip`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showToast(`تم تنزيل ${done-failed} ملفًا بنجاح${failed?` (فشل ${failed})`:''}`);
 }
 
 /* ---------------- معايير التحكيم ---------------- */
@@ -3879,6 +4013,11 @@ function renderSettings(){
           </div>
         </div>
         <div class="field-inline">
+          <label class="flabel">الموعد النهائي لرفع ملف العرض التقديمي للتحكيم</label>
+          <input type="datetime-local" id="st_pres_deadline" value="${formSettings.presentationDeadline}">
+          <div style="font-size:11.5px;color:var(--ink-400);margin-top:4px">مستقل تمامًا عن موعد النموذج أعلاه — بعده يُقفَل رفع/استبدال العرض تلقائيًا للمشارك. اتركه فارغًا لعدم تحديد موعد.</div>
+        </div>
+        <div class="field-inline">
           <label class="flabel">الإشعارات البريدية التلقائية</label>
           <div style="display:flex;flex-direction:column;gap:10px">
             <div style="display:flex;align-items:center;gap:10px"><div class="toggle"><input type="checkbox" id="st_notify48" ${formSettings.notifyBefore48?'checked':''}><label class="tk" for="st_notify48"></label></div><span style="font-size:12.5px">تنبيه قبل 48 ساعة من الموعد النهائي</span></div>
@@ -3913,6 +4052,7 @@ function renderSettings(){
     formSettings.programName = document.getElementById('st_program').value;
     formSettings.formTitle = document.getElementById('st_title').value;
     formSettings.deadline = document.getElementById('st_deadline').value;
+    formSettings.presentationDeadline = document.getElementById('st_pres_deadline').value;
     formSettings.isOpen = document.getElementById('st_open').checked;
     formSettings.notifyBefore48 = document.getElementById('st_notify48').checked;
     formSettings.notifyBefore24 = document.getElementById('st_notify24').checked;
@@ -3926,6 +4066,7 @@ function renderSettings(){
       program_name: formSettings.programName,
       form_title: formSettings.formTitle,
       deadline_at: formSettings.deadline ? new Date(formSettings.deadline).toISOString() : null,
+      presentation_deadline_at: formSettings.presentationDeadline ? new Date(formSettings.presentationDeadline).toISOString() : null,
       is_open: formSettings.isOpen,
       notify_before_48h: formSettings.notifyBefore48,
       notify_before_24h: formSettings.notifyBefore24,

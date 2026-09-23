@@ -422,6 +422,7 @@ let ASSIGNED_COMMITTEE_NAME = null;
 let ASSIGNED_PERIOD = null; // { name, start_time, end_time }
 let JUDGING_CRITERIA_LIST = [];
 let JUDGING_PRESENTATION = null; // { file_name, storage_path, uploaded_at } أو null
+let PRESENTATION_DEADLINE_PASSED = false;
 let SUBMITTED_COMPLETION_PCT = null; // النسبة المجمَّدة وقت الإرسال — تُعرَض بدل الحساب الحي بعد الإرسال
 let IS_READONLY = false;         // true لو المشروع أصبح غير نشط — يمنع التعديل بدون ما يمنع الدخول للعرض
 let QUALIFICATION_BADGE = null;  // 'ok' | 'none' | null (null = غير منشورة أو غير محسوبة)
@@ -1340,15 +1341,17 @@ function renderThankYouScreen(){
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--line)">
       <div style="font-weight:700;color:var(--navy-800);font-size:12.5px;margin-bottom:8px">${icon('file-text',{size:13})} ملف العرض التقديمي للتحكيم</div>
       ${JUDGING_PRESENTATION ? `
-      <div class="file-chip" style="margin-bottom:8px"><span class="fc-name">${icon('file-text',{size:13})} ${escHtml(JUDGING_PRESENTATION.file_name)}</span><button type="button" class="fc-remove" id="btnReplacePresentation">استبدال</button></div>
-      <div style="font-size:11px;color:var(--ink-400)">تم الرفع بتاريخ ${new Date(JUDGING_PRESENTATION.uploaded_at).toLocaleDateString('ar-SA')}</div>
+      <div class="file-chip" style="margin-bottom:8px"><span class="fc-name">${icon('file-text',{size:13})} ${escHtml(JUDGING_PRESENTATION.file_name)}</span>${PRESENTATION_DEADLINE_PASSED ? '' : `<button type="button" class="fc-remove" id="btnReplacePresentation">استبدال</button>`}</div>
+      <div style="font-size:11px;color:var(--ink-400)">تم الرفع بتاريخ ${new Date(JUDGING_PRESENTATION.uploaded_at).toLocaleDateString('ar-SA')}${PRESENTATION_DEADLINE_PASSED ? ' — انتهى موعد الاستبدال' : ''}</div>
+      ` : PRESENTATION_DEADLINE_PASSED ? `
+      <div class="req-banner" style="background:var(--danger-100);color:var(--danger)">انتهى الموعد النهائي لرفع ملف العرض التقديمي، ولم يُرفع أي ملف بعد. تواصلوا مع فريق البرنامج إذا احتجتم استثناءً.</div>
       ` : `
       <div class="file-drop" id="presentationDropZone">
         <div class="fi-title">اضغطوا لرفع ملف العرض التقديمي (PDF)</div>
         <div class="fi-sub">الحد الأقصى ${MAX_PDF_MB} م.ب</div>
       </div>
       `}
-      <input type="file" id="presentationFileInput" accept=".pdf" style="display:none">
+      ${PRESENTATION_DEADLINE_PASSED ? '' : `<input type="file" id="presentationFileInput" accept=".pdf" style="display:none">`}
     </div>` : ''}
   </div>` : '';
 
@@ -1406,6 +1409,7 @@ function renderThankYouScreen(){
   if(presInput) presInput.addEventListener('change', async e=>{
     const file = e.target.files[0];
     if(!file) return;
+    if(PRESENTATION_DEADLINE_PASSED){ showToast('انتهى الموعد النهائي لرفع ملف العرض التقديمي'); presInput.value=''; return; }
     if(!/\.pdf$/i.test(file.name) && file.type!=='application/pdf'){ showToast('يُقبل PDF فقط'); presInput.value=''; return; }
     if(file.size > MAX_PDF_MB*1024*1024){ showToast(`تجاوز الحجم المسموح به (الحد الأقصى ${MAX_PDF_MB} م.ب)`); presInput.value=''; return; }
     showToast('جارٍ رفع العرض التقديمي…');
@@ -1728,6 +1732,10 @@ async function initApp(){
               ASSIGNED_PERIOD = period || null;
               const { data: pres } = await SB.from('judging_presentations').select('file_name, storage_path, uploaded_at').eq('form_id', FORM_ID).maybeSingle();
               JUDGING_PRESENTATION = pres || null;
+              const { data: presSettings } = await SB.from('form_settings').select('presentation_deadline_at').eq('id', 1).maybeSingle();
+              if(presSettings && presSettings.presentation_deadline_at){
+                PRESENTATION_DEADLINE_PASSED = new Date() > new Date(presSettings.presentation_deadline_at);
+              }
             }
             const { data: criteria } = await SB.from('judging_criteria').select('label, description, max_score').eq('round_id', activeRound.id).eq('is_active', true).order('order_index');
             JUDGING_CRITERIA_LIST = criteria || [];
