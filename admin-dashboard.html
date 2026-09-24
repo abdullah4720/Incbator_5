@@ -1510,7 +1510,7 @@ async function renderJudgingCommittees(){
     sb.from('judging_committees').select('*').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
     sb.from('committee_members').select('committee_id, judge_id'),
     sb.from('judges').select('id, full_name').eq('is_active', true).order('full_name'),
-    sb.from('committee_assignments').select('committee_id, form_id, period_id, withdrawn').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+    sb.from('committee_assignments').select('committee_id, form_id, period_id, withdrawn, attendance_confirmed').eq('round_id', CURRENT_ADMIN_ROUND_ID),
     sb.from('judge_assignments').select('judge_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
     sb.from('judging_periods').select('*').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
     getQualifyingSubmittedRows().catch(err=>{ console.error('تعذّر جلب المشاريع المستوفية:', err); return []; }),
