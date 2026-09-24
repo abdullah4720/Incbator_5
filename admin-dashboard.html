@@ -1534,36 +1534,51 @@ async function renderJudgingCommittees(){
   const orphanedFormIds = [...new Set((allJudgeAssignments||[]).map(a=>a.form_id))].filter(fid=>!committeeAssignedFormIds.has(fid));
   const formInfoMap = {}; submittedRows.forEach(r=>{ formInfoMap[r.form_id] = { project_id: r.project_id, project_name: r.project_name, domain: r.domain }; });
 
-  // قسم حالة تأكيد الحضور وقائمة المعتذرين — محسوب مسبقًا كنص جاهز لتفادي
-  // تعقيد تداخل القوالب الحرفية داخل القالب الرئيسي الكبير
+  // قسم حالة تأكيد الحضور — ثلاث بطاقات منطوية (تأكيد / اعتذار / لم يتم الرد)
+  // محسوب مسبقًا كنص جاهز لتفادي تعقيد تداخل القوالب الحرفية داخل القالب الرئيسي
+  const confirmedRowsForList = (committeeAssignments||[]).filter(a=>a.attendance_confirmed===true);
   const withdrawnRowsForList = (committeeAssignments||[]).filter(a=>a.withdrawn);
-  const confirmedYesCount = (committeeAssignments||[]).filter(a=>a.attendance_confirmed===true).length;
-  const confirmedNoCount = (committeeAssignments||[]).filter(a=>a.attendance_confirmed===false).length;
-  const pendingCount = (committeeAssignments||[]).length - confirmedYesCount - confirmedNoCount;
+  const pendingRowsForList = (committeeAssignments||[]).filter(a=>a.attendance_confirmed!==true && a.attendance_confirmed!==false);
+  const attendanceSecRow = (a, opts)=>{
+    const info = formInfoMap[a.form_id] || {};
+    const committee = (JUDGING_COMMITTEES_CACHE||[]).find(c=>c.id===a.committee_id);
+    const period = (JUDGING_PERIODS_CACHE||[]).find(p=>p.id===a.period_id);
+    let row = '<tr>';
+    row += '<td class="mono">'+escHtml(info.project_id||'')+'</td>';
+    row += '<td>'+escHtml(info.project_name||'')+'</td>';
+    row += '<td>'+escHtml(committee?committee.name:'—')+'</td>';
+    if(opts.showPeriod) row += '<td>'+escHtml(period?period.name:'—')+'</td>';
+    if(opts.dateField) row += '<td style="color:var(--ink-400)">'+(a[opts.dateField] ? new Date(a[opts.dateField]).toLocaleDateString('ar-SA') : '—')+'</td>';
+    if(opts.undoBtn) row += '<td><button class="btn btn-ghost btn-sm" data-undowithdraw="'+a.form_id+'" data-undocommittee="'+a.committee_id+'">إلغاء الاعتذار</button></td>';
+    row += '</tr>';
+    return row;
+  };
+  const attendanceSecHTML = (id, title, count, colorVar, rows, opts)=>{
+    let h = '<div class="qa-sec" data-attsec="'+id+'">';
+    h += '<div class="qa-sec-head"><span class="qa-sec-title" style="color:var('+colorVar+')">'+title+'</span>';
+    h += '<span style="display:flex;align-items:center;gap:8px"><span class="qa-sec-count">'+count+'</span><span class="qa-chevron">'+icon('chevron-down',{size:14})+'</span></span></div>';
+    h += '<div class="qa-sec-body">';
+    if(count){
+      h += '<div class="table-wrap"><table><thead><tr><th>رقم المشروع</th><th>الاسم</th><th>اللجنة</th>';
+      if(opts.showPeriod) h += '<th>الفترة</th>';
+      if(opts.dateLabel) h += '<th>'+opts.dateLabel+'</th>';
+      if(opts.undoBtn) h += '<th></th>';
+      h += '</tr></thead><tbody>';
+      rows.forEach(a=>{ h += attendanceSecRow(a, opts); });
+      h += '</tbody></table></div>';
+    } else {
+      h += '<div style="color:var(--ink-400);font-size:12.5px;padding:8px 0">لا توجد مشاريع في هذه الحالة حاليًا.</div>';
+    }
+    h += '</div></div>';
+    return h;
+  };
   let attendanceStatusHTML = '';
   attendanceStatusHTML += '<div class="ac-title" style="margin:24px 0 12px">حالة تأكيد الحضور</div>';
-  attendanceStatusHTML += '<div class="grid kpi-row" style="margin-bottom:20px">';
-  attendanceStatusHTML += '<div class="card kpi-card"><div class="kval mono" style="color:var(--success)">'+confirmedYesCount+'</div><div class="klabel">أكّدوا الحضور</div></div>';
-  attendanceStatusHTML += '<div class="card kpi-card"><div class="kval mono" style="color:var(--danger)">'+confirmedNoCount+'</div><div class="klabel">اعتذروا</div></div>';
-  attendanceStatusHTML += '<div class="card kpi-card"><div class="kval mono" style="color:var(--ink-400)">'+pendingCount+'</div><div class="klabel">لم يردّوا بعد</div></div>';
+  attendanceStatusHTML += '<div class="qa-accordion" style="margin-bottom:20px">';
+  attendanceStatusHTML += attendanceSecHTML('confirmed', 'أكّدوا الحضور', confirmedRowsForList.length, '--success', confirmedRowsForList, { showPeriod:true, dateLabel:'تاريخ التأكيد', dateField:'attendance_confirmed_at' });
+  attendanceStatusHTML += attendanceSecHTML('withdrawn', 'اعتذروا عن الحضور', withdrawnRowsForList.length, '--danger', withdrawnRowsForList, { dateLabel:'تاريخ الاعتذار', dateField:'withdrawn_at', undoBtn:true });
+  attendanceStatusHTML += attendanceSecHTML('pending', 'لم يتم الرد', pendingRowsForList.length, '--ink-400', pendingRowsForList, {});
   attendanceStatusHTML += '</div>';
-  if(withdrawnRowsForList.length){
-    attendanceStatusHTML += '<div class="ac-title" style="margin-bottom:12px">المعتذرون عن الحضور ('+withdrawnRowsForList.length+')</div>';
-    attendanceStatusHTML += '<div class="card" style="margin-bottom:20px"><div class="table-wrap"><table>';
-    attendanceStatusHTML += '<thead><tr><th>رقم المشروع</th><th>الاسم</th><th>كانت لجنته</th><th>تاريخ الاعتذار</th><th></th></tr></thead><tbody>';
-    withdrawnRowsForList.forEach(a=>{
-      const info = formInfoMap[a.form_id] || {};
-      const committee = (JUDGING_COMMITTEES_CACHE||[]).find(c=>c.id===a.committee_id);
-      attendanceStatusHTML += '<tr>';
-      attendanceStatusHTML += '<td class="mono">'+escHtml(info.project_id||'')+'</td>';
-      attendanceStatusHTML += '<td>'+escHtml(info.project_name||'')+'</td>';
-      attendanceStatusHTML += '<td>'+escHtml(committee?committee.name:'—')+'</td>';
-      attendanceStatusHTML += '<td style="color:var(--ink-400)">'+(a.withdrawn_at ? new Date(a.withdrawn_at).toLocaleDateString('ar-SA') : '—')+'</td>';
-      attendanceStatusHTML += '<td><button class="btn btn-ghost btn-sm" data-undowithdraw="'+a.form_id+'" data-undocommittee="'+a.committee_id+'">إلغاء الاعتذار</button></td>';
-      attendanceStatusHTML += '</tr>';
-    });
-    attendanceStatusHTML += '</tbody></table></div></div>';
-  }
 
   content.innerHTML = `
     ${roundSelectorHTML()}
@@ -1676,6 +1691,11 @@ async function renderJudgingCommittees(){
   if(rebalanceBothBtn) rebalanceBothBtn.addEventListener('click', ()=>openRebalanceBothModal(JUDGING_COMMITTEES_CACHE, JUDGING_PERIODS_CACHE, membersByCommittee, committeeAssignments||[], submittedRows));
   const syncBtn = document.getElementById('syncJudgeAssignmentsBtn');
   if(syncBtn) syncBtn.addEventListener('click', ()=>runSyncJudgeAssignments(JUDGING_COMMITTEES_CACHE, membersByCommittee, committeeAssignments||[]));
+  content.querySelectorAll('[data-attsec]').forEach(secEl=>{
+    secEl.querySelector('.qa-sec-head').addEventListener('click', ()=>{
+      secEl.classList.toggle('open');
+    });
+  });
   content.querySelectorAll('[data-undowithdraw]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const formId = btn.dataset.undowithdraw, committeeId = btn.dataset.undocommittee;
