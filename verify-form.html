@@ -422,6 +422,8 @@ let ASSIGNED_COMMITTEE_NAME = null;
 let ASSIGNED_PERIOD = null; // { name, start_time, end_time }
 let JUDGING_CRITERIA_LIST = [];
 let JUDGING_PRESENTATION = null; // { file_name, storage_path, uploaded_at } أو null
+let ATTENDANCE_CONFIRMED = null; // null = لم يردّ بعد، true = سيحضر، false = لن يحضر
+let ATTENDANCE_CONFIRM_DEADLINE = null;
 let PRESENTATION_DEADLINE_PASSED = false;
 let PRESENTATION_DEADLINE_AT = null; // القيمة الفعلية للموعد، تُعرَض للمشارك
 let SUBMITTED_COMPLETION_PCT = null; // النسبة المجمَّدة وقت الإرسال — تُعرَض بدل الحساب الحي بعد الإرسال
@@ -1326,6 +1328,17 @@ function renderThankYouScreen(){
   const judgingSessionDetails = (ASSIGNED_COMMITTEE_NAME || ASSIGNED_PERIOD || JUDGING_CRITERIA_LIST.length) ? `
   <div style="max-width:480px;margin:0 auto 22px;padding:20px 22px;border-radius:12px;background:#fff;border:1px solid var(--line);text-align:right">
     <div style="font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;font-size:14px;margin-bottom:12px">${icon('users',{size:14})} تفاصيل جلسة تحكيمكم</div>
+
+    <div style="background:var(--paper);border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-weight:700;font-size:12.5px;color:var(--navy-800);margin-bottom:10px">هل ستحضرون جلسة التحكيم؟</div>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="btnAttendYes" style="flex:1;padding:10px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;border:2px solid ${ATTENDANCE_CONFIRMED===true?'var(--success)':'var(--line)'};background:${ATTENDANCE_CONFIRMED===true?'var(--success)':'#fff'};color:${ATTENDANCE_CONFIRMED===true?'#fff':'var(--ink-900)'}">✓ نعم سنحضر</button>
+        <button type="button" id="btnAttendNo" style="flex:1;padding:10px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;border:2px solid ${ATTENDANCE_CONFIRMED===false?'var(--danger)':'var(--line)'};background:${ATTENDANCE_CONFIRMED===false?'var(--danger)':'#fff'};color:${ATTENDANCE_CONFIRMED===false?'#fff':'var(--ink-900)'}">✗ لن نحضر</button>
+      </div>
+      ${ATTENDANCE_CONFIRMED===null ? `<div style="font-size:11px;color:var(--ink-400);margin-top:8px">لم تردّوا بعد${ATTENDANCE_CONFIRM_DEADLINE?` — يُفضَّل التأكيد قبل ${new Date(ATTENDANCE_CONFIRM_DEADLINE).toLocaleDateString('ar-SA')}`:''}</div>` : ''}
+      ${ATTENDANCE_CONFIRMED===false ? `<div style="font-size:11px;color:var(--ink-400);margin-top:8px">مسجَّلون حاليًا كـ"لن نحضر" — تقدرون تغيّرون قراركم بأي وقت بالضغط على الزر</div>` : ''}
+    </div>
+
     ${(ASSIGNED_COMMITTEE_NAME || ASSIGNED_PERIOD) ? `<div style="font-size:13px;color:var(--ink-900);line-height:2.1;margin-bottom:${JUDGING_CRITERIA_LIST.length?'16px':'0'}">
       👥 <b>لجنتكم:</b> ${ASSIGNED_COMMITTEE_NAME ? escHtml(ASSIGNED_COMMITTEE_NAME) : 'سيتم تحديدها لاحقًا'}<br>
       ⏱️ <b>فترتكم المحدَّدة:</b> ${ASSIGNED_PERIOD ? `${escHtml(ASSIGNED_PERIOD.name)}${ASSIGNED_PERIOD.start_time?` (${escHtml(ASSIGNED_PERIOD.start_time)}${ASSIGNED_PERIOD.end_time?'–'+escHtml(ASSIGNED_PERIOD.end_time):''})`:''}` : 'سيتم تحديدها لاحقًا'}
@@ -1437,6 +1450,23 @@ function renderThankYouScreen(){
       showToast('تعذّر رفع العرض التقديمي: ' + (err.message||'خطأ غير معروف'));
     }
   });
+
+  const attendYesBtn = document.getElementById('btnAttendYes');
+  const attendNoBtn = document.getElementById('btnAttendNo');
+  const submitAttendance = async (confirmed)=>{
+    try{
+      const { error } = await SB_AUTH.rpc('participant_confirm_attendance', { p_form_id: FORM_ID, p_confirmed: confirmed });
+      if(error) throw error;
+      ATTENDANCE_CONFIRMED = confirmed;
+      showToast(confirmed ? 'تم تأكيد حضوركم' : 'تم تسجيل اعتذاركم');
+      renderAll();
+    } catch(err){
+      console.error(err);
+      showToast('تعذّر تسجيل ردّكم: ' + (err.message||'خطأ غير معروف'));
+    }
+  };
+  if(attendYesBtn) attendYesBtn.addEventListener('click', ()=>submitAttendance(true));
+  if(attendNoBtn) attendNoBtn.addEventListener('click', ()=>submitAttendance(false));
 }
 
 /* ---------------- شاشة التقرير المستقلة — تدمج نتيجة الاستيفاء داخل التقرير نفسه ---------------- */
@@ -1724,7 +1754,7 @@ async function initApp(){
         try{
           const { data: activeRound } = await SB.from('judging_rounds').select('id').eq('is_active', true).maybeSingle();
           if(activeRound){
-            const { data: assignment } = await SB.from('committee_assignments').select('committee_id, period_id').eq('form_id', FORM_ID).eq('round_id', activeRound.id).maybeSingle();
+            const { data: assignment } = await SB.from('committee_assignments').select('committee_id, period_id, attendance_confirmed').eq('form_id', FORM_ID).eq('round_id', activeRound.id).maybeSingle();
             if(assignment){
               const [{data: committee}, {data: period}] = await Promise.all([
                 assignment.committee_id ? SB.from('judging_committees').select('name').eq('id', assignment.committee_id).maybeSingle() : Promise.resolve({data:null}),
@@ -1732,12 +1762,16 @@ async function initApp(){
               ]);
               ASSIGNED_COMMITTEE_NAME = committee ? committee.name : null;
               ASSIGNED_PERIOD = period || null;
+              ATTENDANCE_CONFIRMED = assignment.attendance_confirmed;
               const { data: pres } = await SB.from('judging_presentations').select('file_name, storage_path, uploaded_at').eq('form_id', FORM_ID).maybeSingle();
               JUDGING_PRESENTATION = pres || null;
-              const { data: presSettings } = await SB.from('form_settings').select('presentation_deadline_at').eq('id', 1).maybeSingle();
+              const { data: presSettings } = await SB.from('form_settings').select('presentation_deadline_at, attendance_confirm_deadline_at').eq('id', 1).maybeSingle();
               if(presSettings && presSettings.presentation_deadline_at){
                 PRESENTATION_DEADLINE_AT = presSettings.presentation_deadline_at;
                 PRESENTATION_DEADLINE_PASSED = new Date() > new Date(presSettings.presentation_deadline_at);
+              }
+              if(presSettings && presSettings.attendance_confirm_deadline_at){
+                ATTENDANCE_CONFIRM_DEADLINE = presSettings.attendance_confirm_deadline_at;
               }
             }
             const { data: criteria } = await SB.from('judging_criteria').select('label, description, max_score').eq('round_id', activeRound.id).eq('is_active', true).order('order_index');

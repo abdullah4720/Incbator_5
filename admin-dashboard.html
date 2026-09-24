@@ -730,7 +730,7 @@ let pendingImportRows = []; // معاينة قبل التأكيد النهائي
 
 /* ---------------- إعدادات النموذج (تُحمَّل من Supabase) ---------------- */
 let formSettings = {
-  programName: "", formTitle: "", deadline: "", presentationDeadline: "",
+  programName: "", formTitle: "", deadline: "", presentationDeadline: "", attendanceConfirmDeadline: "",
   isOpen: true, allowEdit: true, notifyBefore48: true, notifyBefore24: true,
   maxPdfMb: 10, maxVideoMb: 200, maxVideoMinutes: 5, maxFilesPerField: 5,
   qualificationPublished: false,
@@ -779,6 +779,7 @@ async function loadFormSettings(){
     programName: data.program_name, formTitle: data.form_title,
     deadline: data.deadline_at ? new Date(data.deadline_at).toISOString().slice(0,16) : "",
     presentationDeadline: data.presentation_deadline_at ? new Date(data.presentation_deadline_at).toISOString().slice(0,16) : "",
+    attendanceConfirmDeadline: data.attendance_confirm_deadline_at ? new Date(data.attendance_confirm_deadline_at).toISOString().slice(0,16) : "",
     isOpen: data.is_open, allowEdit: data.allow_edit_after_submit,
     notifyBefore48: data.notify_before_48h, notifyBefore24: data.notify_before_24h,
     maxPdfMb: data.max_pdf_mb, maxVideoMb: data.max_video_mb,
@@ -1509,7 +1510,7 @@ async function renderJudgingCommittees(){
     sb.from('judging_committees').select('*').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
     sb.from('committee_members').select('committee_id, judge_id'),
     sb.from('judges').select('id, full_name').eq('is_active', true).order('full_name'),
-    sb.from('committee_assignments').select('committee_id, form_id, period_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+    sb.from('committee_assignments').select('committee_id, form_id, period_id, withdrawn').eq('round_id', CURRENT_ADMIN_ROUND_ID),
     sb.from('judge_assignments').select('judge_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
     sb.from('judging_periods').select('*').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
     getQualifyingSubmittedRows().catch(err=>{ console.error('تعذّر جلب المشاريع المستوفية:', err); return []; }),
@@ -1532,6 +1533,37 @@ async function renderJudgingCommittees(){
   // إسناد للجنة — تُعتبر "معلَّقة" وتحتاج انتباه الإداري
   const orphanedFormIds = [...new Set((allJudgeAssignments||[]).map(a=>a.form_id))].filter(fid=>!committeeAssignedFormIds.has(fid));
   const formInfoMap = {}; submittedRows.forEach(r=>{ formInfoMap[r.form_id] = { project_id: r.project_id, project_name: r.project_name, domain: r.domain }; });
+
+  // قسم حالة تأكيد الحضور وقائمة المعتذرين — محسوب مسبقًا كنص جاهز لتفادي
+  // تعقيد تداخل القوالب الحرفية داخل القالب الرئيسي الكبير
+  const withdrawnRowsForList = (committeeAssignments||[]).filter(a=>a.withdrawn);
+  const confirmedYesCount = (committeeAssignments||[]).filter(a=>a.attendance_confirmed===true).length;
+  const confirmedNoCount = (committeeAssignments||[]).filter(a=>a.attendance_confirmed===false).length;
+  const pendingCount = (committeeAssignments||[]).length - confirmedYesCount - confirmedNoCount;
+  let attendanceStatusHTML = '';
+  attendanceStatusHTML += '<div class="ac-title" style="margin:24px 0 12px">حالة تأكيد الحضور</div>';
+  attendanceStatusHTML += '<div class="grid kpi-row" style="margin-bottom:20px">';
+  attendanceStatusHTML += '<div class="card kpi-card"><div class="kval mono" style="color:var(--success)">'+confirmedYesCount+'</div><div class="klabel">أكّدوا الحضور</div></div>';
+  attendanceStatusHTML += '<div class="card kpi-card"><div class="kval mono" style="color:var(--danger)">'+confirmedNoCount+'</div><div class="klabel">اعتذروا</div></div>';
+  attendanceStatusHTML += '<div class="card kpi-card"><div class="kval mono" style="color:var(--ink-400)">'+pendingCount+'</div><div class="klabel">لم يردّوا بعد</div></div>';
+  attendanceStatusHTML += '</div>';
+  if(withdrawnRowsForList.length){
+    attendanceStatusHTML += '<div class="ac-title" style="margin-bottom:12px">المعتذرون عن الحضور ('+withdrawnRowsForList.length+')</div>';
+    attendanceStatusHTML += '<div class="card" style="margin-bottom:20px"><div class="table-wrap"><table>';
+    attendanceStatusHTML += '<thead><tr><th>رقم المشروع</th><th>الاسم</th><th>كانت لجنته</th><th>تاريخ الاعتذار</th><th></th></tr></thead><tbody>';
+    withdrawnRowsForList.forEach(a=>{
+      const info = formInfoMap[a.form_id] || {};
+      const committee = (JUDGING_COMMITTEES_CACHE||[]).find(c=>c.id===a.committee_id);
+      attendanceStatusHTML += '<tr>';
+      attendanceStatusHTML += '<td class="mono">'+escHtml(info.project_id||'')+'</td>';
+      attendanceStatusHTML += '<td>'+escHtml(info.project_name||'')+'</td>';
+      attendanceStatusHTML += '<td>'+escHtml(committee?committee.name:'—')+'</td>';
+      attendanceStatusHTML += '<td style="color:var(--ink-400)">'+(a.withdrawn_at ? new Date(a.withdrawn_at).toLocaleDateString('ar-SA') : '—')+'</td>';
+      attendanceStatusHTML += '<td><button class="btn btn-ghost btn-sm" data-undowithdraw="'+a.form_id+'" data-undocommittee="'+a.committee_id+'">إلغاء الاعتذار</button></td>';
+      attendanceStatusHTML += '</tr>';
+    });
+    attendanceStatusHTML += '</tbody></table></div></div>';
+  }
 
   content.innerHTML = `
     ${roundSelectorHTML()}
@@ -1611,11 +1643,14 @@ async function renderJudgingCommittees(){
         <tbody>
           ${JUDGING_COMMITTEES_CACHE.map(c=>{
             const cellFor = (periodKey)=>{
-              const forms = (committeeAssignments||[]).filter(a=>a.committee_id===c.id && (periodKey==='none' ? !a.period_id : a.period_id==periodKey));
+              const forms = (committeeAssignments||[]).filter(a=>a.committee_id===c.id && !a.withdrawn && (periodKey==='none' ? !a.period_id : a.period_id==periodKey));
               return `<td class="period-cell" data-committee="${c.id}" data-period="${periodKey==='none'?'':periodKey}" style="vertical-align:top;padding:6px;border:1px dashed var(--line);min-height:60px">
                 ${forms.map(a=>{
                   const info = formInfoMap[a.form_id] || {};
-                  return `<div class="period-chip" draggable="true" data-formid="${a.form_id}" data-fromcommittee="${c.id}" data-fromperiod="${a.period_id||''}" style="background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:4px 8px;margin-bottom:4px;font-size:11.5px;cursor:grab">${escHtml(info.project_id||'')} - ${escHtml(info.domain||'—')} - ${escHtml(info.project_name||'')}</div>`;
+                  return `<div class="period-chip" draggable="true" data-formid="${a.form_id}" data-fromcommittee="${c.id}" data-fromperiod="${a.period_id||''}" style="background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:4px 8px;margin-bottom:4px;font-size:11.5px;cursor:grab;display:flex;justify-content:space-between;align-items:center;gap:6px">
+                    <span>${escHtml(info.project_id||'')} - ${escHtml(info.domain||'—')} - ${escHtml(info.project_name||'')}</span>
+                    <button type="button" data-withdraw="${a.form_id}" data-withdrawcommittee="${c.id}" title="اعتذر عن الحضور" style="flex-shrink:0;border:none;background:none;color:var(--danger);cursor:pointer;font-size:13px;padding:0 2px">✕</button>
+                  </div>`;
                 }).join('') || `<div style="font-size:10.5px;color:var(--ink-400);text-align:center;padding:8px 0">—</div>`}
               </td>`;
             };
@@ -1626,7 +1661,9 @@ async function renderJudgingCommittees(){
           }).join('')}
         </tbody>
       </table>
-    </div>`}
+    </div>
+    ${attendanceStatusHTML}
+    `}
   `;
   bindRoundSelector(renderJudgingCommittees);
 
@@ -1639,6 +1676,21 @@ async function renderJudgingCommittees(){
   if(rebalanceBothBtn) rebalanceBothBtn.addEventListener('click', ()=>openRebalanceBothModal(JUDGING_COMMITTEES_CACHE, JUDGING_PERIODS_CACHE, membersByCommittee, committeeAssignments||[], submittedRows));
   const syncBtn = document.getElementById('syncJudgeAssignmentsBtn');
   if(syncBtn) syncBtn.addEventListener('click', ()=>runSyncJudgeAssignments(JUDGING_COMMITTEES_CACHE, membersByCommittee, committeeAssignments||[]));
+  content.querySelectorAll('[data-undowithdraw]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const formId = btn.dataset.undowithdraw, committeeId = btn.dataset.undocommittee;
+      openConfirm('سيُلغى الاعتذار — يرجع المشروع يظهر بالشبكة، ويُعاد تكليف محكّمي لجنته تلقائيًا. متابعة؟', async ()=>{
+        const { error: e1 } = await sb.from('committee_assignments').update({ withdrawn: false, withdrawn_at: null }).eq('form_id', formId).eq('committee_id', committeeId);
+        if(e1){ showToast('تعذّر التحديث: '+e1.message); return; }
+        const newJudgeRows = (membersByCommittee[committeeId]||[]).map(jid=>({ judge_id: jid, form_id: formId, round_id: CURRENT_ADMIN_ROUND_ID, assigned_by: currentAdmin.id }));
+        if(newJudgeRows.length){
+          await sb.from('judge_assignments').upsert(newJudgeRows, { onConflict: 'judge_id,form_id,round_id' });
+        }
+        showToast('تم إلغاء الاعتذار');
+        renderJudgingCommittees();
+      }, 'إلغاء الاعتذار');
+    });
+  });
   const resetAllBtn = document.getElementById('resetAllAssignmentsBtn');
   if(resetAllBtn) resetAllBtn.addEventListener('click', ()=>confirmResetAllAssignments(committeeAssignedFormIds.size));
   document.getElementById('openProgressBtn').addEventListener('click', ()=>{ judgingSubtab='progress'; renderJudgingTab(); });
@@ -1695,6 +1747,21 @@ async function renderJudgingCommittees(){
       renderJudgingCommittees();
     });
   });
+  content.querySelectorAll('[data-withdraw]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      e.stopPropagation();
+      const formId = btn.dataset.withdraw, committeeId = btn.dataset.withdrawcommittee;
+      const info = formInfoMap[formId] || {};
+      openConfirm(`سيُعلَّم مشروع "${info.project_name||formId}" (${info.project_id||''}) كمعتذر عن حضور التحكيم — يختفي من الشبكة ومن قائمة المحكّم المُسند له، بدون أي تأثير على باقي المشاريع أو اللجان. يبقى بالسجل للأرشفة. متابعة؟`, async ()=>{
+        const { error: e1 } = await sb.from('committee_assignments').update({ withdrawn: true, withdrawn_at: new Date().toISOString() }).eq('form_id', formId).eq('committee_id', committeeId);
+        if(e1){ showToast('تعذّر التحديث: '+e1.message); return; }
+        // نزيل تكليف المحكّمين الفرديين لهذا المشروع تحديدًا — يختفي من قوائمهم فورًا
+        await sb.from('judge_assignments').delete().eq('form_id', formId).eq('round_id', CURRENT_ADMIN_ROUND_ID);
+        showToast('تم تسجيل الاعتذار');
+        renderJudgingCommittees();
+      }, 'تسجيل الاعتذار');
+    });
+  });
   const autoAssignPeriodsBtn = document.getElementById('autoAssignPeriodsBtn');
   if(autoAssignPeriodsBtn) autoAssignPeriodsBtn.addEventListener('click', ()=>runAutoAssignPeriods(committeeAssignments||[]));
 }
@@ -1703,7 +1770,7 @@ async function renderJudgingCommittees(){
    بالتساوي داخل كل لجنة، بدون ما يغيّر لجنة أي مشروع */
 async function runAutoAssignPeriods(committeeAssignments){
   if(!JUDGING_PERIODS_CACHE.length){ showToast('أضِف فترة واحدة على الأقل أولًا'); return; }
-  const unassigned = committeeAssignments.filter(a=>!a.period_id);
+  const unassigned = committeeAssignments.filter(a=>!a.period_id && !a.withdrawn);
   if(!unassigned.length){ showToast('كل المشاريع المُسنَدة للجان عندها فترة محدَّدة أصلًا'); return; }
 
   openConfirm(`سيُوزَّع ${unassigned.length} مشروعًا بلا فترة على الفترات المتاحة (${JUDGING_PERIODS_CACHE.length}) بالتساوي، داخل كل لجنة على حدة — بدون أي تغيير للجنتها. متابعة؟`, async ()=>{
@@ -1974,7 +2041,7 @@ async function runRebalanceCommittees(committees, membersByCommittee, committeeA
   const evalResults = await Promise.all(chunks.map(c=>sb.from('judge_evaluations').select('form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID).eq('is_submitted', true).in('form_id', c)));
   const evaluatedFormIds = new Set(evalResults.flatMap(r=>r.data||[]).map(e=>e.form_id));
 
-  const movable = committeeAssignments.filter(a=>!evaluatedFormIds.has(a.form_id));
+  const movable = committeeAssignments.filter(a=>!evaluatedFormIds.has(a.form_id) && !a.withdrawn);
   const skippedCount = committeeAssignments.length - movable.length;
   if(!movable.length){ showToast('كل المشاريع المُسندة لها تقييمات مُرسَلة بالفعل — لا يوجد شيء يمكن إعادة توزيعه'); return; }
 
@@ -2078,7 +2145,7 @@ async function runRebalanceBoth(committees, periods, membersByCommittee, committ
   const evalResults = await Promise.all(chunks.map(c=>sb.from('judge_evaluations').select('form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID).eq('is_submitted', true).in('form_id', c)));
   const evaluatedFormIds = new Set(evalResults.flatMap(r=>r.data||[]).map(e=>e.form_id));
 
-  const movable = committeeAssignments.filter(a=>!evaluatedFormIds.has(a.form_id));
+  const movable = committeeAssignments.filter(a=>!evaluatedFormIds.has(a.form_id) && !a.withdrawn);
   const skippedCount = committeeAssignments.length - movable.length;
   if(!movable.length){ showToast('كل المشاريع المُسندة لها تقييمات مُرسَلة بالفعل — لا يوجد شيء يمكن إعادة توزيعه'); return; }
 
@@ -2154,9 +2221,10 @@ async function runSyncJudgeAssignments(committees, membersByCommittee, committee
     const currentAssignments = currentRes.flatMap(r=>r.data||[]);
     const evaluatedPairs = new Set(evalRes.flatMap(r=>r.data||[]).map(e=>`${e.judge_id}|${e.form_id}`));
 
-    // المجموعة الصحيحة المتوقَّعة: كل (عضو لجنة × مشروع مُسنَد لنفس لجنته)
+    // المجموعة الصحيحة المتوقَّعة: كل (عضو لجنة × مشروع مُسنَد لنفس لجنته)، باستثناء
+    // أي مشروع معتذر — تكليفه الفردي يجب أن يبقى محذوفًا لا أن يُعاد تلقائيًا
     const expectedPairs = new Set();
-    committeeAssignments.forEach(a=>{
+    committeeAssignments.filter(a=>!a.withdrawn).forEach(a=>{
       (membersByCommittee[a.committee_id]||[]).forEach(jid=>{ expectedPairs.add(`${jid}|${a.form_id}`); });
     });
     const currentPairsSet = new Set(currentAssignments.map(a=>`${a.judge_id}|${a.form_id}`));
@@ -4350,6 +4418,11 @@ function renderSettings(){
           <div style="font-size:11.5px;color:var(--ink-400);margin-top:4px">مستقل تمامًا عن موعد النموذج أعلاه — بعده يُقفَل رفع/استبدال العرض تلقائيًا للمشارك. اتركه فارغًا لعدم تحديد موعد.</div>
         </div>
         <div class="field-inline">
+          <label class="flabel">الموعد المستهدف لتأكيد حضور جلسة التحكيم</label>
+          <input type="datetime-local" id="st_attend_deadline" value="${formSettings.attendanceConfirmDeadline}">
+          <div style="font-size:11.5px;color:var(--ink-400);margin-top:4px">إرشادي فقط — يظهر للمشارك كتذكير، لكن لا يقفل تأكيده أو اعتذاره بعده. اتركه فارغًا لعدم تحديد موعد.</div>
+        </div>
+        <div class="field-inline">
           <label class="flabel">الإشعارات البريدية التلقائية</label>
           <div style="display:flex;flex-direction:column;gap:10px">
             <div style="display:flex;align-items:center;gap:10px"><div class="toggle"><input type="checkbox" id="st_notify48" ${formSettings.notifyBefore48?'checked':''}><label class="tk" for="st_notify48"></label></div><span style="font-size:12.5px">تنبيه قبل 48 ساعة من الموعد النهائي</span></div>
@@ -4385,6 +4458,7 @@ function renderSettings(){
     formSettings.formTitle = document.getElementById('st_title').value;
     formSettings.deadline = document.getElementById('st_deadline').value;
     formSettings.presentationDeadline = document.getElementById('st_pres_deadline').value;
+    formSettings.attendanceConfirmDeadline = document.getElementById('st_attend_deadline').value;
     formSettings.isOpen = document.getElementById('st_open').checked;
     formSettings.notifyBefore48 = document.getElementById('st_notify48').checked;
     formSettings.notifyBefore24 = document.getElementById('st_notify24').checked;
@@ -4399,6 +4473,7 @@ function renderSettings(){
       form_title: formSettings.formTitle,
       deadline_at: formSettings.deadline ? new Date(formSettings.deadline).toISOString() : null,
       presentation_deadline_at: formSettings.presentationDeadline ? new Date(formSettings.presentationDeadline).toISOString() : null,
+      attendance_confirm_deadline_at: formSettings.attendanceConfirmDeadline ? new Date(formSettings.attendanceConfirmDeadline).toISOString() : null,
       is_open: formSettings.isOpen,
       notify_before_48h: formSettings.notifyBefore48,
       notify_before_24h: formSettings.notifyBefore24,
@@ -6173,6 +6248,7 @@ function renderReviewDetail(){
       </div>
       <div style="display:flex;align-items:center;gap:10px">
         <span class="badge ${st[1]}">${st[0]}</span>
+        <button class="btn btn-ghost btn-sm" id="withdrawFromDetailBtn" style="color:var(--danger)">اعتذر عن الحضور</button>
         <div class="review-nav-arrows">
           <button id="prevReviewBtn" ${hasPrev?'':'disabled'} title="الطلب السابق في القائمة">${icon('chevron-right',{size:15})}</button>
           <button id="nextReviewBtn" ${hasNext?'':'disabled'} title="الطلب التالي في القائمة">${icon('chevron-left',{size:15})}</button>
@@ -6192,6 +6268,17 @@ function renderReviewDetail(){
   document.getElementById('backToReviewList').addEventListener('click', ()=>{ currentReviewProjectId=null; reviewDetail=null; renderReview(); });
   if(hasPrev) document.getElementById('prevReviewBtn').addEventListener('click', ()=>openReviewDetail(queueIds[curIdx-1]));
   if(hasNext) document.getElementById('nextReviewBtn').addEventListener('click', ()=>openReviewDetail(queueIds[curIdx+1]));
+  document.getElementById('withdrawFromDetailBtn').addEventListener('click', async ()=>{
+    const { data: assignment } = await sb.from('committee_assignments').select('committee_id, round_id, withdrawn').eq('form_id', form.id).maybeSingle();
+    if(!assignment){ showToast('هذا المشروع غير مُسند للجنة تحكيم بعد — لا يوجد شيء يُعتذَر عنه'); return; }
+    if(assignment.withdrawn){ showToast('هذا المشروع مُسجَّل كمعتذر أصلًا'); return; }
+    openConfirm(`سيُعلَّم مشروع "${escHtml(proj.project_name)||currentReviewProjectId}" كمعتذر عن حضور التحكيم — يختفي من شبكة التوزيع ومن قائمة المحكّم المُسند له، بدون أي تأثير على باقي المشاريع. متابعة؟`, async ()=>{
+      const { error: e1 } = await sb.from('committee_assignments').update({ withdrawn: true, withdrawn_at: new Date().toISOString() }).eq('form_id', form.id).eq('committee_id', assignment.committee_id);
+      if(e1){ showToast('تعذّر التحديث: '+e1.message); return; }
+      await sb.from('judge_assignments').delete().eq('form_id', form.id).eq('round_id', assignment.round_id);
+      showToast('تم تسجيل الاعتذار');
+    }, 'تسجيل الاعتذار');
+  });
 
   renderEvalPanel(canEdit);
   renderSubtabs();
