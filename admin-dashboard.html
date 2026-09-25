@@ -1662,8 +1662,9 @@ async function renderJudgingCommittees(){
               return `<td class="period-cell" data-committee="${c.id}" data-period="${periodKey==='none'?'':periodKey}" style="vertical-align:top;padding:6px;border:1px dashed var(--line);min-height:60px">
                 ${forms.map(a=>{
                   const info = formInfoMap[a.form_id] || {};
+                  const confirmMark = a.attendance_confirmed===true ? `<span title="أكّد الحضور" style="flex-shrink:0;color:var(--success);font-weight:700;font-size:12px">✓</span>` : '';
                   return `<div class="period-chip" draggable="true" data-formid="${a.form_id}" data-fromcommittee="${c.id}" data-fromperiod="${a.period_id||''}" style="background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:4px 8px;margin-bottom:4px;font-size:11.5px;cursor:grab;display:flex;justify-content:space-between;align-items:center;gap:6px">
-                    <span>${escHtml(info.project_id||'')} - ${escHtml(info.domain||'—')} - ${escHtml(info.project_name||'')}</span>
+                    <span style="display:flex;align-items:center;gap:5px">${confirmMark}${escHtml(info.project_id||'')} - ${escHtml(info.domain||'—')} - ${escHtml(info.project_name||'')}</span>
                     <button type="button" data-withdraw="${a.form_id}" data-withdrawcommittee="${c.id}" title="اعتذر عن الحضور" style="flex-shrink:0;border:none;background:none;color:var(--danger);cursor:pointer;font-size:13px;padding:0 2px">✕</button>
                   </div>`;
                 }).join('') || `<div style="font-size:10.5px;color:var(--ink-400);text-align:center;padding:8px 0">—</div>`}

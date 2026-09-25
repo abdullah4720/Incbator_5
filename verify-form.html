@@ -1341,7 +1341,8 @@ function renderThankYouScreen(){
 
     ${(ASSIGNED_COMMITTEE_NAME || ASSIGNED_PERIOD) ? `<div style="font-size:13px;color:var(--ink-900);line-height:2.1;margin-bottom:${JUDGING_CRITERIA_LIST.length?'16px':'0'}">
       👥 <b>لجنتكم:</b> ${ASSIGNED_COMMITTEE_NAME ? escHtml(ASSIGNED_COMMITTEE_NAME) : 'سيتم تحديدها لاحقًا'}<br>
-      ⏱️ <b>فترتكم المحدَّدة:</b> ${ASSIGNED_PERIOD ? `${escHtml(ASSIGNED_PERIOD.name)}${ASSIGNED_PERIOD.start_time?` (${escHtml(ASSIGNED_PERIOD.start_time)}${ASSIGNED_PERIOD.end_time?'–'+escHtml(ASSIGNED_PERIOD.end_time):''})`:''}` : 'سيتم تحديدها لاحقًا'}
+      ⏱️ <b>فترتكم المحدَّدة:</b> ${ASSIGNED_PERIOD ? `${escHtml(ASSIGNED_PERIOD.name)}${ASSIGNED_PERIOD.start_time?` (${escHtml(ASSIGNED_PERIOD.start_time)}${ASSIGNED_PERIOD.end_time?'–'+escHtml(ASSIGNED_PERIOD.end_time):''})`:''}` : 'سيتم تحديدها لاحقًا'}<br>
+      📍 <b>الموقع:</b> <a href="https://maps.app.goo.gl/Q3aDCPcbd331CB2E8?g_st=awb" target="_blank" rel="noopener" style="color:var(--teal-600);text-decoration:underline">مركز ريادة الأعمال الرقمية</a>
     </div>` : ''}
     ${JUDGING_CRITERIA_LIST.length ? `
     <div style="font-weight:700;color:var(--navy-800);font-size:12.5px;margin-bottom:8px">معايير التحكيم</div>
