@@ -3032,16 +3032,35 @@ async function runExportPresentationZip(rows){
   const zip = new JSZip();
   let done=0, failed=0;
   const failedNames = [];
+  // مستخرج ZIP المدمج بويندوز غير موثوق مطلقًا مع أي حرف عربي داخل أسماء
+  // المجلدات/الملفات نفسها (مش بس اسم الملف الخارجي) — حتى لو JSZip يضبط
+  // علم UTF-8 بشكل صحيح. الحل العملي: أسماء إنجليزية بالكامل داخل الأرشيف،
+  // مع ملف فهرس manifest.csv يربط كل رقم مجلد/ملف باسمه العربي الحقيقي
+  const committeeOrder = []; // أسماء اللجان بترتيب ظهورها — تحدد رقم مجلدها
+  const committeeIndexOf = (name)=>{
+    let i = committeeOrder.indexOf(name);
+    if(i===-1){ committeeOrder.push(name); i = committeeOrder.length-1; }
+    return i+1;
+  };
+  const manifestRows = [['المجلد','اللجنة','رقم المشروع','اسم المشروع','اسم الملف داخل الأرشيف']];
   for(const r of uploaded){
     if(batchCancelled) break;
     try{
       const { data: blob, error } = await sb.storage.from('form-attachments').download(r.presentation.storage_path);
       if(error) throw error;
-      const safeCommittee = (r.committeeName||'بدون_لجنة').replace(/[\\/:*?"<>|]/g,'_');
-      const ext = (r.presentation.file_name.split('.').pop()||'pdf');
-      zip.folder(safeCommittee).file(`${r.project_id}_${(r.project_name||'').replace(/[\\/:*?"<>|]/g,'_')}.${ext}`, blob);
+      const committeeLabel = r.committeeName || 'بدون لجنة';
+      const folderName = `Committee-${String(committeeIndexOf(committeeLabel)).padStart(2,'0')}`;
+      const ext = (r.presentation.file_name.split('.').pop()||'pdf').replace(/[^a-zA-Z0-9]/g,'') || 'pdf';
+      const safeProjectId = (r.project_id||'project').replace(/[^a-zA-Z0-9._-]/g,'_');
+      const fileName = `${safeProjectId}.${ext}`;
+      zip.folder(folderName).file(fileName, blob);
+      manifestRows.push([folderName, committeeLabel, r.project_id||'', r.project_name||'', `${folderName}/${fileName}`]);
     }catch(e){ failed++; failedNames.push(r.project_id); console.error('[تصدير ZIP] تعذّر تحميل ملف '+r.project_id+':', e); }
     done++; updateBatchProgress(done, uploaded.length, failed);
+  }
+  if(manifestRows.length>1){
+    const manifestCsv = manifestRows.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    zip.file('manifest.csv', '﻿'+manifestCsv);
   }
   closeBatchProgressModal();
   if(btn) btn.disabled = false;
