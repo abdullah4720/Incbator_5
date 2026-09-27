@@ -319,29 +319,6 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
 </div>
 
 <div id="judgeDashboard" style="display:none">
-  <div id="jdOnboardingOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:200;align-items:center;justify-content:center;padding:20px">
-    <div style="background:#fff;border-radius:18px;max-width:440px;width:100%;overflow:hidden">
-      <div style="background:linear-gradient(135deg,var(--navy-800),#1a2456);padding:24px;text-align:center;color:#fff">
-        <div style="font-size:32px;margin-bottom:8px">👋</div>
-        <div style="font-size:18px;font-weight:800;font-family:'Cairo',sans-serif">أهلًا بك في بوابة التحكيم</div>
-      </div>
-      <div style="padding:22px 24px">
-        <div style="display:flex;gap:12px;margin-bottom:16px">
-          <div style="flex-shrink:0;width:32px;height:32px;border-radius:8px;background:var(--teal-100);color:var(--teal-600);display:flex;align-items:center;justify-content:center" data-icon="users"></div>
-          <div><b style="font-size:13.5px">الفرق والتقييم</b><div style="font-size:12.5px;color:var(--ink-400);margin-top:2px">مشاريعك المُسندة رسميًا — هنا تسجّل الدرجات وترسل تقييمك</div></div>
-        </div>
-        <div style="display:flex;gap:12px;margin-bottom:16px">
-          <div style="flex-shrink:0;width:32px;height:32px;border-radius:8px;background:var(--gold-100);color:#7A5C1E;display:flex;align-items:center;justify-content:center" data-icon="folder"></div>
-          <div><b style="font-size:13.5px">كل المشاريع</b><div style="font-size:12.5px;color:var(--ink-400);margin-top:2px">تصفّح جميع مشاريع الجولة، حتى غير المُسندة إليك، للاطلاع فقط</div></div>
-        </div>
-        <div style="display:flex;gap:12px;margin-bottom:20px">
-          <div style="flex-shrink:0;width:32px;height:32px;border-radius:8px;background:#EDE7F6;color:var(--purple-500);display:flex;align-items:center;justify-content:center" data-icon="award"></div>
-          <div><b style="font-size:13.5px">شهاداتي</b><div style="font-size:12.5px;color:var(--ink-400);margin-top:2px">شهادة تحكيمك الرسمية بعد إتمام تقييماتك</div></div>
-        </div>
-        <button class="btn btn-primary" id="jdOnboardingCloseBtn" style="width:100%">ابدأ التحكيم</button>
-      </div>
-    </div>
-  </div>
   <div id="jdQuickPreviewOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:200;align-items:center;justify-content:center;padding:20px">
     <div style="background:#fff;border-radius:16px;max-width:380px;width:100%;padding:22px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
@@ -412,7 +389,6 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
   <div class="jd-tabs-row">
     <button class="jd-tab-pill active" data-jtab="teams"><span class="jd-tab-icon" data-icon="users"></span> الفرق والتقييم</button>
     <button class="jd-tab-pill" data-jtab="allprojects"><span class="jd-tab-icon" data-icon="folder"></span> كل المشاريع</button>
-    <button class="jd-tab-pill" data-jtab="certificate"><span class="jd-tab-icon" data-icon="award"></span> شهاداتي</button>
     <select class="jd-round-select" id="jdRoundSelect" style="margin-inline-start:auto"></select>
   </div>
 
@@ -433,9 +409,6 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
     <div class="jd-project-grid" id="jdAllProjectsGrid"><div class="jd-empty">جارٍ التحميل…</div></div>
   </div>
 
-  <div id="jdCertificateView" style="display:none">
-    <div id="jdCertificateBody"><div class="jd-empty">جارٍ التحميل…</div></div>
-  </div>
 
   <div id="jdDetailView" style="display:none">
     <button class="jd-back" id="jdBackBtn">→ رجوع للقائمة</button>
@@ -680,6 +653,8 @@ els.loginPassword.addEventListener('keydown', e=>{ if(e.key==='Enter') handleLog
 let JD_CRITERIA = [];
 let JD_ASSIGNED_FORM_IDS = new Set();
 let JD_CURRENT_FORM = null; // {id, project_id, project_name, track}
+let JD_CURRENT_WITHIN_WINDOW = null; // null = بلا قيد توقيت، true/false = داخل/خارج توقيت التحكيم الحالي
+let JD_JUDGING_WINDOW = { start: null, end: null }; // توقيت التحكيم العام — يُحمَّل مرة واحدة من form_settings
 let JD_ROUNDS = [];
 let CURRENT_ROUND_ID = null;
 let JD_ACTIVE_TAB = 'teams';
@@ -687,7 +662,6 @@ let JD_ACTIVE_TAB = 'teams';
 function injectStaticIcons(){
   document.getElementById('jdRoundBadgeIcon').innerHTML = icon('trophy',{size:11});
   document.querySelectorAll('.jd-tab-icon').forEach(el=>{ el.innerHTML = icon(el.dataset.icon,{size:14}); });
-  document.querySelectorAll('#jdOnboardingOverlay [data-icon]').forEach(el=>{ el.innerHTML = icon(el.dataset.icon,{size:16}); });
 }
 
 async function enterDashboard(){
@@ -712,19 +686,18 @@ async function enterDashboard(){
     await refreshCurrentTab();
   });
 
+  await loadJudgingWindow();
   await loadJudgingRounds();
   await refreshCurrentTab();
+}
 
-  // نافذة ترحيبية تظهر مرة واحدة فقط لكل محكّم — تُحفَظ محليًا بالمتصفح
-  const onboardKey = `jd_onboarding_seen_${CURRENT_JUDGE_ID}`;
-  if(!localStorage.getItem(onboardKey)){
-    const overlay = document.getElementById('jdOnboardingOverlay');
-    overlay.style.display = 'flex';
-    document.getElementById('jdOnboardingCloseBtn').addEventListener('click', ()=>{
-      overlay.style.display = 'none';
-      localStorage.setItem(onboardKey, '1');
-    });
-  }
+// يُحمَّل مرة واحدة عند الدخول — توقيت التحكيم العام المضبوط من لوحة الإدارة
+async function loadJudgingWindow(){
+  const { data } = await sb.from('form_settings').select('judging_window_start_at, judging_window_end_at').eq('id', 1).maybeSingle();
+  JD_JUDGING_WINDOW = {
+    start: data && data.judging_window_start_at ? new Date(data.judging_window_start_at) : null,
+    end: data && data.judging_window_end_at ? new Date(data.judging_window_end_at) : null,
+  };
 }
 
 async function loadJudgingRounds(){
@@ -753,16 +726,13 @@ function switchJudgeTab(tab){
   document.querySelectorAll('[data-jtab]').forEach(b=>b.classList.toggle('active', b.dataset.jtab===tab));
   document.getElementById('jdListView').style.display = tab==='teams' ? 'block' : 'none';
   document.getElementById('jdAllProjectsView').style.display = tab==='allprojects' ? 'block' : 'none';
-  document.getElementById('jdCertificateView').style.display = tab==='certificate' ? 'block' : 'none';
   document.getElementById('jdDetailView').style.display = 'none';
-  document.getElementById('jdRoundSelect').style.display = tab==='certificate' ? 'none' : 'block';
   refreshCurrentTab();
 }
 
 async function refreshCurrentTab(){
   if(JD_ACTIVE_TAB==='teams'){ await loadJudgingCriteria(); await loadProjectLists(); }
   else if(JD_ACTIVE_TAB==='allprojects'){ await loadAllProjectsView(); }
-  else if(JD_ACTIVE_TAB==='certificate'){ await loadCertificateView(); }
 }
 
 async function loadJudgingCriteria(){
@@ -1199,56 +1169,6 @@ async function loadAllProjectsView(){
   });
 }
 
-/* ---------------- شهاداتي ---------------- */
-async function loadCertificateView(){
-  const el = document.getElementById('jdCertificateBody');
-  const { count } = await sb.from('judge_evaluations').select('id', {count:'exact', head:true}).eq('judge_id', CURRENT_JUDGE_ID).eq('is_submitted', true);
-  const today = new Date().toLocaleDateString('ar-SA', { year:'numeric', month:'long', day:'numeric' });
-  el.innerHTML = `
-    <div style="text-align:left;max-width:720px;margin:0 auto 14px">
-      <button class="btn btn-primary btn-sm" id="jdPrintCertBtn" style="width:auto;padding:10px 20px">${icon('download',{size:13})} تنزيل PDF</button>
-    </div>
-    <div class="jd-cert-page" id="jdCertPrintable">
-      <div class="jd-cert-inner">
-        <div class="jd-cert-corner tl"></div><div class="jd-cert-corner tr"></div>
-        <div class="jd-cert-corner bl"></div><div class="jd-cert-corner br"></div>
-        <div id="jdCertLogoSlot" style="display:flex;justify-content:center;margin-bottom:18px"></div>
-        <div style="font-size:12px;letter-spacing:3px;color:var(--gold-500);font-weight:700;margin-bottom:6px">شهادة شكر وتقدير</div>
-        <div style="font-size:22px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:18px">حاضنة ابتكار 5</div>
-        <div style="font-size:14px;color:var(--ink-600);margin-bottom:8px">تتقدَّم حاضنة الابتكار بجامعة القصيم بخالص الشكر والتقدير إلى</div>
-        <div style="font-size:26px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin:14px 0;border-bottom:2px solid var(--gold-500);display:inline-block;padding-bottom:6px">${escHtmlJD(CURRENT_JUDGE_NAME)}</div>
-        <div style="font-size:14px;color:var(--ink-600);line-height:2;max-width:520px;margin:14px auto">
-          لمشاركته كمحكّم ضمن برنامج حاضنة ابتكار 5، وتقييمه ${count||0} مشروعًا بمهنية وحرص على تطوير المشاريع الريادية المشارِكة.
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px;padding-top:16px;border-top:1px solid var(--line)">
-          <div style="text-align:right"><div style="font-size:10.5px;color:var(--ink-400)">التاريخ</div><div style="font-size:12.5px;color:var(--ink-600);font-weight:600">${today}</div></div>
-          <div style="text-align:left"><div style="font-size:10.5px;color:var(--ink-400)">رقم الشهادة</div><div style="font-size:12.5px;color:var(--ink-600);font-weight:600;font-family:monospace">IB5-${String(CURRENT_JUDGE_ID||'').slice(0,8).toUpperCase()}</div></div>
-        </div>
-      </div>
-    </div>
-  `;
-  document.getElementById('jdPrintCertBtn').addEventListener('click', ()=>window.print());
-  const logoSlot = document.getElementById('jdCertLogoSlot');
-  const sourceLogo = document.querySelector('.jd-logo-svg');
-  if(logoSlot && sourceLogo){ const clone = sourceLogo.cloneNode(true); clone.style.height = '48px'; clone.style.width = 'auto'; logoSlot.appendChild(clone); }
-}
-
-/* يحدد أيقونة ولون بطاقة الملف حسب امتداده، ويعرض عنوان السؤال (مثل "السجل
-   التجاري"، "العرض الاستثماري") بدل اسم الملف الخام اللي رفعه المشارك */
-function fileCardHTML(f, questions){
-  const ext = (f.file_name||'').split('.').pop().toLowerCase();
-  let iconName = 'file-text', bg = 'var(--paper)', fg = 'var(--ink-600)';
-  if(ext==='pdf'){ iconName='file-text'; bg='var(--danger-100)'; fg='var(--danger)'; }
-  else if(['mp4','mov','avi','webm'].includes(ext)){ iconName='video'; bg='rgba(107,79,160,.14)'; fg='var(--purple-500)'; }
-  else if(['jpg','jpeg','png','gif','webp'].includes(ext)){ iconName='image'; bg='var(--gold-100)'; fg='var(--gold-500)'; }
-  const q = (questions||[]).find(qq=>qq.field_key===f.field_key);
-  const displayLabel = (q ? q.label : f.file_name || '').replace(/^رفع\s+/, '');
-  return `<a href="#" class="jd-file-card" data-viewfile="${escHtmlJD(f.storage_path)}">
-    <div class="jd-file-icon" style="background:${bg};color:${fg}">${icon(iconName,{size:18})}</div>
-    <div class="jd-file-name">${escHtmlJD(displayLabel)}</div>
-  </a>`;
-}
-
 function escHtmlJD(str){
   if(str===null||str===undefined) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1283,11 +1203,10 @@ async function openProjectDetail(formId, projInfo){
   document.getElementById('jdDetailAssignedBadge').style.display = JD_ASSIGNED_FORM_IDS.has(formId) ? 'inline-flex' : 'none';
   document.getElementById('jdInfoSections').innerHTML = `<div class="jd-empty">جارٍ التحميل…</div>`;
 
-  const [{data: answers}, {data: questions}, {data: sections}, {data: files}, {data: members}, {data: existingEval}, {data: presentation}] = await Promise.all([
+  const [{data: answers}, {data: questions}, {data: sections}, {data: members}, {data: existingEval}, {data: presentation}] = await Promise.all([
     sb.from('form_answers').select('field_key, value_text, value_json').eq('form_id', formId),
     sb.from('form_questions').select('field_key, label, type, section_id, order_index').eq('is_active', true).order('order_index'),
     sb.from('form_sections').select('id, title, order_index').order('order_index'),
-    sb.from('form_files').select('field_key, file_name, storage_path').eq('form_id', formId).is('deleted_at', null),
     sb.from('team_members').select('full_name, specialization, is_leader').eq('form_id', formId).order('order_index'),
     sb.from('judge_evaluations').select('*').eq('judge_id', CURRENT_JUDGE_ID).eq('form_id', formId).eq('round_id', CURRENT_ROUND_ID).maybeSingle(),
     sb.from('judging_presentations').select('file_name, storage_path, uploaded_at').eq('form_id', formId).maybeSingle(),
@@ -1295,7 +1214,6 @@ async function openProjectDetail(formId, projInfo){
 
   const avMap = {}; (answers||[]).forEach(a=>{ avMap[a.field_key] = a.value_json!==null ? a.value_json : a.value_text; });
   const secMap = {}; (sections||[]).forEach(s=>{ secMap[s.id] = s.title; });
-  const fileFieldKeys = new Set((files||[]).map(f=>f.field_key));
 
   // سؤال الشراكة/الملكية الفكرية — نعرضه رغم إنه تقنيًا داخل قسم السجل
   // التجاري المستبعد، لأنه إثبات خارجي قد يفيد المحكّم
@@ -1318,7 +1236,6 @@ async function openProjectDetail(formId, projInfo){
         <div><div class="jd-ov-label">المسار</div><div class="jd-ov-val">${escHtmlJD(projInfo.track||'—')}</div></div>
         ${stageLabel ? `<div><div class="jd-ov-label">مرحلة النموذج</div><div class="jd-ov-val">${escHtmlJD(stageLabel)}</div></div>` : ''}
         <div><div class="jd-ov-label">عدد أعضاء الفريق</div><div class="jd-ov-val">${members ? members.length : '—'}</div></div>
-        <div><div class="jd-ov-label">الملفات المرفقة</div><div class="jd-ov-val">${files ? files.length : 0}</div></div>
       </div>
     </div>`;
 
@@ -1354,15 +1271,6 @@ async function openProjectDetail(formId, projInfo){
       </div>`;
   });
 
-  // 3) الملفات المرفوعة — بطاقات بأيقونة حسب نوع الملف
-  if(files && files.length){
-    sectionsHTML += `
-      <div class="jd-section-card">
-        <div class="jd-section-head"><div class="jd-section-icon" style="background:var(--paper);color:var(--ink-600)">${icon('paperclip',{size:15})}</div><div class="jd-section-head-title">الملفات المرفوعة</div></div>
-        <div class="jd-file-grid">${files.map(f=>fileCardHTML(f, questions)).join('')}</div>
-      </div>`;
-  }
-
   document.getElementById('jdInfoSections').innerHTML = sectionsHTML || `<div class="jd-empty">لا توجد معلومات كافية لهذا المشروع بعد</div>`;
   document.querySelectorAll('[data-viewfile]').forEach(a=>{
     a.addEventListener('click', async e=>{
@@ -1374,6 +1282,18 @@ async function openProjectDetail(formId, projInfo){
 
   const isAssigned = JD_ASSIGNED_FORM_IDS.has(formId);
   renderScoringForm(existingEval, isAssigned, presentation);
+}
+
+// يتحقق إن كان الوقت الحالي داخل توقيت التحكيم العام (يُطبَّق على كل
+// المشاريع والمحكّمين معًا — يُضبَط من لوحة الإدارة). يرجع null لو ما تم
+// تحديد أي توقيت — يعني بلا أي قيد.
+function isWithinJudgingWindow(){
+  const { start, end } = JD_JUDGING_WINDOW || {};
+  if(!start && !end) return null;
+  const now = new Date();
+  if(start && now < start) return false;
+  if(end && now > end) return false;
+  return true;
 }
 
 function renderScoringForm(existingEval, isAssigned, presentation){
@@ -1404,8 +1324,13 @@ function renderScoringForm(existingEval, isAssigned, presentation){
   }
   const totalMax = JD_CRITERIA.reduce((s,c)=>s+parseFloat(c.max_score),0) || 1;
   const scores = existingEval ? (existingEval.scores||{}) : {};
+  const withinWindow = isWithinJudgingWindow();
+  JD_CURRENT_WITHIN_WINDOW = withinWindow;
+  const fmtDT = (d)=>d ? d.toLocaleString('ar-SA', { day:'numeric', month:'long', hour:'2-digit', minute:'2-digit' }) : '';
+  const windowLabel = (JD_JUDGING_WINDOW.start||JD_JUDGING_WINDOW.end) ? `${fmtDT(JD_JUDGING_WINDOW.start)}${JD_JUDGING_WINDOW.end?' – '+fmtDT(JD_JUDGING_WINDOW.end):''}` : '';
   scoringCard.innerHTML = `
     <div style="font-weight:700;color:var(--navy-800);margin-bottom:4px;font-size:14px">تسجيل الدرجات</div>
+    ${withinWindow===false ? `<div class="err-box" style="margin-bottom:12px">${icon('lock',{size:13})} خارج توقيت التحكيم${windowLabel?` (${windowLabel})`:''} — يمكنك حفظ ملاحظاتك كمسودة الآن، وإرسال التقييم النهائي متاح فقط خلال هذا التوقيت.</div>` : ''}
     ${presentation ? `<a href="#" data-viewfile="${escHtmlJD(presentation.storage_path)}" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;background:var(--teal-100);color:var(--teal-700,#0E5C5B);text-decoration:none;font-size:12.5px;font-weight:700;margin-bottom:12px">${icon('file-text',{size:14})} ملف العرض التقديمي للتحكيم — ${escHtmlJD(presentation.file_name)}</a>` : `<div style="padding:10px 12px;border-radius:10px;background:var(--paper);color:var(--ink-400);font-size:12px;margin-bottom:12px">${icon('file-text',{size:14})} لم يرفع الفريق ملف العرض التقديمي للتحكيم بعد</div>`}
     <div style="font-size:12px;color:var(--ink-400);margin-bottom:14px">${JD_CRITERIA.length ? `${JD_CRITERIA.length} معايير — اختر درجة من 1 إلى 5 لكل معيار حسب وزنه` : 'لم يتم إعداد معايير تحكيم بعد — تواصل مع فريق البرنامج.'}</div>
     <div id="jdCriteriaList"></div>
@@ -1417,7 +1342,7 @@ function renderScoringForm(existingEval, isAssigned, presentation){
     <div class="err-box" id="jdScoreErr"></div>
     <div style="display:flex;gap:10px;margin-top:14px">
       <button class="btn btn-ghost" id="jdSaveDraftBtn" style="width:auto;padding:11px 20px">حفظ كمسودة</button>
-      <button class="btn btn-primary" id="jdSubmitBtn" style="width:auto;padding:11px 20px">إرسال التقييم النهائي</button>
+      <button class="btn btn-primary" id="jdSubmitBtn" style="width:auto;padding:11px 20px" ${withinWindow===false?'disabled title="خارج توقيت فترة التحكيم"':''}>إرسال التقييم النهائي</button>
     </div>
     <div id="jdSubmittedNote" style="display:${existingEval && existingEval.is_submitted ? 'inline-flex' : 'none'};margin-top:10px" class="jd-badge submitted">✓ تم إرسال تقييمك النهائي لهذا المشروع</div>
   `;
@@ -1545,6 +1470,11 @@ async function saveEvaluation(isSubmit){
   });
   if(isSubmit && missing){
     errBox.textContent = 'يرجى اختيار درجة لكل المعايير قبل الإرسال النهائي.';
+    errBox.classList.add('show');
+    return;
+  }
+  if(isSubmit && JD_CURRENT_WITHIN_WINDOW===false){
+    errBox.textContent = 'الإرسال النهائي متاح فقط خلال توقيت فترة التحكيم المحدَّدة لهذا المشروع.';
     errBox.classList.add('show');
     return;
   }
