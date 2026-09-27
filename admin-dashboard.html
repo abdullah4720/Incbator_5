@@ -2928,13 +2928,18 @@ async function renderJudgingPresentationsTab(){
   if(!CURRENT_ADMIN_ROUND_ID){ content.innerHTML = roundSelectorHTML(); return; }
   content.innerHTML = `${roundSelectorHTML()}<div class="empty-hint">جارٍ التحميل…</div>`;
 
-  const [{data: committees}, {data: assignments}, {data: presentations}, classified] = await Promise.all([
-    sb.from('judging_committees').select('id, name, track, domain').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
+  // اللجان والفترات تُجلَب هنا بلا فلتر round_id — الربط الفعلي يتم بمطابقة
+  // committee_id/period_id من جدول الإسناد نفسه (مضمون بمفتاح خارجي)، بدل
+  // الاعتماد على تطابق round_id في الجدولين، لتفادي أي اختلاف بينهما
+  const [{data: committees, error: committeesErr}, {data: assignments}, {data: presentations}, classified] = await Promise.all([
+    sb.from('judging_committees').select('id, name, track'),
     sb.from('committee_assignments').select('form_id, committee_id, period_id, withdrawn').eq('round_id', CURRENT_ADMIN_ROUND_ID),
     sb.from('judging_presentations').select('form_id, file_name, storage_path, uploaded_at'),
     computeQualificationClassification(),
   ]);
-  const { data: periods } = await sb.from('judging_periods').select('id, name').eq('round_id', CURRENT_ADMIN_ROUND_ID);
+  if(committeesErr) console.error('[ملفات العروض] تعذّر جلب اللجان:', committeesErr);
+  if(!committees || !committees.length) console.warn('[ملفات العروض] جدول اللجان رجع فارغًا — تحقق من صلاحيات RLS على judging_committees');
+  const { data: periods } = await sb.from('judging_periods').select('id, name');
   const committeeById = {}; (committees||[]).forEach(c=>{ committeeById[c.id] = c; });
   const periodById = {}; (periods||[]).forEach(p=>{ periodById[p.id] = p; });
   const presByForm = {}; (presentations||[]).forEach(p=>{ presByForm[p.form_id] = p; });
