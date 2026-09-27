@@ -2954,6 +2954,10 @@ async function renderJudgingPresentationsTab(){
     };
   });
 
+  // نسخة كاملة بلا فلاتر — تُستخدم دائمًا لتنزيل ZIP (بكل وضعيه) حتى لا يتأثر
+  // التنزيل بفلتر اللجنة/المسار المطبَّق على الجدول فقط (وإلا صار كل الملفات
+  // يظهرون كأنهم للجنة واحدة إذا كان فلتر اللجنة محدَّدًا مسبقًا)
+  const allRows = rows;
   const tracks = [...new Set(rows.map(r=>r.track).filter(Boolean))];
   if(PRESENTATIONS_FILTER.track) rows = rows.filter(r=>r.track===PRESENTATIONS_FILTER.track);
   if(PRESENTATIONS_FILTER.committeeId) rows = rows.filter(r=>String(r.committeeId)===String(PRESENTATIONS_FILTER.committeeId));
@@ -2973,7 +2977,7 @@ async function renderJudgingPresentationsTab(){
       </select>
       <span style="font-size:12.5px;color:var(--ink-400)">${uploadedCount} من ${rows.length} مرفوع ضمن الفلتر الحالي</span>
       <div style="flex:1"></div>
-      <select id="presZipMode" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px" title="طريقة تنزيل ZIP">
+      <select id="presZipMode" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px" title="طريقة تنزيل ZIP — يشمل دائمًا كل اللجان بصرف النظر عن الفلتر أعلاه">
         <option value="all">ZIP واحد لكل اللجان</option>
         <option value="separate">ZIP منفصل لكل لجنة</option>
       </select>
@@ -3007,7 +3011,9 @@ async function renderJudgingPresentationsTab(){
   document.getElementById('exportPresLinksBtn').addEventListener('click', ()=>runExportPresentationLinks(rows));
   document.getElementById('exportPresZipBtn').addEventListener('click', ()=>{
     const mode = document.getElementById('presZipMode').value;
-    runExportPresentationZip(rows, mode);
+    // تنزيل الـZIP يشمل دائمًا كل اللجان بكل الملفات، بصرف النظر عن فلتر
+    // اللجنة/المسار المطبَّق على الجدول أعلاه (الفلتر يخص العرض على الشاشة فقط)
+    runExportPresentationZip(allRows, mode);
   });
 }
 
