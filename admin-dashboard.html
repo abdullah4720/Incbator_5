@@ -2930,7 +2930,7 @@ async function renderJudgingPresentationsTab(){
 
   const [{data: committees}, {data: assignments}, {data: presentations}, classified] = await Promise.all([
     sb.from('judging_committees').select('id, name, track, domain').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
-    sb.from('committee_assignments').select('form_id, committee_id, period_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+    sb.from('committee_assignments').select('form_id, committee_id, period_id, withdrawn').eq('round_id', CURRENT_ADMIN_ROUND_ID),
     sb.from('judging_presentations').select('form_id, file_name, storage_path, uploaded_at'),
     computeQualificationClassification(),
   ]);
@@ -2940,8 +2940,10 @@ async function renderJudgingPresentationsTab(){
   const presByForm = {}; (presentations||[]).forEach(p=>{ presByForm[p.form_id] = p; });
   const infoByForm = {}; classified.forEach(r=>{ infoByForm[r.form_id] = r; });
 
-  // فقط المشاريع المُسندة فعليًا للجان بهذي الجولة — نطاق التحكيم الفعلي
-  let rows = (assignments||[]).map(a=>{
+  // فقط المشاريع المُسندة فعليًا للجان بهذي الجولة، ما عدا المعتذرة — نفس
+  // المنطق بالضبط المستخدَم بشبكة "توزيع المشاريع على الفترات"، عشان القائمة
+  // هنا (وملف الـZIP) تطابق الشبكة تمامًا ولا تختلف عنها
+  let rows = (assignments||[]).filter(a=>!a.withdrawn).map(a=>{
     const info = infoByForm[a.form_id] || {};
     const committee = committeeById[a.committee_id];
     return {
