@@ -3025,10 +3025,13 @@ async function runExportPresentationLinks(rows){
 async function runExportPresentationZip(rows){
   const uploaded = rows.filter(r=>r.presentation);
   if(!uploaded.length){ showToast('لا توجد ملفات مرفوعة ضمن الفلتر الحالي'); return; }
-  if(typeof JSZip === 'undefined'){ showToast('تعذّر تحميل مكتبة الضغط'); return; }
+  if(typeof JSZip === 'undefined'){ showToast('تعذّر تحميل مكتبة الضغط (JSZip) — تحقق من اتصال الإنترنت وأعد تحميل الصفحة'); return; }
+  const btn = document.getElementById('exportPresZipBtn');
+  if(btn) btn.disabled = true;
   showBatchProgressModal(uploaded.length, 'جارٍ تحميل ملفات العروض…');
   const zip = new JSZip();
   let done=0, failed=0;
+  const failedNames = [];
   for(const r of uploaded){
     if(batchCancelled) break;
     try{
@@ -3037,18 +3040,25 @@ async function runExportPresentationZip(rows){
       const safeCommittee = (r.committeeName||'بدون_لجنة').replace(/[\\/:*?"<>|]/g,'_');
       const ext = (r.presentation.file_name.split('.').pop()||'pdf');
       zip.folder(safeCommittee).file(`${r.project_id}_${(r.project_name||'').replace(/[\\/:*?"<>|]/g,'_')}.${ext}`, blob);
-    }catch(e){ failed++; console.error(e); }
+    }catch(e){ failed++; failedNames.push(r.project_id); console.error('[تصدير ZIP] تعذّر تحميل ملف '+r.project_id+':', e); }
     done++; updateBatchProgress(done, uploaded.length, failed);
   }
   closeBatchProgressModal();
+  if(btn) btn.disabled = false;
   if(batchCancelled){ showToast('تم إلغاء التنزيل'); return; }
-  const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{level:6} });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `ملفات_العروض_حسب_اللجنة_${new Date().toISOString().slice(0,10)}.zip`;
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
-  showToast(`تم تنزيل ${done-failed} ملفًا بنجاح${failed?` (فشل ${failed})`:''}`);
+  if(done-failed <= 0){ showToast('تعذّر تحميل أي ملف — تحقق من Console (F12) لتفاصيل الخطأ'); return; }
+  try{
+    const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{level:6} });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `judging-presentations-by-committee-${new Date().toISOString().slice(0,10)}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    showToast(`تم تنزيل ${done-failed} ملفًا بنجاح${failed?` (فشل ${failed}: ${failedNames.join('، ')})`:''}`);
+  }catch(e){
+    console.error('[تصدير ZIP] تعذّر إنشاء ملف الضغط:', e);
+    showToast('تعذّر إنشاء ملف ZIP: '+(e.message||'خطأ غير معروف'));
+  }
 }
 
 /* ---------------- معايير التحكيم ---------------- */
@@ -4833,7 +4843,7 @@ async function runBackup(includeFiles){
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `نسخة-احتياطية-${includeFiles?'شاملة':'سريعة'}-${timestamp}.zip`;
+    a.download = `backup-${includeFiles?'full':'quick'}-${timestamp}.zip`;
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
     showToast('تم إنشاء النسخة الاحتياطية وتنزيلها بنجاح');
