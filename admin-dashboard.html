@@ -2715,8 +2715,14 @@ async function renderJudgingRanking(){
     const assignedCount = (assignments||[]).filter(a=>a.form_id===formId).length;
     const avgTotal = submittedEvals.length ? submittedEvals.reduce((s,e)=>s+weightedTotal(e.scores),0)/submittedEvals.length : null;
     const proj = formIdToProject[formId] || {};
-    return { project_id: proj.project_id||'—', project_name: proj.project_name||'—', avgTotal, submittedCount: submittedEvals.length, assignedCount, complete: submittedEvals.length===assignedCount && assignedCount>0 };
+    return { project_id: proj.project_id||'—', project_name: proj.project_name||'—', domain: proj.domain||'بدون مجال', avgTotal, submittedCount: submittedEvals.length, assignedCount, complete: submittedEvals.length===assignedCount && assignedCount>0 };
   }).filter(r=>r.avgTotal!==null).sort((a,b)=>b.avgTotal-a.avgTotal);
+
+  // الترتيب يُعرض مجموعًا حسب المجال — كل مجال له مراكزه المستقلة (🥇🥈🥉)
+  // بدل ترتيب واحد عام يخلط كل المجالات ببعض
+  const domainGroups = {};
+  ranked.forEach(r=>{ (domainGroups[r.domain] = domainGroups[r.domain]||[]).push(r); });
+  const domainNames = Object.keys(domainGroups).sort((a,b)=>a.localeCompare('ar'));
 
   const medalIcons = ['🥇','🥈','🥉'];
   content.innerHTML = `
@@ -2737,20 +2743,22 @@ async function renderJudgingRanking(){
       <button class="btn ${round?.results_published?'btn-ghost':'btn-primary'} btn-sm" id="togglePublishBtn">${round?.results_published?'إلغاء النشر':'نشر النتائج الآن'}</button>
     </div>
 
-    ${ranked.length===0 ? `<div class="empty-hint">لا توجد نتائج كافية بعد لعرض المراكز</div>` : `
-    <div class="card" style="margin-bottom:16px;display:flex;justify-content:flex-end">
-      <button class="btn btn-ghost btn-sm" id="exportRankingBtn">${icon('download',{size:13})} تصدير Excel</button>
+    <div class="card" style="margin-bottom:16px;display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" id="exportDetailedScoresBtn">${icon('download',{size:13})} تصدير تفصيلي (كل محكّم ومعيار)</button>
+      ${ranked.length ? `<button class="btn btn-ghost btn-sm" id="exportRankingBtn">${icon('download',{size:13})} تصدير Excel (المراكز)</button>` : ''}
     </div>
+    ${ranked.length===0 ? `<div class="empty-hint">لا توجد نتائج كافية بعد لعرض المراكز</div>` : domainNames.map(domain=>`
+    <div style="margin:18px 0 8px;font-weight:700;font-size:14px">${icon('briefcase',{size:14})} ${escHtml(domain)} <span style="font-weight:400;color:var(--ink-400);font-size:12px">(${domainGroups[domain].length} مشروعًا)</span></div>
     <div class="card"><div class="table-wrap"><table>
       <thead><tr><th>المركز</th><th>رقم المشروع</th><th>اسم المشروع</th><th>الدرجة</th><th>الحالة</th></tr></thead>
-      <tbody>${ranked.map((r,i)=>`<tr style="${i<3?'background:var(--gold-100)33':''}">
+      <tbody>${domainGroups[domain].map((r,i)=>`<tr style="${i<3?'background:var(--gold-100)33':''}">
         <td style="font-size:16px">${medalIcons[i]||(i+1)}</td>
         <td class="mono">${escHtml(r.project_id)}</td>
         <td><b>${escHtml(r.project_name)}</b></td>
         <td><b class="mono" style="font-size:14px">${r.avgTotal.toFixed(1)} / ${maxTotal}</b></td>
         <td>${r.complete ? `<span class="badge ok">اكتمل التحكيم</span>` : `<span class="badge mid">${r.submittedCount}/${r.assignedCount} محكّمين</span>`}</td>
       </tr>`).join('')}</tbody>
-    </table></div></div>`}
+    </table></div></div>`).join('')}
   `;
   bindRoundSelector(renderJudgingRanking);
   document.getElementById('toggleLockBtn').addEventListener('click', async ()=>{
@@ -2766,7 +2774,9 @@ async function renderJudgingRanking(){
     else { doToggle(); }
   });
   const exportBtn = document.getElementById('exportRankingBtn');
-  if(exportBtn) exportBtn.addEventListener('click', ()=>exportRankingToExcel(ranked, maxTotal, round));
+  if(exportBtn) exportBtn.addEventListener('click', ()=>exportRankingToExcel(domainGroups, domainNames, maxTotal, round));
+  const exportDetailedBtn = document.getElementById('exportDetailedScoresBtn');
+  if(exportDetailedBtn) exportDetailedBtn.addEventListener('click', ()=>runExportDetailedJudgeScores(round));
   document.getElementById('togglePublishBtn').addEventListener('click', async ()=>{
     const publish = !round?.results_published;
     const doToggle = async ()=>{
@@ -2781,17 +2791,64 @@ async function renderJudgingRanking(){
   });
 }
 
-function exportRankingToExcel(ranked, maxTotal, round){
+function exportRankingToExcel(domainGroups, domainNames, maxTotal, round){
   if(typeof XLSX === 'undefined'){ showToast('تعذّر تحميل مكتبة التصدير — تأكد من اتصالك بالإنترنت وأعد المحاولة'); return; }
-  const header = ['المركز', 'رقم المشروع', 'اسم المشروع', `الدرجة (من ${maxTotal})`, 'عدد المحكّمين المُرسِلين', 'عدد المحكّمين المُكلَّفين', 'الحالة'];
-  const rows = ranked.map((r,i)=>[
-    i+1, r.project_id, r.project_name, r.avgTotal.toFixed(1), r.submittedCount, r.assignedCount,
-    r.complete ? 'اكتمل التحكيم' : 'لم يكتمل',
-  ]);
+  const header = ['المجال', 'المركز (داخل المجال)', 'رقم المشروع', 'اسم المشروع', `الدرجة (من ${maxTotal})`, 'عدد المحكّمين المُرسِلين', 'عدد المحكّمين المُكلَّفين', 'الحالة'];
+  const rows = [];
+  domainNames.forEach(domain=>{
+    domainGroups[domain].forEach((r,i)=>{
+      rows.push([domain, i+1, r.project_id, r.project_name, r.avgTotal.toFixed(1), r.submittedCount, r.assignedCount, r.complete ? 'اكتمل التحكيم' : 'لم يكتمل']);
+    });
+  });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, ...rows]), 'المراكز والنتائج');
   const roundName = (round?.name || 'جولة').replace(/[\\/:*?"<>|]/g, '');
   XLSX.writeFile(wb, `نتائج_${roundName}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// تصدير تفصيلي: صفّ واحد لكل (محكّم × مشروع) بدرجة كل معيار على حدة —
+// يفيد بمراجعة أي محكّم بالذات (هل درجاته وصلت، وكم أعطى كل معيار)
+// بدل الاكتفاء بمتوسط المشروع النهائي فقط
+async function runExportDetailedJudgeScores(round){
+  if(typeof XLSX === 'undefined'){ showToast('تعذّر تحميل مكتبة التصدير — تأكد من اتصالك بالإنترنت وأعد المحاولة'); return; }
+  const btn = document.getElementById('exportDetailedScoresBtn');
+  const original = btn.innerHTML; btn.disabled = true; btn.innerHTML = 'جارٍ التجهيز…';
+  try{
+    const [{data: judges}, {data: evals}, {data: criteria}] = await Promise.all([
+      sb.from('judges').select('id, full_name'),
+      sb.from('judge_evaluations').select('judge_id, form_id, scores, is_submitted, overall_note, submitted_at, updated_at').eq('round_id', CURRENT_ADMIN_ROUND_ID),
+      sb.from('judging_criteria').select('id, name, max_score, order_index').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
+    ]);
+    if(!evals || !evals.length){ showToast('لا توجد أي تقييمات محفوظة بهذه الجولة بعد'); return; }
+    const judgeMap = {}; (judges||[]).forEach(j=>{ judgeMap[j.id] = j.full_name; });
+    const rows = joinedReviewRows();
+    const formIdToProject = {}; rows.forEach(r=>{ formIdToProject[r.form_id] = r; });
+    const critList = criteria || [];
+
+    const header = ['المحكّم', 'رقم المشروع', 'اسم المشروع', 'حالة الإرسال', ...critList.map(c=>`${c.name} (من ${c.max_score})`), 'الملاحظة', 'آخر تحديث', 'تاريخ الإرسال'];
+    const dataRows = evals.map(e=>{
+      const proj = formIdToProject[e.form_id] || {};
+      const scoreVals = critList.map(c=>{
+        const raw = (e.scores||{})[c.id];
+        if(raw===undefined || raw===null || raw==='') return '';
+        return (parseFloat(raw)/5)*parseFloat(c.max_score);
+      });
+      return [
+        judgeMap[e.judge_id] || e.judge_id, proj.project_id||'', proj.project_name||'',
+        e.is_submitted ? 'مُرسَل نهائيًا' : 'مسودة (لم يُرسَل)',
+        ...scoreVals,
+        e.overall_note || '',
+        e.updated_at ? new Date(e.updated_at).toLocaleString('ar-SA') : '',
+        e.submitted_at ? new Date(e.submitted_at).toLocaleString('ar-SA') : '',
+      ];
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, ...dataRows]), 'تفصيل الدرجات');
+    const roundName = (round?.name || 'جولة').replace(/[\\/:*?"<>|]/g, '');
+    XLSX.writeFile(wb, `تفصيل_درجات_المحكّمين_${roundName}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast(`تم تصدير ${dataRows.length} صفًا`);
+  }catch(e){ console.error(e); showToast('تعذّر التصدير: '+(e.message||'')); }
+  finally{ btn.disabled = false; btn.innerHTML = original; }
 }
 
 async function renderJudgingRounds(){
