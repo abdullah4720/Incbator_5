@@ -2814,39 +2814,106 @@ async function runExportDetailedJudgeScores(round){
   const btn = document.getElementById('exportDetailedScoresBtn');
   const original = btn.innerHTML; btn.disabled = true; btn.innerHTML = 'جارٍ التجهيز…';
   try{
-    const [{data: judges}, {data: evals}, {data: criteria}] = await Promise.all([
+    const [{data: judges}, {data: evals}, {data: criteria}, {data: assignments}] = await Promise.all([
       sb.from('judges').select('id, full_name'),
       sb.from('judge_evaluations').select('judge_id, form_id, scores, is_submitted, overall_note, submitted_at, updated_at').eq('round_id', CURRENT_ADMIN_ROUND_ID),
       sb.from('judging_criteria').select('id, name, max_score, order_index').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
+      sb.from('judge_assignments').select('judge_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
     ]);
     if(!evals || !evals.length){ showToast('لا توجد أي تقييمات محفوظة بهذه الجولة بعد'); return; }
     const judgeMap = {}; (judges||[]).forEach(j=>{ judgeMap[j.id] = j.full_name; });
     const rows = joinedReviewRows();
     const formIdToProject = {}; rows.forEach(r=>{ formIdToProject[r.form_id] = r; });
     const critList = criteria || [];
+    const maxTotal = critList.reduce((s,c)=>s+parseFloat(c.max_score||0), 0) || 1;
 
-    const header = ['المحكّم', 'رقم المشروع', 'اسم المشروع', 'حالة الإرسال', ...critList.map(c=>`${c.name} (من ${c.max_score})`), 'الملاحظة', 'آخر تحديث', 'تاريخ الإرسال'];
-    const dataRows = evals.map(e=>{
-      const proj = formIdToProject[e.form_id] || {};
-      const scoreVals = critList.map(c=>{
-        const raw = (e.scores||{})[c.id];
-        if(raw===undefined || raw===null || raw==='') return '';
-        return (parseFloat(raw)/5)*parseFloat(c.max_score);
+    const scoreOf = (e, c)=>{
+      const raw = (e.scores||{})[c.id];
+      if(raw===undefined || raw===null || raw==='') return null;
+      return (parseFloat(raw)/5)*parseFloat(c.max_score);
+    };
+    const totalOf = (e)=> critList.reduce((s,c)=>{ const v = scoreOf(e,c); return s + (v===null?0:v); }, 0);
+
+    // نجمّع حسب المجال ثم المشروع ثم المحكّم — عشان الملف يُقرأ بترتيب منطقي
+    // (كل مشروع مع كل محكّميه مع بعض) بدل قائمة طويلة غير مرتّبة، مع صفّ
+    // متوسط لكل مشروع وفواصل بين المشاريع/المجالات لسهولة القراءة
+    const byProject = {};
+    evals.forEach(e=>{ (byProject[e.form_id] = byProject[e.form_id]||[]).push(e); });
+    const formIds = Object.keys(byProject);
+    const projectsSorted = formIds.map(fid=>{
+      const proj = formIdToProject[fid] || {};
+      return { form_id: fid, project_id: proj.project_id||'', project_name: proj.project_name||fid, domain: proj.domain||'بدون مجال', track: proj.track||'—' };
+    }).sort((a,b)=> (a.domain).localeCompare(b.domain,'ar') || (a.project_id).localeCompare(b.project_id,'ar',{numeric:true}));
+
+    const critHeaders = critList.map(c=>`${c.name} (من ${c.max_score})`);
+    const header = ['المجال', 'رقم المشروع', 'اسم المشروع', 'المحكّم', 'حالة الإرسال', ...critHeaders, `المجموع (من ${maxTotal})`, 'الملاحظة', 'تاريخ الإرسال'];
+    const aoa = [header];
+    let currentDomain = null;
+    projectsSorted.forEach(p=>{
+      if(p.domain !== currentDomain){
+        if(currentDomain !== null) aoa.push([]); // فاصل قبل مجال جديد
+        aoa.push([`── ${p.domain} ──`]);
+        currentDomain = p.domain;
+      }
+      const projEvals = byProject[p.form_id].slice().sort((a,b)=>(judgeMap[a.judge_id]||'').localeCompare(judgeMap[b.judge_id]||'', 'ar'));
+      projEvals.forEach((e,i)=>{
+        const scoreVals = critList.map(c=>{ const v = scoreOf(e,c); return v===null ? '' : Math.round(v*100)/100; });
+        aoa.push([
+          i===0 ? p.domain : '', i===0 ? p.project_id : '', i===0 ? p.project_name : '',
+          judgeMap[e.judge_id] || e.judge_id,
+          e.is_submitted ? 'مُرسَل نهائيًا' : 'مسودة (لم يُرسَل)',
+          ...scoreVals,
+          e.is_submitted ? Math.round(totalOf(e)*100)/100 : '',
+          e.overall_note || '',
+          e.submitted_at ? new Date(e.submitted_at).toLocaleString('ar-SA') : '',
+        ]);
       });
-      return [
-        judgeMap[e.judge_id] || e.judge_id, proj.project_id||'', proj.project_name||'',
-        e.is_submitted ? 'مُرسَل نهائيًا' : 'مسودة (لم يُرسَل)',
-        ...scoreVals,
-        e.overall_note || '',
-        e.updated_at ? new Date(e.updated_at).toLocaleString('ar-SA') : '',
-        e.submitted_at ? new Date(e.submitted_at).toLocaleString('ar-SA') : '',
-      ];
+      const submittedForProj = projEvals.filter(e=>e.is_submitted);
+      if(submittedForProj.length){
+        const avgTotal = submittedForProj.reduce((s,e)=>s+totalOf(e),0) / submittedForProj.length;
+        const avgPerCrit = critList.map(c=>{
+          const vals = submittedForProj.map(e=>scoreOf(e,c)).filter(v=>v!==null);
+          return vals.length ? Math.round((vals.reduce((s,v)=>s+v,0)/vals.length)*100)/100 : '';
+        });
+        aoa.push(['', '', '', 'متوسط المشروع', `${submittedForProj.length} محكّمًا مُرسِلًا`, ...avgPerCrit, Math.round(avgTotal*100)/100, '', '']);
+      }
+      aoa.push([]); // فاصل بعد كل مشروع
     });
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{wch:16},{wch:12},{wch:26},{wch:20},{wch:16}, ...critList.map(()=>({wch:14})), {wch:12},{wch:24},{wch:18}];
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:0,c:header.length-1} }) };
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+    ws['!views'] = [{ state: 'frozen', ySplit: 1 }];
+
+    // ورقة ثانية: تجاوب مباشرة على "هل تقييم كل مشروع موجود؟" — تقارن كل
+    // إسناد محكّم↔مشروع فعلي (judge_assignments) مقابل وجود تقييم له فعليًا،
+    // وتفرز الفجوات: "لم يبدأ التقييم إطلاقًا" أو "مسودة محفوظة لكن لم تُرسَل"
+    const evalByPair = {}; evals.forEach(e=>{ evalByPair[`${e.judge_id}|${e.form_id}`] = e; });
+    const gapRows = [];
+    (assignments||[]).forEach(a=>{
+      const e = evalByPair[`${a.judge_id}|${a.form_id}`];
+      const proj = formIdToProject[a.form_id] || {};
+      if(!e){
+        gapRows.push([proj.domain||'بدون مجال', proj.project_id||'', proj.project_name||'', judgeMap[a.judge_id]||a.judge_id, 'لم يبدأ التقييم إطلاقًا']);
+      } else if(!e.is_submitted){
+        gapRows.push([proj.domain||'بدون مجال', proj.project_id||'', proj.project_name||'', judgeMap[a.judge_id]||a.judge_id, 'مسودة محفوظة — لم تُرسَل بعد']);
+      }
+    });
+    gapRows.sort((a,b)=> a[0].localeCompare(b[0],'ar') || String(a[1]).localeCompare(String(b[1]),'ar',{numeric:true}));
+    const gapHeader = ['المجال', 'رقم المشروع', 'اسم المشروع', 'المحكّم', 'الحالة'];
+    const wsGaps = XLSX.utils.aoa_to_sheet([gapHeader, ...gapRows]);
+    wsGaps['!cols'] = [{wch:16},{wch:12},{wch:26},{wch:20},{wch:28}];
+    wsGaps['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:0,c:gapHeader.length-1} }) };
+    wsGaps['!freeze'] = { xSplit: 0, ySplit: 1 };
+    wsGaps['!views'] = [{ state: 'frozen', ySplit: 1 }];
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, ...dataRows]), 'تفصيل الدرجات');
+    XLSX.utils.book_append_sheet(wb, ws, 'تفصيل الدرجات');
+    XLSX.utils.book_append_sheet(wb, wsGaps, 'ناقص أو لم يُرسَل');
     const roundName = (round?.name || 'جولة').replace(/[\\/:*?"<>|]/g, '');
     XLSX.writeFile(wb, `تفصيل_درجات_المحكّمين_${roundName}_${new Date().toISOString().slice(0,10)}.xlsx`);
-    showToast(`تم تصدير ${dataRows.length} صفًا`);
+    showToast(`تم تصدير ${evals.length} تقييمًا عبر ${formIds.length} مشروعًا${gapRows.length?` — و${gapRows.length} فجوة بورقة "ناقص أو لم يُرسَل"`:''}`);
   }catch(e){ console.error(e); showToast('تعذّر التصدير: '+(e.message||'')); }
   finally{ btn.disabled = false; btn.innerHTML = original; }
 }
@@ -4950,6 +5017,26 @@ async function renderDataCenterTab(){
       </div>
     </div>
 
+    <div class="ac-title" style="margin-bottom:10px">📁 كل الملفات المرفوعة</div>
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+        <div>
+          <b>تنزيل كل الملفات المرفوعة — مفروزة حسب المشروع</b>
+          <div style="font-size:12.5px;color:var(--ink-400);margin-top:4px;max-width:560px">كل الملفات التي رفعها المشاركون (PDF وفيديوهات المتطلبات — ما عدا ملفات عروض التحكيم، لها تصدير خاص بتبويب التحكيم)، كل مشروع بمجلد مستقل داخل الأرشيف باسم واضح، ومعه ملف فهرس manifest.csv بكل الأسماء الحقيقية. نظرًا لعدد الملفات الكبير (400+) يمكنك تقسيمها لعدة أرشيفات ZIP بدل ملف واحد ضخم.</div>
+          <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <label style="font-size:12.5px;color:var(--ink-400)">مشاريع كل أرشيف:</label>
+            <select id="filesByProjectChunkSize" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px">
+              <option value="15">15 مشروعًا لكل ZIP</option>
+              <option value="30" selected>30 مشروعًا لكل ZIP</option>
+              <option value="60">60 مشروعًا لكل ZIP</option>
+              <option value="0">أرشيف واحد يشمل الجميع</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="filesByProjectBtn">${icon('download',{size:13})} تنزيل الملفات</button>
+      </div>
+    </div>
+
     <div class="req-banner">كل التصديرات تُنشأ بمتصفحك مباشرة (ما تمر بأي خادم خارجي) — احفظها بمكان آمن بعد التنزيل.</div>
   `;
   document.getElementById('dcExportJudgingProjectsBtn').addEventListener('click', ()=>runExportJudgingProjectsExcel(classified, 'dcExportJudgingProjectsBtn'));
@@ -4959,6 +5046,122 @@ async function renderDataCenterTab(){
   document.getElementById('fullBackupBtn').addEventListener('click', ()=>{
     openConfirm('النسخة الشاملة تحمّل كل الملفات المرفوعة فعليًا — قد تاخذ عدة دقائق ويكون حجم الملف النهائي كبيرًا. متابعة؟', ()=>runBackup(true));
   });
+  document.getElementById('filesByProjectBtn').addEventListener('click', ()=>{
+    const chunkSize = parseInt(document.getElementById('filesByProjectChunkSize').value, 10) || 0;
+    const msg = chunkSize>0
+      ? `سيتم تنزيل الملفات على شكل عدة أرشيفات ZIP (${chunkSize} مشروعًا بكل أرشيف) — قد يستغرق وقتًا حسب عدد وحجم الملفات. متابعة؟`
+      : `سيتم تنزيل كل الملفات بأرشيف ZIP واحد — قد يكون حجمه كبيرًا جدًا ويستغرق وقتًا طويلًا. متابعة؟`;
+    openConfirm(msg, ()=>runExportFilesByProject(chunkSize));
+  });
+}
+
+// تنزيل كل ملفات form_files (متطلبات المشاركين) مجمّعة حسب المشروع —
+// كل مشروع بمجلد مستقل، وأسماء داخل الأرشيف إنجليزية بالكامل (نفس درس ملفات
+// عروض التحكيم: المستخرج المدمج بويندوز لا يوثق بأي حرف عربي داخل مسار
+// الأرشيف نفسه) مع manifest.csv يربط كل اسم بمقابله الحقيقي.
+async function runExportFilesByProject(chunkSize){
+  if(typeof JSZip === 'undefined'){ showToast('تعذّر تحميل مكتبة الضغط (JSZip) — تحقق من اتصال الإنترنت وأعد تحميل الصفحة'); return; }
+  const btn = document.getElementById('filesByProjectBtn');
+  if(btn){ btn.disabled = true; btn.innerHTML = 'جارٍ التجهيز…'; }
+  try{
+    const [{ data: files, error: filesErr }, { data: forms, error: formsErr }, { data: projects, error: projErr }, { data: questions }] = await Promise.all([
+      sb.from('form_files').select('id, form_id, field_key, storage_path, file_name, size_bytes, uploaded_at').is('deleted_at', null),
+      sb.from('verification_forms').select('id, project_id'),
+      sb.from('eligible_projects').select('project_id, project_name, track, domain'),
+      sb.from('form_questions').select('field_key, label'),
+    ]);
+    if(filesErr || formsErr || projErr){ showToast('تعذّر جلب البيانات: '+((filesErr||formsErr||projErr).message)); return; }
+    if(!files || !files.length){ showToast('لا توجد أي ملفات مرفوعة حاليًا'); return; }
+
+    const formToProject = {}; (forms||[]).forEach(f=>{ formToProject[f.id] = f.project_id; });
+    const projectMap = {}; (projects||[]).forEach(p=>{ projectMap[p.project_id] = p; });
+    const labelMap = {}; (questions||[]).forEach(q=>{ labelMap[q.field_key] = q.label; });
+
+    // تجميع الملفات حسب المشروع
+    const byProject = {};
+    files.forEach(f=>{
+      const pid = formToProject[f.form_id] || 'بدون_مشروع';
+      (byProject[pid] = byProject[pid] || []).push(f);
+    });
+    const projectIds = Object.keys(byProject).sort((a,b)=>a.localeCompare(b,'ar',{numeric:true}));
+
+    // تقسيم المشاريع إلى دفعات (أرشيف واحد لكل دفعة) — chunkSize=0 يعني دفعة واحدة تشمل الجميع
+    const batches = [];
+    if(chunkSize>0){
+      for(let i=0;i<projectIds.length;i+=chunkSize) batches.push(projectIds.slice(i, i+chunkSize));
+    } else {
+      batches.push(projectIds);
+    }
+
+    const totalFiles = files.length;
+    showBatchProgressModal(totalFiles, 'جارٍ تحميل الملفات المرفوعة…');
+    let doneTotal=0, failedTotal=0, zipsDownloaded=0;
+    const failedNames = [];
+
+    for(let bi=0; bi<batches.length; bi++){
+      if(batchCancelled) break;
+      const batchProjectIds = batches[bi];
+      const zip = new JSZip();
+      const manifestRows = [['المجلد','رقم المشروع','اسم المشروع','المسار/المجال','الحقل','اسم الملف داخل الأرشيف','اسم الملف الأصلي','تاريخ الرفع']];
+      let anyFile = false;
+      let folderCounter = 0;
+      for(const pid of batchProjectIds){
+        if(batchCancelled) break;
+        const proj = projectMap[pid] || {};
+        folderCounter++;
+        const safeId = (pid||'project').replace(/[^a-zA-Z0-9._-]/g,'_');
+        const folderName = `${String(folderCounter).padStart(3,'0')}-${safeId}`;
+        const fieldCounters = {};
+        for(const f of byProject[pid]){
+          if(batchCancelled) break;
+          try{
+            const { data: blob, error } = await sb.storage.from('form-attachments').download(f.storage_path);
+            if(error) throw error;
+            const safeField = (f.field_key||'file').replace(/[^a-zA-Z0-9._-]/g,'_');
+            fieldCounters[safeField] = (fieldCounters[safeField]||0) + 1;
+            const ext = (f.file_name.split('.').pop()||'dat').replace(/[^a-zA-Z0-9]/g,'').toLowerCase() || 'dat';
+            const fileName = fieldCounters[safeField]>1 ? `${safeField}_${fieldCounters[safeField]}.${ext}` : `${safeField}.${ext}`;
+            zip.folder(folderName).file(fileName, blob);
+            manifestRows.push([folderName, pid, proj.project_name||'', `${proj.track||''} — ${proj.domain||''}`, labelMap[f.field_key]||f.field_key, `${folderName}/${fileName}`, f.file_name, f.uploaded_at ? new Date(f.uploaded_at).toLocaleString('ar-SA') : '']);
+            anyFile = true;
+          }catch(e){ failedTotal++; failedNames.push(f.file_name||f.storage_path); console.error('[تصدير الملفات] تعذّر تحميل', f.storage_path, e); }
+          doneTotal++; updateBatchProgress(doneTotal, totalFiles, failedTotal);
+        }
+      }
+      if(batchCancelled) break;
+      if(!anyFile) continue;
+      const manifestCsv = manifestRows.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+      zip.file('manifest.csv', '﻿'+manifestCsv);
+      try{
+        const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{level:6} });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const datePart = new Date().toISOString().slice(0,10);
+        a.href = url;
+        a.download = batches.length>1
+          ? `ملفات-المشاريع-دفعة-${String(bi+1).padStart(2,'0')}-من-${batches.length}-${datePart}.zip`
+          : `ملفات-المشاريع-${datePart}.zip`;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+        zipsDownloaded++;
+        // مهلة قصيرة بين كل تنزيل والتالي حتى لا يحجب المتصفح التنزيلات المتعددة المتتالية
+        await new Promise(res=>setTimeout(res, 700));
+      }catch(e){
+        console.error('[تصدير الملفات] تعذّر إنشاء أرشيف الدفعة', bi+1, e);
+      }
+    }
+
+    closeBatchProgressModal();
+    if(batchCancelled){ showToast('تم إلغاء التنزيل'); return; }
+    if(zipsDownloaded===0){ showToast('تعذّر تحميل أي ملف — تحقق من Console (F12) لتفاصيل الخطأ'); return; }
+    showToast(`تم تنزيل ${zipsDownloaded} أرشيف ZIP — ${doneTotal-failedTotal} ملفًا من أصل ${totalFiles} عبر ${projectIds.length} مشروعًا${failedTotal?` (فشل ${failedTotal} ملفًا)`:''}`);
+  }catch(e){
+    console.error(e);
+    showToast('تعذّر تنزيل الملفات: '+(e.message||'خطأ غير معروف'));
+  }finally{
+    closeBatchProgressModal();
+    if(btn){ btn.disabled = false; btn.innerHTML = `${icon('download',{size:13})} تنزيل الملفات`; }
+  }
 }
 
 async function runBackup(includeFiles){
