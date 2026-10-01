@@ -2814,13 +2814,17 @@ async function runExportDetailedJudgeScores(round){
   const btn = document.getElementById('exportDetailedScoresBtn');
   const original = btn.innerHTML; btn.disabled = true; btn.innerHTML = 'جارٍ التجهيز…';
   try{
-    const [{data: judges}, {data: evals}, {data: criteria}, {data: assignments}] = await Promise.all([
+    const [judgesRes, evalsRes, criteriaRes, assignmentsRes] = await Promise.all([
       sb.from('judges').select('id, full_name'),
       sb.from('judge_evaluations').select('judge_id, form_id, scores, is_submitted, overall_note, submitted_at, updated_at').eq('round_id', CURRENT_ADMIN_ROUND_ID),
-      sb.from('judging_criteria').select('id, name, max_score, order_index').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
+      sb.from('judging_criteria').select('id, label, max_score, order_index').eq('round_id', CURRENT_ADMIN_ROUND_ID).order('order_index'),
       sb.from('judge_assignments').select('judge_id, form_id').eq('round_id', CURRENT_ADMIN_ROUND_ID),
     ]);
+    if(criteriaRes.error){ showToast('تعذّر جلب معايير التحكيم: '+criteriaRes.error.message); return; }
+    if(evalsRes.error){ showToast('تعذّر جلب التقييمات: '+evalsRes.error.message); return; }
+    const judges = judgesRes.data, evals = evalsRes.data, criteria = criteriaRes.data, assignments = assignmentsRes.data;
     if(!evals || !evals.length){ showToast('لا توجد أي تقييمات محفوظة بهذه الجولة بعد'); return; }
+    if(!criteria || !criteria.length){ showToast('لا توجد معايير تحكيم معرَّفة لهذه الجولة — أضفها من تبويب "معايير التحكيم" أولًا'); return; }
     const judgeMap = {}; (judges||[]).forEach(j=>{ judgeMap[j.id] = j.full_name; });
     const rows = joinedReviewRows();
     const formIdToProject = {}; rows.forEach(r=>{ formIdToProject[r.form_id] = r; });
@@ -2845,7 +2849,7 @@ async function runExportDetailedJudgeScores(round){
       return { form_id: fid, project_id: proj.project_id||'', project_name: proj.project_name||fid, domain: proj.domain||'بدون مجال', track: proj.track||'—' };
     }).sort((a,b)=> (a.domain).localeCompare(b.domain,'ar') || (a.project_id).localeCompare(b.project_id,'ar',{numeric:true}));
 
-    const critHeaders = critList.map(c=>`${c.name} (من ${c.max_score})`);
+    const critHeaders = critList.map(c=>`${c.label} (من ${c.max_score})`);
     const header = ['المجال', 'رقم المشروع', 'اسم المشروع', 'المحكّم', 'حالة الإرسال', ...critHeaders, `المجموع (من ${maxTotal})`, 'الملاحظة', 'تاريخ الإرسال'];
     const aoa = [header];
     let currentDomain = null;
@@ -3546,41 +3550,72 @@ async function openManageJudgeAssignmentsModal(judge){
   if(!CURRENT_ADMIN_ROUND_ID){ showToast('اختر جولة أولًا'); return; }
   const modal = document.getElementById('confirmModal');
   const box = modal.querySelector('.modal-box');
-  box.style.maxWidth = '460px';
+  box.style.maxWidth = '520px';
   box.innerHTML = `<h3>إسناد "${escHtml(judge.full_name)}"</h3><div class="empty-hint">جارٍ التحميل…</div>`;
   modal.classList.add('show');
 
-  const { data: assignments } = await sb.from('judge_assignments').select('form_id').eq('judge_id', judge.id).eq('round_id', CURRENT_ADMIN_ROUND_ID);
+  const [{data: assignments}, {data: evals}] = await Promise.all([
+    sb.from('judge_assignments').select('form_id').eq('judge_id', judge.id).eq('round_id', CURRENT_ADMIN_ROUND_ID),
+    sb.from('judge_evaluations').select('form_id, is_submitted, updated_at').eq('judge_id', judge.id).eq('round_id', CURRENT_ADMIN_ROUND_ID),
+  ]);
   const formIds = (assignments||[]).map(a=>a.form_id);
+  const evalMap = {}; (evals||[]).forEach(e=>{ evalMap[e.form_id] = e; });
   const rows = joinedReviewRows();
   const rowsMap = {}; rows.forEach(r=>{ rowsMap[r.form_id] = r; });
 
-  box.innerHTML = `
-    <h3>إسناد "${escHtml(judge.full_name)}" (${formIds.length} مشروعًا)</h3>
-    ${formIds.length===0 ? `<div class="empty-hint">لا توجد مشاريع مُسندة لهذا المحكّم بهذه الجولة</div>` : `
-    <div style="max-height:300px;overflow-y:auto;margin:12px 0">
-      ${formIds.map(fid=>{
-        const r = rowsMap[fid];
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px">
-          <span>${r?escHtml(r.project_id)+' — '+escHtml(r.project_name):fid}</span>
-          <button class="btn btn-ghost btn-sm" data-removeassign="${fid}">إزالة</button>
-        </div>`;
-      }).join('')}
-    </div>`}
-    <div class="modal-actions"><button class="btn btn-primary" id="manageAssignClose">إغلاق</button></div>
-  `;
-  document.getElementById('manageAssignClose').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
-  box.querySelectorAll('[data-removeassign]').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      openConfirm('إزالة هذا المشروع من إسناد المحكّم؟ لا يمس أي تقييم سبق وأرسله.', async ()=>{
-        const { error } = await sb.from('judge_assignments').delete().eq('judge_id', judge.id).eq('round_id', CURRENT_ADMIN_ROUND_ID).eq('form_id', b.dataset.removeassign);
-        if(error){ showToast('تعذّر الإزالة: '+error.message); return; }
-        showToast('تمت الإزالة');
-        modal.classList.remove('show'); restoreConfirmModal();
-        renderJudgingJudges();
+  const renderList = ()=>{
+    box.innerHTML = `
+      <h3>إسناد "${escHtml(judge.full_name)}" (${formIds.length} مشروعًا)</h3>
+      ${formIds.length===0 ? `<div class="empty-hint">لا توجد مشاريع مُسندة لهذا المحكّم بهذه الجولة</div>` : `
+      <div style="max-height:360px;overflow-y:auto;margin:12px 0">
+        ${formIds.map(fid=>{
+          const r = rowsMap[fid];
+          const ev = evalMap[fid];
+          const statusBadge = !ev ? `<span class="badge mid">لم يبدأ</span>`
+            : ev.is_submitted ? `<span class="badge ok">مُرسَل نهائيًا</span>`
+            : `<span class="badge mid">مسودة</span>`;
+          return `<div style="padding:8px 0;border-bottom:1px solid var(--line);font-size:13px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+              <span>${r?escHtml(r.project_id)+' — '+escHtml(r.project_name):fid}</span>
+              <button class="btn btn-ghost btn-sm" data-removeassign="${fid}">إزالة الإسناد</button>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px">
+              <span>${statusBadge}${ev?` <span style="color:var(--ink-400);font-size:11px">آخر تحديث ${relativeTime(ev.updated_at)}</span>`:''}</span>
+              ${ev ? `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" data-delevalfid="${fid}">${icon('trash-2',{size:12})} حذف التقييم</button>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`}
+      <div class="modal-actions"><button class="btn btn-primary" id="manageAssignClose">إغلاق</button></div>
+    `;
+    document.getElementById('manageAssignClose').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+    box.querySelectorAll('[data-removeassign]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        openConfirm('إزالة هذا المشروع من إسناد المحكّم؟ لا يمس أي تقييم سبق وأرسله.', async ()=>{
+          const { error } = await sb.from('judge_assignments').delete().eq('judge_id', judge.id).eq('round_id', CURRENT_ADMIN_ROUND_ID).eq('form_id', b.dataset.removeassign);
+          if(error){ showToast('تعذّر الإزالة: '+error.message); return; }
+          showToast('تمت الإزالة');
+          modal.classList.remove('show'); restoreConfirmModal();
+          renderJudgingJudges();
+        });
       });
     });
-  });
+    box.querySelectorAll('[data-delevalfid]').forEach(b=>{
+      b.addEventListener('click', ()=>{
+        const fid = b.dataset.delevalfid;
+        const r = rowsMap[fid];
+        const label = r ? `${r.project_id} — ${r.project_name}` : fid;
+        openConfirm(`حذف تقييم "${escHtml(judge.full_name)}" لمشروع "${escHtml(label)}" نهائيًا؟ هذا يمسح كل الدرجات والملاحظة المسجَّلة ولا يمكن التراجع عنه — يبقى إسناد المشروع له قائمًا ويقدر يسجّل تقييمًا جديدًا من جديد (إن لم تكن الجولة مقفلة).`, async ()=>{
+          const { error } = await sb.from('judge_evaluations').delete().eq('judge_id', judge.id).eq('round_id', CURRENT_ADMIN_ROUND_ID).eq('form_id', fid);
+          if(error){ showToast('تعذّر حذف التقييم: '+error.message); return; }
+          delete evalMap[fid];
+          showToast('تم حذف التقييم');
+          renderList();
+        });
+      });
+    });
+  };
+  renderList();
 }
 
 function openJudgeModal(existing){
