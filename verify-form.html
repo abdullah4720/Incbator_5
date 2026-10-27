@@ -688,9 +688,17 @@ function renderStepper(){
       if(showingThankYou && (!ALLOW_EDIT_AFTER_SUBMIT || IS_READONLY)) return; // التعديل بعد الإرسال أو بعد الإقفال غير متاح
       showingThankYou = false;
       showingReport = false;
+      showingTeaser = false;
       state.current=parseInt(n.dataset.goto); renderAll(); window.scrollTo({top:0,behavior:'smooth'});
     });
   });
+  if(TEASER_ELIGIBLE){
+    const t = document.createElement('div');
+    t.className = 'step-item' + (showingTeaser ? ' active' : '') + ((TEASER && TEASER.is_complete) ? ' done' : ' warn');
+    t.innerHTML = `<div class="step-num">${(TEASER && TEASER.is_complete) ? icon('check',{size:13}) : '★'}</div><div class="step-title">استكمال البيانات (التيزر)</div>`;
+    t.addEventListener('click', ()=>{ showingReport=false; showingTeaser=true; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
+    el.appendChild(t);
+  }
 }
 
 /* ---------------- عرض حقل عام ---------------- */
@@ -1388,6 +1396,11 @@ function renderThankYouScreen(){
         <div style="font-size:14px;font-weight:800;font-family:'Cairo',sans-serif">${QUALIFICATION_BADGE==='ok'?'مشروعكم متأهِّل للانتقال إلى مرحلة التحكيم':'مشروعكم غير متأهِّل حاليًا للانتقال إلى مرحلة التحكيم'}</div>
       </div>
       ${QUALIFICATION_BADGE==='ok' ? qualifiedDetails + judgingSessionDetails : notQualifiedMessage}` : ''}
+      ${TEASER_ELIGIBLE ? `<div style="max-width:480px;margin:0 auto 22px;padding:16px 18px;border-radius:12px;background:var(--gold-100,#FBF0DA);border:1px solid var(--gold-300,#E6C570);text-align:right">
+        <div style="font-weight:800;font-size:14px;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:6px">★ استكمال بيانات ملف التيزر</div>
+        <div style="font-size:12.5px;color:var(--ink-900);line-height:1.9;margin-bottom:10px">أضيفوا نبذة مشروعكم وشعاره وبيانات التواصل وأعضاء الفريق لتظهر في الملف الموزَّع على المشاركين. ${(TEASER && TEASER.is_complete) ? '<b style="color:var(--success)">✓ بياناتكم مكتملة</b>' : (TEASER_OPEN ? '' : '<b style="color:var(--danger)">انتهت فترة الاستكمال</b>')}</div>
+        <button class="btn btn-gold" id="btnGoToTeaser">${(TEASER && TEASER.is_complete) ? 'مراجعة البيانات' : 'استكمال البيانات'}</button>
+      </div>` : ''}
       ${PUBLISHED_REPORT ? `<div style="margin-bottom:22px"><button class="btn btn-primary" id="btnGoToReport">${icon('file-text',{size:14})} عرض تقرير مشروعكم</button></div>` : ''}
       ${canEdit
         ? `<button class="btn btn-primary" id="btnEditAfterSubmit">تعديل الإجابات</button>`
@@ -1410,6 +1423,8 @@ function renderThankYouScreen(){
     renderAll();
     window.scrollTo({top:0,behavior:'smooth'});
   });
+  const goTeaserBtn = document.getElementById('btnGoToTeaser');
+  if(goTeaserBtn) goTeaserBtn.addEventListener('click', ()=>{ showingTeaser = true; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
   const goReportBtn = document.getElementById('btnGoToReport');
   if(goReportBtn) goReportBtn.addEventListener('click', ()=>{
     showingReport = true;
@@ -1597,10 +1612,369 @@ function renderAnnouncementsBanner(){
   if(bannerLink) bannerLink.addEventListener('click', ()=>{ showingReport = true; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
 }
 
+/* ==========================================================================
+   استكمال البيانات (ملف التيزر) — يظهر فقط للمشاريع المتأهِّلة التي تم تحكيمها
+   (لها تقييم محكَّم مُرسَل واحد على الأقل)، ويبقى متاحًا للتعديل حتى بعد إرسال
+   النموذج الرئيسي أو قفله، طالما نافذة الاستكمال مفتوحة من لوحة الإدارة.
+   ========================================================================== */
+let TEASER_ELIGIBLE = false;
+let TEASER_OPEN = true;
+let showingTeaser = false;
+let TEASER = null;            // صف teaser_profiles (أو القيم الافتراضية قبل أول حفظ)
+let TEASER_MEMBERS = [];      // [{id,name,phone,email,role,spec,specOther,camp,title,is_leader}]
+let TEASER_LOGO_URL = null;
+let TEASER_TEAM_DIRTY = false;
+let TEASER_SAVE_TIMER = null;
+let PROJECT_META = null;      // صف eligible_projects للمشروع الحالي
+const TEASER_MAX_WORDS = 150, TEASER_MIN_WORDS = 30, TEASER_MAX_MEMBERS = 6;
+const TEASER_ROLES = ["التطوير التقني","تطوير المنتج أو الخدمة","نموذج العمل التجاري","التسويق والمبيعات","الإدارة المالية","العمليات","التصميم وتجربة المستخدم","البحث والتطوير","دور آخر"];
+
+function teaserWordCount(t){ const s=(t||'').trim(); return s ? s.split(/\s+/).length : 0; }
+function teaserEmailOk(v){ return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((v||'').trim()); }
+function teaserNormalizeUrl(v){
+  let s=(v||'').trim(); if(!s) return '';
+  if(!/^https?:\/\//i.test(s)) s='https://'+s;
+  try{ const u=new URL(s); return /\./.test(u.hostname) ? u.href : null; }catch(e){ return null; }
+}
+function teaserMemberComplete(m){
+  const spec = m.spec==='أخرى' ? (m.specOther||'').trim() : (m.spec||'');
+  return !!((m.name||'').trim() && (m.phone||'').trim() && teaserEmailOk(m.email) && (m.role||'').trim() && spec);
+}
+
+async function loadTeaser(){
+  try{
+    const { data: elig, error: eErr } = await SB.rpc('teaser_is_eligible', { p_form_id: FORM_ID });
+    if(eErr) throw eErr;
+    TEASER_ELIGIBLE = elig === true;
+    if(!TEASER_ELIGIBLE) return;
+    const { data: open } = await SB.rpc('teaser_window_open');
+    TEASER_OPEN = open !== false;
+    const { data: prof } = await SB.from('teaser_profiles').select('*').eq('form_id', FORM_ID).maybeSingle();
+    TEASER = {
+      summary: (prof && prof.summary) || '',
+      logo_path: prof ? prof.logo_path : null, logo_name: prof ? prof.logo_name : null,
+      project_url: (prof && prof.project_url) || '',
+      contact_email: prof && prof.contact_email ? prof.contact_email : ((PROJECT_META && PROJECT_META.team_leader_email) || ''),
+      contact_phone: prof && prof.contact_phone ? prof.contact_phone : ((PROJECT_META && PROJECT_META.team_leader_phone) || ''),
+      contact_confirmed: !!(prof && prof.contact_confirmed),
+      consent_publish: !!(prof && prof.consent_publish),
+      show_members: prof ? prof.show_members !== false : true,
+      is_complete: !!(prof && prof.is_complete),
+    };
+    await loadTeaserMembers();
+    if(TEASER.logo_path) await refreshTeaserLogoUrl();
+  }catch(e){
+    console.error('تعذّر تحميل بيانات استكمال البيانات:', e);
+    TEASER_ELIGIBLE = false; // أي فشل = لا نعرض التبويب بدل عرضه معطوبًا
+  }
+}
+async function loadTeaserMembers(){
+  const { data } = await SB.from('team_members').select('*').eq('form_id', FORM_ID).order('order_index');
+  TEASER_MEMBERS = (data||[]).map(m=>({
+    id: m.id, name: m.full_name||'', phone: m.phone||'', email: m.email||'', role: m.role_in_project||'',
+    spec: SPECIALIZATIONS.includes(m.specialization) ? m.specialization : (m.specialization ? 'أخرى' : ''),
+    specOther: SPECIALIZATIONS.includes(m.specialization) ? '' : (m.specialization||''),
+    camp: m.attended_camp===true ? 'نعم' : (m.attended_camp===false ? 'لا' : ''),
+    title: m.title_in_entity||'', is_leader: !!m.is_leader,
+  }));
+  TEASER_TEAM_DIRTY = false;
+}
+async function refreshTeaserLogoUrl(){
+  TEASER_LOGO_URL = null;
+  if(!TEASER || !TEASER.logo_path) return;
+  const { data } = await SB.storage.from('form-attachments').createSignedUrl(TEASER.logo_path, 3600);
+  TEASER_LOGO_URL = data ? data.signedUrl : null;
+}
+
+/* ---- التقدم: أربعة بنود إلزامية (الشعار والرابط اختياريان) ---- */
+function teaserChecklist(){
+  const words = teaserWordCount(TEASER.summary);
+  const teamOk = TEASER_MEMBERS.length>=1 && TEASER_MEMBERS.every(teaserMemberComplete) && !TEASER_TEAM_DIRTY;
+  return [
+    { key:'summary', label:`نبذة عن المشروع (${TEASER_MIN_WORDS}–${TEASER_MAX_WORDS} كلمة)`, ok: words>=TEASER_MIN_WORDS && words<=TEASER_MAX_WORDS },
+    { key:'contact', label:'بريد التواصل مؤكَّد', ok: teaserEmailOk(TEASER.contact_email) && TEASER.contact_confirmed },
+    { key:'team', label:'بيانات أعضاء الفريق محفوظة وكاملة', ok: teamOk },
+    { key:'consent', label:'الموافقة على نشر البيانات في ملف التيزر', ok: !!TEASER.consent_publish },
+  ];
+}
+
+function teaserPreviewHTML(){
+  const initial = escHtml(((PROJECT_NAME||'؟').trim()[0]) || '؟');
+  const logo = TEASER_LOGO_URL
+    ? `<img src="${escHtml(TEASER_LOGO_URL)}" alt="" style="width:100%;height:100%;object-fit:contain;display:block">`
+    : `<span style="font-size:30px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif">${initial}</span>`;
+  const meta = [PROJECT_META && PROJECT_META.domain, PROJECT_META && PROJECT_META.track].filter(Boolean).map(escHtml).join(' • ');
+  const members = TEASER_MEMBERS.filter(m=>(m.name||'').trim());
+  const url = teaserNormalizeUrl(TEASER.project_url);
+  return `
+  <div style="border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff;text-align:right">
+    <div style="background:linear-gradient(135deg,var(--navy-800),#1a2456);padding:16px 18px;display:flex;align-items:center;gap:14px">
+      <div style="width:64px;height:64px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">${logo}</div>
+      <div style="min-width:0">
+        <div style="font-size:10.5px;color:var(--gold-300,#E6C570);font-family:'Cairo',sans-serif">حاضنة ابتكار 5</div>
+        <div style="font-size:16px;font-weight:800;color:#fff;font-family:'Cairo',sans-serif;margin-top:2px;overflow-wrap:anywhere">${escHtml(PROJECT_NAME||'')}</div>
+        ${meta ? `<div style="font-size:11px;color:rgba(255,255,255,.75);margin-top:3px">${meta}</div>` : ''}
+      </div>
+    </div>
+    <div style="padding:16px 18px">
+      <div style="font-weight:800;font-size:12px;color:var(--navy-800);margin-bottom:6px">نبذة عن المشروع</div>
+      <div style="font-size:13px;line-height:1.9;color:var(--ink-900);white-space:pre-wrap;overflow-wrap:anywhere">${TEASER.summary.trim() ? escHtml(TEASER.summary.trim()) : '<span style="color:var(--ink-400)">ستظهر النبذة هنا…</span>'}</div>
+      ${(TEASER.show_members && members.length) ? `
+      <div style="font-weight:800;font-size:12px;color:var(--navy-800);margin:14px 0 6px">فريق المشروع</div>
+      <div style="font-size:12.5px;line-height:2;color:var(--ink-900)">${members.map(m=>`<div>• ${escHtml(m.name)}${m.is_leader?' <span style="color:var(--gold-600,#B8860B);font-size:11px">(قائد الفريق)</span>':(m.role?` <span style="color:var(--ink-400);font-size:11px">— ${escHtml(m.role)}</span>`:'')}</div>`).join('')}</div>` : ''}
+      <div style="font-weight:800;font-size:12px;color:var(--navy-800);margin:14px 0 6px">التواصل</div>
+      <div style="font-size:12.5px;line-height:2;color:var(--ink-900)">
+        ${TEASER.contact_email ? `✉️ <span class="mono" dir="ltr">${escHtml(TEASER.contact_email)}</span><br>` : ''}
+        ${TEASER.contact_phone ? `📞 <span class="mono" dir="ltr">${escHtml(TEASER.contact_phone)}</span><br>` : ''}
+        ${url ? `🔗 <span class="mono" dir="ltr" style="word-break:break-all">${escHtml(url)}</span>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderTeaserScreen(){
+  const card = document.getElementById('sectionCard');
+  if(!TEASER){ card.innerHTML = `<div class="empty-hint" style="padding:40px">تعذّر تحميل البيانات</div>`; return; }
+  const locked = !TEASER_OPEN;
+  const dis = locked ? 'disabled' : '';
+  const dupPhones = findDuplicateValues(TEASER_MEMBERS, 'phone', v=>v.replace(/\s+/g,''));
+  const dupEmails = findDuplicateValues(TEASER_MEMBERS, 'email', v=>v.toLowerCase());
+  const q = (s)=>String(s||'').replace(/"/g,'&quot;');
+  const membersHTML = TEASER_MEMBERS.map((m,i)=>{
+    const isLeader = m.is_leader;
+    const phoneDup = dupPhones.has((m.phone||'').replace(/\s+/g,''));
+    const emailDup = dupEmails.has((m.email||'').toLowerCase());
+    const roleOpts = TEASER_ROLES.includes(m.role) || !m.role ? TEASER_ROLES : TEASER_ROLES.concat([m.role]);
+    return `
+    <div class="member-card">
+      <div class="member-head">
+        <span class="member-tag">${isLeader?'قائد الفريق':'عضو '+(i+1)}</span>
+        ${(!isLeader && !locked) ? `<button type="button" class="member-remove" data-tremove="${i}">إزالة العضو</button>` : ''}
+      </div>
+      <div class="field"><div class="field-label">الاسم الرباعي<span class="req-star">*</span></div><input type="text" data-tm="${i}" data-tk="name" value="${q(m.name)}" ${dis}></div>
+      <div class="two-col">
+        <div class="field ${phoneDup?'has-error':''}"><div class="field-label">رقم الجوال<span class="req-star">*</span></div><input type="text" data-tm="${i}" data-tk="phone" value="${q(m.phone)}" ${dis}>${phoneDup?'<div class="error-text" style="display:block">هذا الرقم مستخدَم لعضو آخر</div>':''}</div>
+        <div class="field ${emailDup?'has-error':''}"><div class="field-label">البريد الإلكتروني<span class="req-star">*</span></div><input type="email" data-tm="${i}" data-tk="email" value="${q(m.email)}" ${(dis||isLeader)?'disabled':''}>${emailDup?'<div class="error-text" style="display:block">هذا البريد مستخدَم لعضو آخر</div>':''}${isLeader?'<div class="field-hint">بريد الدخول — لتعديل بريد التواصل استخدم الحقل المخصص أعلاه</div>':''}</div>
+      </div>
+      <div class="two-col">
+        <div class="field"><div class="field-label">الدور الرئيس في المشروع<span class="req-star">*</span></div>
+          ${isLeader ? `<input type="text" value="قائد الفريق" disabled>` : `<select data-tm="${i}" data-tk="role" ${dis}><option value="">اختر…</option>${roleOpts.map(o=>`<option value="${q(o)}" ${m.role===o?'selected':''}>${escHtml(o)}</option>`).join('')}</select>`}
+        </div>
+        <div class="field"><div class="field-label">التخصص أو مجال الخبرة<span class="req-star">*</span></div>
+          <select data-tm="${i}" data-tk="spec" ${dis}><option value="">اختر…</option>${SPECIALIZATIONS.map(o=>`<option value="${o}" ${m.spec===o?'selected':''}>${o}</option>`).join('')}</select>
+        </div>
+      </div>
+      ${m.spec==='أخرى' ? `<div class="field"><div class="field-label">حدّد التخصص<span class="req-star">*</span></div><input type="text" data-tm="${i}" data-tk="specOther" value="${q(m.specOther)}" ${dis}></div>` : ''}
+    </div>`;
+  }).join('');
+
+  card.innerHTML = `
+    <div style="padding:20px 20px 8px"><button class="btn btn-ghost btn-sm" id="btnBackFromTeaser">${icon('arrow-right',{size:13})} رجوع</button></div>
+    <div style="padding:8px 22px 30px;max-width:760px;margin:0 auto">
+      <div style="font-size:20px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:6px">استكمال البيانات</div>
+      <div style="font-size:13px;color:var(--ink-600);line-height:1.9;margin-bottom:14px">تهانينا على اجتياز مرحلة التحكيم. نرجو استكمال البيانات أدناه لإدراج مشروعكم في <b>ملف التيزر</b> الذي يُوزَّع على المشاركين.</div>
+      ${locked ? `<div class="req-banner" style="background:var(--danger-100);color:var(--danger);margin-bottom:14px"><b>🔒 انتهت فترة استكمال البيانات.</b>&nbsp;يمكنكم الاطلاع على ما تم حفظه، لكن لا يمكن تعديله. للاستفسار: <span class="mono">icip@qu.edu.sa</span></div>` : ''}
+
+      <div id="teaserChecklist" style="margin-bottom:18px"></div>
+
+      <div class="ac-title" style="font-weight:800;color:var(--navy-800);margin:6px 0 10px">١) هوية المشروع</div>
+      <div class="field">
+        <div class="field-label">شعار المشروع <span style="color:var(--ink-400);font-weight:400">(اختياري — PNG أو JPG أو SVG، حتى 2 م.ب)</span></div>
+        ${TEASER.logo_path ? `<div class="file-chip" style="margin-bottom:8px"><span class="fc-name">${icon('file-text',{size:13})} ${escHtml(TEASER.logo_name||'الشعار')}</span>${locked?'':`<button type="button" class="fc-remove" id="teaserLogoRemove">إزالة</button>`}</div>` : ''}
+        ${locked ? '' : `<div class="file-drop" id="teaserLogoDrop"><div class="fi-title">${TEASER.logo_path?'اضغطوا لاستبدال الشعار':'اضغطوا لرفع شعار المشروع'}</div><div class="fi-sub">يُفضَّل خلفية شفافة أو بيضاء</div></div><input type="file" id="teaserLogoInput" accept=".png,.jpg,.jpeg,.svg,.webp,image/png,image/jpeg,image/svg+xml,image/webp" style="display:none">`}
+      </div>
+      <div class="field">
+        <div class="field-label">نبذة عن المشروع<span class="req-star">*</span> <span style="color:var(--ink-400);font-weight:400">(من ${TEASER_MIN_WORDS} إلى ${TEASER_MAX_WORDS} كلمة)</span></div>
+        <textarea id="teaserSummary" rows="7" ${dis} placeholder="ما المشكلة التي يعالجها مشروعكم؟ وما الحل؟ ولمن يتوجه؟ وما الأثر المتوقع؟">${escHtml(TEASER.summary)}</textarea>
+        <div id="teaserWordCount" style="font-size:12px;margin-top:6px"></div>
+      </div>
+      <div class="field">
+        <div class="field-label">رابط المشروع أو المنصة <span style="color:var(--ink-400);font-weight:400">(اختياري — إن كان متاحًا)</span></div>
+        <input type="text" id="teaserUrl" dir="ltr" value="${q(TEASER.project_url)}" placeholder="https://" ${dis}>
+        <div id="teaserUrlErr" class="error-text"></div>
+      </div>
+
+      <div class="ac-title" style="font-weight:800;color:var(--navy-800);margin:22px 0 10px">٢) التواصل مع الفريق</div>
+      <div class="two-col">
+        <div class="field"><div class="field-label">بريد التواصل<span class="req-star">*</span></div><input type="email" id="teaserEmail" dir="ltr" value="${q(TEASER.contact_email)}" ${dis}></div>
+        <div class="field"><div class="field-label">جوال التواصل <span style="color:var(--ink-400);font-weight:400">(اختياري)</span></div><input type="text" id="teaserPhone" dir="ltr" value="${q(TEASER.contact_phone)}" ${dis}></div>
+      </div>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-bottom:6px;cursor:pointer"><input type="checkbox" id="teaserConfirm" ${TEASER.contact_confirmed?'checked':''} ${dis} style="margin-top:4px"> <span>أؤكد أن وسيلة التواصل أعلاه صحيحة ويمكن للمشاركين وفريق البرنامج التواصل معنا عبرها. <span class="field-hint">(هذا البريد منفصل عن بريد دخولكم للمنصة ولا يغيّره)</span></span></label>
+
+      <div class="ac-title" style="font-weight:800;color:var(--navy-800);margin:22px 0 10px">٣) أعضاء الفريق <span style="font-weight:400;color:var(--ink-400);font-size:12px">(حتى ${TEASER_MAX_MEMBERS} أعضاء)</span></div>
+      ${membersHTML}
+      ${(!locked && TEASER_MEMBERS.length<TEASER_MAX_MEMBERS) ? `<div class="add-member-btn" id="teaserAddMember">+ إضافة عضو جديد</div>` : ''}
+      <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:12px;cursor:pointer"><input type="checkbox" id="teaserShowMembers" ${TEASER.show_members?'checked':''} ${dis}> <span>إظهار أسماء أعضاء الفريق في ملف التيزر</span></label>
+
+      <div class="ac-title" style="font-weight:800;color:var(--navy-800);margin:22px 0 10px">٤) الموافقة على النشر</div>
+      <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer"><input type="checkbox" id="teaserConsent" ${TEASER.consent_publish?'checked':''} ${dis} style="margin-top:4px"> <span>أوافق على نشر اسم المشروع وشعاره ونبذته وبيانات الفريق ووسيلة التواصل الموضحة أعلاه في ملف التيزر الموزَّع على المشاركين.</span></label>
+
+      <div class="ac-title" style="font-weight:800;color:var(--navy-800);margin:26px 0 10px">معاينة صفحة مشروعكم في الملف</div>
+      <div id="teaserPreview"></div>
+
+      ${locked ? '' : `<div style="position:sticky;bottom:0;background:linear-gradient(to top,#fff 70%,rgba(255,255,255,0));padding:18px 0 4px;margin-top:18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <button class="btn btn-gold" id="teaserSaveAll">حفظ البيانات</button>
+        <span id="teaserSaveState" style="font-size:12px;color:var(--ink-400)"></span>
+      </div>`}
+    </div>`;
+  refreshTeaserLive();
+  bindTeaserEvents();
+}
+
+function refreshTeaserLive(){
+  const words = teaserWordCount(TEASER.summary);
+  const wc = document.getElementById('teaserWordCount');
+  if(wc){
+    const bad = words>TEASER_MAX_WORDS, low = words<TEASER_MIN_WORDS;
+    wc.style.color = bad ? 'var(--danger)' : (low ? 'var(--ink-400)' : 'var(--success)');
+    wc.textContent = `${words} / ${TEASER_MAX_WORDS} كلمة` + (bad ? ` — تجاوزتم الحد بـ ${words-TEASER_MAX_WORDS} كلمة` : (low && words>0 ? ` — الحد الأدنى ${TEASER_MIN_WORDS} كلمة` : ''));
+  }
+  const cl = document.getElementById('teaserChecklist');
+  if(cl){
+    const items = teaserChecklist();
+    const done = items.filter(i=>i.ok).length;
+    cl.innerHTML = `<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--paper)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <b style="font-size:13px;color:var(--navy-800)">أنجزتم ${done} من ${items.length}</b>
+        ${done===items.length ? `<span class="badge ok">مكتمل ✓</span>` : `<span class="badge mid">قيد الاستكمال</span>`}
+      </div>
+      <div style="height:6px;background:var(--line);border-radius:4px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${done/items.length*100}%;background:var(--success)"></div></div>
+      ${items.map(i=>`<div style="font-size:12.5px;line-height:2;color:${i.ok?'var(--success)':'var(--ink-600)'}">${i.ok?'✓':'○'} ${i.label}</div>`).join('')}
+    </div>`;
+  }
+  const pv = document.getElementById('teaserPreview');
+  if(pv) pv.innerHTML = teaserPreviewHTML();
+}
+
+function setTeaserSaveState(msg){ const el=document.getElementById('teaserSaveState'); if(el) el.textContent = msg; }
+
+async function saveTeaserProfile(silent){
+  if(!TEASER_OPEN) return false;
+  const words = teaserWordCount(TEASER.summary);
+  if(words > TEASER_MAX_WORDS){ if(!silent) showToast(`النبذة تتجاوز ${TEASER_MAX_WORDS} كلمة — اختصروها أولًا`); return false; }
+  let url = null;
+  if((TEASER.project_url||'').trim()){
+    url = teaserNormalizeUrl(TEASER.project_url);
+    if(url===null){ if(!silent) showToast('رابط المشروع غير صحيح'); return false; }
+  }
+  const payload = {
+    form_id: FORM_ID,
+    summary: TEASER.summary.trim() || null,
+    logo_path: TEASER.logo_path || null, logo_name: TEASER.logo_name || null,
+    project_url: url,
+    contact_email: (TEASER.contact_email||'').trim() || null,
+    contact_phone: (TEASER.contact_phone||'').trim() || null,
+    contact_confirmed: !!TEASER.contact_confirmed,
+    consent_publish: !!TEASER.consent_publish,
+    show_members: !!TEASER.show_members,
+  };
+  const { error } = await SB.from('teaser_profiles').upsert(payload, { onConflict: 'form_id' });
+  if(error){ console.error(error); if(!silent) showToast('تعذّر الحفظ: '+(error.message||'')); setTeaserSaveState('تعذّر الحفظ التلقائي'); return false; }
+  setTeaserSaveState('تم الحفظ — '+new Date().toLocaleTimeString('ar-SA'));
+  return true;
+}
+
+async function saveTeaserTeam(){
+  if(!TEASER_OPEN) return false;
+  const bad = TEASER_MEMBERS.findIndex(m=>!teaserMemberComplete(m));
+  if(bad>=0){ showToast(`بيانات ${TEASER_MEMBERS[bad].is_leader?'قائد الفريق':'العضو '+(bad+1)} غير مكتملة`); return false; }
+  const dupP = findDuplicateValues(TEASER_MEMBERS,'phone',v=>v.replace(/\s+/g,'')), dupE = findDuplicateValues(TEASER_MEMBERS,'email',v=>v.toLowerCase());
+  if(dupP.size || dupE.size){ showToast('يوجد رقم جوال أو بريد مكرر بين الأعضاء'); return false; }
+  const rows = TEASER_MEMBERS.map(m=>({
+    id: m.id || null, full_name: m.name.trim(), phone: m.phone.trim(), email: m.email.trim(),
+    role_in_project: m.is_leader ? 'قائد الفريق' : m.role,
+    specialization: m.spec==='أخرى' ? (m.specOther||'').trim() : m.spec,
+    attended_camp: m.camp==='نعم' ? true : (m.camp==='لا' ? false : null),
+    title_in_entity: m.title || null,
+  }));
+  const { error } = await SB.rpc('teaser_save_team', { p_form_id: FORM_ID, p_members: rows });
+  if(error){ console.error(error); showToast('تعذّر حفظ الفريق: '+(error.message||'')); return false; }
+  await loadTeaserMembers();
+  return true;
+}
+
+function scheduleTeaserAutosave(){
+  setTeaserSaveState('تعديلات غير محفوظة…');
+  clearTimeout(TEASER_SAVE_TIMER);
+  TEASER_SAVE_TIMER = setTimeout(()=>{ saveTeaserProfile(true).then(()=>refreshTeaserLive()); }, 1500);
+}
+
+function bindTeaserEvents(){
+  const back = document.getElementById('btnBackFromTeaser');
+  if(back) back.addEventListener('click', ()=>{ clearTimeout(TEASER_SAVE_TIMER); if(TEASER_OPEN) saveTeaserProfile(true); showingTeaser=false; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
+  if(!TEASER_OPEN) return;
+
+  const bindText = (id, key)=>{ const el=document.getElementById(id); if(el) el.addEventListener('input', ()=>{ TEASER[key]=el.value; if(key==='contact_email'||key==='contact_phone'){ /* تغيير البريد يُلغي التأكيد السابق */ if(key==='contact_email' && TEASER.contact_confirmed){ TEASER.contact_confirmed=false; const c=document.getElementById('teaserConfirm'); if(c) c.checked=false; } } refreshTeaserLive(); scheduleTeaserAutosave(); }); };
+  bindText('teaserSummary','summary'); bindText('teaserUrl','project_url'); bindText('teaserEmail','contact_email'); bindText('teaserPhone','contact_phone');
+  const bindCheck = (id, key)=>{ const el=document.getElementById(id); if(el) el.addEventListener('change', ()=>{ TEASER[key]=el.checked; refreshTeaserLive(); scheduleTeaserAutosave(); }); };
+  bindCheck('teaserConfirm','contact_confirmed'); bindCheck('teaserConsent','consent_publish'); bindCheck('teaserShowMembers','show_members');
+  const urlEl = document.getElementById('teaserUrl');
+  if(urlEl) urlEl.addEventListener('blur', ()=>{ const err=document.getElementById('teaserUrlErr'); const ok = !(urlEl.value||'').trim() || teaserNormalizeUrl(urlEl.value)!==null; err.style.display = ok?'none':'block'; err.textContent = ok?'':'رابط غير صحيح — مثال: https://example.com'; });
+
+  document.querySelectorAll('[data-tm]').forEach(el=>{
+    const i = parseInt(el.dataset.tm), key = el.dataset.tk;
+    el.addEventListener(el.tagName==='SELECT' ? 'change' : 'input', ()=>{
+      TEASER_MEMBERS[i][key] = el.value; TEASER_TEAM_DIRTY = true;
+      if(key==='spec'){ renderTeaserScreen(); return; }
+      refreshTeaserLive(); setTeaserSaveState('تعديلات الفريق غير محفوظة — اضغطوا "حفظ البيانات"');
+    });
+  });
+  const add = document.getElementById('teaserAddMember');
+  if(add) add.addEventListener('click', ()=>{
+    if(TEASER_MEMBERS.length>=TEASER_MAX_MEMBERS) return;
+    TEASER_MEMBERS.push({ id:null, name:'', phone:'', email:'', role:'', spec:'', specOther:'', camp:'', title:'', is_leader:false });
+    TEASER_TEAM_DIRTY = true; renderTeaserScreen();
+  });
+  document.querySelectorAll('[data-tremove]').forEach(b=>b.addEventListener('click', ()=>{
+    TEASER_MEMBERS.splice(parseInt(b.dataset.tremove),1); TEASER_TEAM_DIRTY = true; renderTeaserScreen();
+  }));
+
+  // الشعار
+  const drop = document.getElementById('teaserLogoDrop'), inp = document.getElementById('teaserLogoInput');
+  if(drop) drop.addEventListener('click', ()=>inp.click());
+  if(inp) inp.addEventListener('change', async e=>{
+    const file = e.target.files[0]; if(!file) return;
+    const ext = (file.name.split('.').pop()||'').replace(/[^a-zA-Z0-9]/g,'').toLowerCase();
+    if(!['png','jpg','jpeg','svg','webp'].includes(ext)){ showToast('يُقبل PNG أو JPG أو SVG أو WEBP فقط'); inp.value=''; return; }
+    if(file.size > 2*1024*1024){ showToast('حجم الشعار يتجاوز 2 م.ب'); inp.value=''; return; }
+    showToast('جارٍ رفع الشعار…');
+    try{
+      const path = `${PROJECT_ID}/teaser-logo/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
+      const { error: upErr } = await SB.storage.from('form-attachments').upload(path, file, { upsert:false, contentType: file.type || undefined });
+      if(upErr) throw upErr;
+      const oldPath = TEASER.logo_path;
+      TEASER.logo_path = path; TEASER.logo_name = file.name;
+      const ok = await saveTeaserProfile(true);
+      if(!ok){ TEASER.logo_path = oldPath; throw new Error('تعذّر حفظ بيانات الشعار'); }
+      if(oldPath) await SB.storage.from('form-attachments').remove([oldPath]);
+      await refreshTeaserLogoUrl();
+      showToast('تم رفع الشعار'); renderTeaserScreen();
+    }catch(err){ console.error(err); showToast('تعذّر رفع الشعار: '+(err.message||'')); }
+  });
+  const rm = document.getElementById('teaserLogoRemove');
+  if(rm) rm.addEventListener('click', async ()=>{
+    const oldPath = TEASER.logo_path; TEASER.logo_path = null; TEASER.logo_name = null; TEASER_LOGO_URL = null;
+    if(await saveTeaserProfile(true)){ if(oldPath) await SB.storage.from('form-attachments').remove([oldPath]); showToast('تمت إزالة الشعار'); }
+    renderTeaserScreen();
+  });
+
+  const saveBtn = document.getElementById('teaserSaveAll');
+  if(saveBtn) saveBtn.addEventListener('click', async ()=>{
+    saveBtn.disabled = true; saveBtn.textContent = 'جارٍ الحفظ…';
+    clearTimeout(TEASER_SAVE_TIMER);
+    const okP = await saveTeaserProfile(false);
+    let okT = true;
+    if(okP && TEASER_TEAM_DIRTY) okT = await saveTeaserTeam();
+    saveBtn.disabled = false; saveBtn.textContent = 'حفظ البيانات';
+    if(okP && okT){ showToast('تم حفظ بيانات التيزر'); renderTeaserScreen(); }
+  });
+}
+
 function renderAll(){
   renderStepper();
   renderAnnouncementsBanner();
   if(showingReport){ renderReportScreen(); updateTopbar(); return; }
+  if(showingTeaser && TEASER_ELIGIBLE){ renderTeaserScreen(); updateTopbar(); return; }
   if(showingThankYou){ renderThankYouScreen(); updateTopbar(); return; }
   renderSection();
   updateTopbar();
@@ -1626,6 +2000,7 @@ async function initApp(){
       .eq('project_id', PROJECT_ID).maybeSingle();
     IS_READONLY = !!proj && (proj.is_active === false || proj.edit_locked === true);
     PROJECT_NAME = proj ? (proj.project_name || '') : '';
+    PROJECT_META = proj || null;
 
     // 2) جلب سجل النموذج أو إنشاؤه لأول مرة
     let { data: form, error: formErr } = await SB_AUTH.from('verification_forms')
@@ -1784,6 +2159,7 @@ async function initApp(){
 
     if(form.status === 'submitted'){
       showingThankYou = true;
+      await loadTeaser(); // استكمال البيانات — للمشاريع المتأهِّلة المحكَّمة فقط
     }
     FORM_STATUS = form.status;
   } catch(e){

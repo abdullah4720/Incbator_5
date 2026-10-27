@@ -10,6 +10,8 @@
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <style>
 :root{
   --navy-950:#12103C; --navy-800:#1A1852; --navy-700:#242066;
@@ -4971,6 +4973,327 @@ async function fetchAllRowsPaginated(tableName){
   return all;
 }
 
+/* ==========================================================================
+   ملف التيزر (استكمال البيانات) — متابعة الفرق وإصدار الملف
+   المشاريع المشمولة: المتأهِّلة التي لها تقييم محكَّم واحد على الأقل مُرسَل.
+   لا يُدرَج في الملف أي مشروع لم يوافق فريقه صراحةً على نشر بياناته.
+   ========================================================================== */
+const TEASER_MIN_W = 30, TEASER_MAX_W = 150;
+const teaserWords = (t)=>{ const s=(t||'').trim(); return s ? s.split(/\s+/).length : 0; };
+const chunkArr = (arr, n)=>{ const out=[]; for(let i=0;i<arr.length;i+=n) out.push(arr.slice(i,i+n)); return out; };
+
+async function fetchTeaserRows(){
+  const formIds = new Set();
+  let from = 0; const PAGE = 1000;
+  while(true){
+    const { data, error } = await sb.from('judge_evaluations').select('form_id').eq('is_submitted', true).range(from, from+PAGE-1);
+    if(error) throw error;
+    (data||[]).forEach(r=>formIds.add(r.form_id));
+    if(!data || data.length < PAGE) break;
+    from += PAGE;
+  }
+  const ids = [...formIds];
+  if(!ids.length) return [];
+  const forms = [], profiles = [], members = [];
+  for(const c of chunkArr(ids, 80)){
+    const [f, p, m] = await Promise.all([
+      sb.from('verification_forms').select('id, project_id').in('id', c),
+      sb.from('teaser_profiles').select('*').in('form_id', c),
+      sb.from('team_members').select('form_id, full_name, phone, email, role_in_project, is_leader, order_index').in('form_id', c).order('order_index'),
+    ]);
+    if(f.error) throw f.error;
+    if(p.error) throw p.error;
+    if(m.error) throw m.error;
+    forms.push(...(f.data||[])); profiles.push(...(p.data||[])); members.push(...(m.data||[]));
+  }
+  const projIds = [...new Set(forms.map(f=>f.project_id))];
+  const projects = [];
+  for(const c of chunkArr(projIds, 80)){
+    const { data, error } = await sb.from('eligible_projects').select('project_id, project_name, track, domain, team_leader_name, team_leader_email, team_leader_phone').in('project_id', c);
+    if(error) throw error;
+    projects.push(...(data||[]));
+  }
+  const projMap = {}; projects.forEach(p=>{ projMap[p.project_id] = p; });
+  const profMap = {}; profiles.forEach(p=>{ profMap[p.form_id] = p; });
+  const memByForm = {}; members.forEach(m=>{ (memByForm[m.form_id] = memByForm[m.form_id]||[]).push(m); });
+
+  return forms.map(f=>{
+    const proj = projMap[f.project_id] || {};
+    const prof = profMap[f.id] || null;
+    const words = prof ? teaserWords(prof.summary) : 0;
+    const missing = [];
+    if(!prof || words < TEASER_MIN_W) missing.push(!prof || !words ? 'النبذة' : `النبذة قصيرة (${words} كلمة)`);
+    if(!prof || !prof.contact_confirmed) missing.push('تأكيد بريد التواصل');
+    if(!prof || !prof.consent_publish) missing.push('الموافقة على النشر');
+    return {
+      form_id: f.id, project_id: f.project_id, project_name: proj.project_name || f.project_id,
+      track: proj.track || '', domain: proj.domain || 'بدون مجال',
+      leader_name: proj.team_leader_name || '', leader_email: proj.team_leader_email || '', leader_phone: proj.team_leader_phone || '',
+      profile: prof, members: memByForm[f.id] || [], words,
+      status: !prof ? 'none' : (prof.is_complete ? 'complete' : 'partial'),
+      missing,
+    };
+  }).sort((a,b)=> a.domain.localeCompare(b.domain,'ar') || a.project_id.localeCompare(b.project_id,'ar',{numeric:true}));
+}
+
+async function renderTeaserAdminBox(){
+  const box = document.getElementById('teaserAdminBox');
+  if(!box) return;
+  box.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  let rows, settings;
+  try{
+    rows = await fetchTeaserRows();
+    const { data, error } = await sb.from('form_settings').select('teaser_is_open, teaser_deadline_at').eq('id', 1).maybeSingle();
+    if(error) throw error;
+    settings = data || {};
+  }catch(e){
+    console.error(e);
+    box.innerHTML = `<div class="req-banner" style="background:var(--danger-100);color:var(--danger)">تعذّر تحميل بيانات التيزر: ${escHtml(e.message||'')}.<br>تأكد من تشغيل ملف <span class="mono">add-teaser-profiles.sql</span> في Supabase SQL Editor.</div>`;
+    return;
+  }
+  const n = { all: rows.length, complete: rows.filter(r=>r.status==='complete').length, partial: rows.filter(r=>r.status==='partial').length, none: rows.filter(r=>r.status==='none').length };
+  const consented = rows.filter(r=>r.profile && r.profile.consent_publish).length;
+  const isOpen = settings.teaser_is_open !== false;
+  const dl = settings.teaser_deadline_at ? new Date(settings.teaser_deadline_at) : null;
+  const dlLocal = dl ? new Date(dl.getTime() - dl.getTimezoneOffset()*60000).toISOString().slice(0,16) : '';
+  const badge = (st)=> st==='complete' ? `<span class="badge ok">مكتمل</span>` : st==='partial' ? `<span class="badge mid">قيد الاستكمال</span>` : `<span class="badge no">لم يبدأ</span>`;
+
+  box.innerHTML = `
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <div class="card kpi-card" style="flex:1;min-width:110px"><div class="kval mono">${n.all}</div><div class="klabel">مشاريع محكَّمة (مشمولة)</div></div>
+        <div class="card kpi-card" style="flex:1;min-width:110px"><div class="kval mono">${n.complete}</div><div class="klabel">مكتملة</div></div>
+        <div class="card kpi-card" style="flex:1;min-width:110px"><div class="kval mono">${n.partial}</div><div class="klabel">قيد الاستكمال</div></div>
+        <div class="card kpi-card" style="flex:1;min-width:110px"><div class="kval mono">${n.none}</div><div class="klabel">لم تبدأ</div></div>
+        <div class="card kpi-card" style="flex:1;min-width:110px"><div class="kval mono">${consented}</div><div class="klabel">وافقت على النشر</div></div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)">
+        <div style="flex:1;min-width:200px">
+          <b>فترة استكمال البيانات</b>
+          <div style="font-size:12px;color:var(--ink-400);margin-top:2px">${isOpen ? (dl ? `مفتوحة — تُغلَق تلقائيًا ${dl.toLocaleString('ar-SA')}` : 'مفتوحة حتى تغلقها يدويًا') : 'مغلقة — لا يستطيع الفرق التعديل'}</div>
+        </div>
+        <input type="datetime-local" id="teaserDeadlineInput" value="${dlLocal}" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px" title="موعد إغلاق تلقائي (اختياري)">
+        <button class="btn btn-ghost btn-sm" id="teaserSaveDeadlineBtn">حفظ الموعد</button>
+        <button class="btn ${isOpen?'btn-ghost':'btn-primary'} btn-sm" id="teaserToggleOpenBtn">${isOpen?'إغلاق الاستكمال الآن':'إعادة فتح الاستكمال'}</button>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--line)">
+        <button class="btn btn-ghost btn-sm" id="teaserTrackerBtn">${icon('download',{size:13})} متابعة الفرق (Excel)</button>
+        <select id="teaserExportMode" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px" title="أي المشاريع تدخل ملف التيزر؟ لا يُدرَج أبدًا مشروع لم يوافق على النشر">
+          <option value="complete">المكتملة فقط (${n.complete})</option>
+          <option value="consented">كل من وافق على النشر (${consented})</option>
+        </select>
+        <button class="btn btn-primary btn-sm" id="teaserPdfBtn">${icon('download',{size:13})} ملف التيزر (PDF واحد)</button>
+        <button class="btn btn-ghost btn-sm" id="teaserZipBtn">${icon('download',{size:13})} PDF لكل مشروع (ZIP)</button>
+      </div>
+    </div>
+
+    <details class="card">
+      <summary style="cursor:pointer;font-weight:700">قائمة المشاريع وحالة الاستكمال (${n.all})</summary>
+      <div class="table-wrap" style="margin-top:10px"><table>
+        <thead><tr><th>المجال</th><th>رقم المشروع</th><th>اسم المشروع</th><th>الحالة</th><th>النواقص</th><th>كلمات النبذة</th></tr></thead>
+        <tbody>${rows.map(r=>`<tr>
+          <td style="font-size:12px">${escHtml(r.domain)}</td>
+          <td class="mono">${escHtml(r.project_id)}</td>
+          <td>${escHtml(r.project_name)}</td>
+          <td>${badge(r.status)}</td>
+          <td style="font-size:12px;color:var(--ink-600)">${r.missing.length ? escHtml(r.missing.join('، ')) : '—'}</td>
+          <td class="mono">${r.words}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </details>`;
+
+  document.getElementById('teaserToggleOpenBtn').addEventListener('click', async ()=>{
+    const { error } = await sb.from('form_settings').update({ teaser_is_open: !isOpen }).eq('id', 1);
+    if(error){ showToast('تعذّر التحديث: '+error.message); return; }
+    showToast(isOpen ? 'تم إغلاق استكمال البيانات' : 'تمت إعادة فتح استكمال البيانات');
+    renderTeaserAdminBox();
+  });
+  document.getElementById('teaserSaveDeadlineBtn').addEventListener('click', async ()=>{
+    const v = document.getElementById('teaserDeadlineInput').value;
+    const { error } = await sb.from('form_settings').update({ teaser_deadline_at: v ? new Date(v).toISOString() : null }).eq('id', 1);
+    if(error){ showToast('تعذّر الحفظ: '+error.message); return; }
+    showToast(v ? 'تم حفظ موعد الإغلاق' : 'تمت إزالة موعد الإغلاق');
+    renderTeaserAdminBox();
+  });
+  document.getElementById('teaserTrackerBtn').addEventListener('click', ()=>exportTeaserTracker(rows));
+  const pick = ()=> rows.filter(r=> r.profile && r.profile.consent_publish && (document.getElementById('teaserExportMode').value==='consented' ? true : r.status==='complete'));
+  document.getElementById('teaserPdfBtn').addEventListener('click', ()=>runExportTeaserPdf(pick(), 'single'));
+  document.getElementById('teaserZipBtn').addEventListener('click', ()=>runExportTeaserPdf(pick(), 'zip'));
+}
+
+function exportTeaserTracker(rows){
+  if(typeof XLSX === 'undefined'){ showToast('تعذّر تحميل مكتبة التصدير'); return; }
+  const stLabel = { complete:'مكتمل', partial:'قيد الاستكمال', none:'لم يبدأ' };
+  const rank = { none:0, partial:1, complete:2 };
+  const sorted = rows.slice().sort((a,b)=> a.domain.localeCompare(b.domain,'ar') || rank[a.status]-rank[b.status] || a.project_id.localeCompare(b.project_id,'ar',{numeric:true}));
+  const aoa = [['المجال','رقم المشروع','اسم المشروع','الحالة','النواقص','كلمات النبذة','شعار','بريد التواصل','موافقة النشر','عدد الأعضاء','اسم قائد الفريق','بريد قائد الفريق (للتذكير)','جوال قائد الفريق']];
+  sorted.forEach(r=>aoa.push([
+    r.domain, r.project_id, r.project_name, stLabel[r.status], r.missing.join('، '), r.words,
+    r.profile && r.profile.logo_path ? 'نعم' : 'لا', r.profile ? (r.profile.contact_email||'') : '',
+    r.profile && r.profile.consent_publish ? 'نعم' : 'لا', r.members.length, r.leader_name, r.leader_email, r.leader_phone,
+  ]));
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:22},{wch:20},{wch:30},{wch:14},{wch:34},{wch:10},{wch:8},{wch:28},{wch:12},{wch:10},{wch:22},{wch:30},{wch:16}];
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:0,c:aoa[0].length-1} }) };
+  ws['!views'] = [{ state:'frozen', ySplit:1 }];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'متابعة التيزر');
+  XLSX.writeFile(wb, `متابعة_استكمال_بيانات_التيزر_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast(`تم تصدير ${sorted.length} مشروعًا`);
+}
+
+/* ---------------- صفحات PDF ---------------- */
+const TEASER_PAGE_W = 794, TEASER_PAGE_H = 1123; // A4 عند 96dpi
+function teaserBlobToDataUrl(blob){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(blob); }); }
+
+function teaserPageShell(inner){
+  const d = document.createElement('div');
+  d.dir = 'rtl';
+  d.style.cssText = `width:${TEASER_PAGE_W}px;height:${TEASER_PAGE_H}px;background:#fff;position:relative;overflow:hidden;font-family:'IBM Plex Sans Arabic','Cairo',sans-serif;color:#1a1a2e;box-sizing:border-box`;
+  d.innerHTML = inner;
+  return d;
+}
+const TEASER_FOOTER = `<div style="position:absolute;bottom:0;left:0;right:0;height:46px;background:#0B0B3D;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 40px;font-size:12px"><span>حاضنة ابتكار 5 — ملف المشاريع</span><span style="color:#E6C570">مركز الابتكار والملكية الفكرية — جامعة القصيم</span></div><div style="position:absolute;bottom:46px;left:0;right:0;height:4px;background:linear-gradient(90deg,#C9A24B,#2C8C8B,#6B3FA0)"></div>`;
+
+function teaserProjectPage(r, logoDataUrl, seq){
+  const prof = r.profile;
+  const initial = escHtml(((r.project_name||'؟').trim()[0]) || '؟');
+  const logo = logoDataUrl ? `<img src="${logoDataUrl}" style="width:100%;height:100%;object-fit:contain;display:block">` : `<span style="font-size:54px;font-weight:900;color:#0B0B3D;font-family:'Cairo',sans-serif">${initial}</span>`;
+  const members = (prof && prof.show_members === false) ? [] : r.members.filter(m=>(m.full_name||'').trim());
+  let url = (prof && prof.project_url) || '';
+  const contactRows = [
+    prof && prof.contact_email ? `<div style="margin-bottom:8px"><span style="color:#6b6b80">البريد الإلكتروني</span><div dir="ltr" style="text-align:right;font-weight:600;font-size:16px">${escHtml(prof.contact_email)}</div></div>` : '',
+    prof && prof.contact_phone ? `<div style="margin-bottom:8px"><span style="color:#6b6b80">الجوال</span><div dir="ltr" style="text-align:right;font-weight:600;font-size:16px">${escHtml(prof.contact_phone)}</div></div>` : '',
+    url ? `<div><span style="color:#6b6b80">رابط المشروع / المنصة</span><div dir="ltr" style="text-align:right;font-weight:600;font-size:15px;word-break:break-all">${escHtml(url)}</div></div>` : '',
+  ].join('');
+  return teaserPageShell(`
+    <div style="background:linear-gradient(135deg,#0B0B3D,#1a2456);height:230px;padding:34px 40px;display:flex;align-items:center;gap:26px">
+      <div style="width:150px;height:150px;border-radius:20px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;padding:8px;box-sizing:border-box">${logo}</div>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:13px;color:#E6C570;font-family:'Cairo',sans-serif;margin-bottom:8px">حاضنة ابتكار 5 — ${escHtml(r.domain)}</div>
+        <div style="font-size:30px;font-weight:900;color:#fff;font-family:'Cairo',sans-serif;line-height:1.5;overflow-wrap:anywhere">${escHtml(r.project_name)}</div>
+        <div style="font-size:13px;color:rgba(255,255,255,.75);margin-top:8px">${escHtml(r.track||'')}${seq?` <span style="margin-inline-start:10px;color:#E6C570">• رقم ${seq} في الملف</span>`:''}</div>
+      </div>
+    </div>
+    <div style="padding:30px 40px 0">
+      <div style="font-family:'Cairo',sans-serif;font-weight:800;font-size:17px;color:#0B0B3D;border-bottom:3px solid #C9A24B;display:inline-block;padding-bottom:4px;margin-bottom:12px">نبذة عن المشروع</div>
+      <div style="font-size:16px;line-height:2;white-space:pre-wrap;overflow-wrap:anywhere">${escHtml((prof && prof.summary || '').trim())}</div>
+      ${members.length ? `<div style="font-family:'Cairo',sans-serif;font-weight:800;font-size:17px;color:#0B0B3D;border-bottom:3px solid #C9A24B;display:inline-block;padding-bottom:4px;margin:26px 0 12px">فريق المشروع</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;font-size:15px;line-height:1.8">${members.map(m=>`<div>• <b>${escHtml(m.full_name)}</b>${m.is_leader?' <span style="color:#B8860B;font-size:12px">(قائد الفريق)</span>':(m.role_in_project?` <span style="color:#6b6b80;font-size:12.5px">— ${escHtml(m.role_in_project)}</span>`:'')}</div>`).join('')}</div>` : ''}
+    </div>
+    ${contactRows ? `<div style="position:absolute;left:40px;right:40px;bottom:80px;border:1.5px solid #e4e4ee;border-radius:16px;padding:18px 22px;background:#f7f7fb;font-size:14px"><div style="font-family:'Cairo',sans-serif;font-weight:800;color:#0B0B3D;margin-bottom:10px;font-size:15px">للتواصل مع الفريق</div>${contactRows}</div>` : ''}
+    ${TEASER_FOOTER}`);
+}
+function teaserCoverPage(total, domains){
+  return teaserPageShell(`
+    <div style="position:absolute;inset:0;background:linear-gradient(160deg,#0B0B3D 0%,#1a2456 60%,#2a1d5e 100%)"></div>
+    <div style="position:absolute;top:0;left:0;right:0;height:8px;background:linear-gradient(90deg,#C9A24B,#2C8C8B,#6B3FA0)"></div>
+    <div style="position:relative;padding:260px 60px 0;text-align:center;color:#fff">
+      <div style="font-size:18px;color:#E6C570;font-family:'Cairo',sans-serif;margin-bottom:18px">حاضنة ابتكار — النسخة الخامسة</div>
+      <div style="font-size:54px;font-weight:900;font-family:'Cairo',sans-serif;line-height:1.5">ملف المشاريع</div>
+      <div style="font-size:20px;margin-top:10px;color:rgba(255,255,255,.85)">تعريف بالمشاريع المتأهِّلة والمحكَّمة</div>
+      <div style="width:120px;height:4px;background:#C9A24B;margin:38px auto"></div>
+      <div style="font-size:17px;color:rgba(255,255,255,.8);line-height:2.2">${total} مشروعًا • ${domains} مجالات<br>${new Date().toLocaleDateString('ar-SA',{year:'numeric',month:'long'})}</div>
+    </div>
+    <div style="position:absolute;bottom:50px;left:0;right:0;text-align:center;color:#E6C570;font-size:14px">مركز الابتكار والملكية الفكرية — جامعة القصيم</div>`);
+}
+function teaserTocPages(rows){
+  // سطور الفهرس: عنوان مجال ثم مشاريعه — تُقسَّم على صفحات (30 سطرًا للصفحة)
+  const lines = []; let cur = null; let seq = 0;
+  rows.forEach(r=>{ if(r.domain!==cur){ lines.push({ h:r.domain }); cur=r.domain; } seq++; lines.push({ n:seq, r }); });
+  return chunkArr(lines, 26).map((chunk, idx, all)=> teaserPageShell(`
+    <div style="padding:46px 50px 0">
+      <div style="font-family:'Cairo',sans-serif;font-weight:900;font-size:26px;color:#0B0B3D;border-bottom:4px solid #C9A24B;display:inline-block;padding-bottom:6px;margin-bottom:22px">الفهرس${all.length>1?` (${idx+1}/${all.length})`:''}</div>
+      ${chunk.map(l=> l.h
+        ? `<div style="margin:16px 0 6px;font-family:'Cairo',sans-serif;font-weight:800;font-size:16px;color:#fff;background:#0B0B3D;border-radius:8px;padding:6px 14px">${escHtml(l.h)}</div>`
+        : `<div style="display:flex;gap:12px;font-size:14.5px;line-height:2.1;border-bottom:1px dashed #e4e4ee"><span class="mono" style="color:#B8860B;width:30px;flex-shrink:0">${l.n}</span><span style="flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${escHtml(l.r.project_name)}</span></div>`).join('')}
+    </div>${TEASER_FOOTER}`));
+}
+
+async function teaserRenderToJpeg(el, host){
+  host.appendChild(el);
+  const imgs = [...el.querySelectorAll('img')];
+  await Promise.all(imgs.map(i=> i.complete ? Promise.resolve() : new Promise(res=>{ i.onload = i.onerror = res; })));
+  if(document.fonts && document.fonts.ready) await document.fonts.ready;
+  const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
+  host.removeChild(el);
+  return canvas.toDataURL('image/jpeg', 0.92);
+}
+async function teaserLogoFor(r){
+  if(!r.profile || !r.profile.logo_path) return null;
+  try{
+    const { data: blob, error } = await sb.storage.from('form-attachments').download(r.profile.logo_path);
+    if(error) throw error;
+    return await teaserBlobToDataUrl(blob);
+  }catch(e){ console.error('تعذّر تحميل شعار', r.project_id, e); return null; }
+}
+
+async function runExportTeaserPdf(rows, mode){
+  if(!rows.length){ showToast('لا توجد مشاريع مستوفية الشروط للتصدير — تأكد من موافقة الفرق على النشر'); return; }
+  if(typeof html2canvas === 'undefined' || !window.jspdf){ showToast('تعذّر تحميل مكتبات إنشاء PDF — تحقق من الاتصال وأعد تحميل الصفحة'); return; }
+  const { jsPDF } = window.jspdf;
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;left:-20000px;top:0;z-index:-1;pointer-events:none';
+  document.body.appendChild(host);
+  const domainsCount = new Set(rows.map(r=>r.domain)).size;
+  const tocPages = mode==='single' ? teaserTocPages(rows) : [];
+  const extra = mode==='single' ? (1 + tocPages.length) : 0;
+  showBatchProgressModal(rows.length + extra, mode==='single' ? 'جارٍ إنشاء ملف التيزر…' : 'جارٍ إنشاء ملفات المشاريع…');
+  let done = 0, failed = 0;
+  try{
+    if(mode==='single'){
+      const pdf = new jsPDF({ unit:'mm', format:'a4', orientation:'p', compress:true });
+      let first = true;
+      const addPage = (jpeg)=>{ if(!first) pdf.addPage(); first = false; pdf.addImage(jpeg, 'JPEG', 0, 0, 210, 297, undefined, 'FAST'); };
+      addPage(await teaserRenderToJpeg(teaserCoverPage(rows.length, domainsCount), host)); done++; updateBatchProgress(done, rows.length+extra, failed);
+      for(const el of tocPages){ if(batchCancelled) break; addPage(await teaserRenderToJpeg(el, host)); done++; updateBatchProgress(done, rows.length+extra, failed); }
+      let seq = 0;
+      for(const r of rows){
+        if(batchCancelled) break;
+        seq++;
+        try{ addPage(await teaserRenderToJpeg(teaserProjectPage(r, await teaserLogoFor(r), seq), host)); }
+        catch(e){ failed++; console.error('[التيزر] تعذّر إنشاء صفحة', r.project_id, e); }
+        done++; updateBatchProgress(done, rows.length+extra, failed);
+      }
+      if(batchCancelled){ showToast('تم إلغاء التصدير'); return; }
+      pdf.save(`ملف-التيزر-حاضنة-ابتكار-5-${new Date().toISOString().slice(0,10)}.pdf`);
+      showToast(`تم إنشاء ملف التيزر (${rows.length-failed} مشروعًا${failed?` — فشل ${failed}`:''})`);
+    } else {
+      // ZIP: ملف PDF لكل مشروع — مجلد لكل مجال، بأسماء إنجليزية داخل الأرشيف + manifest.csv (نفس درس مستخرج ويندوز)
+      const zip = new JSZip();
+      const domainOrder = [];
+      const manifest = [['المجلد','المجال','رقم المشروع','اسم المشروع','الملف داخل الأرشيف']];
+      for(const r of rows){
+        if(batchCancelled) break;
+        try{
+          const jpeg = await teaserRenderToJpeg(teaserProjectPage(r, await teaserLogoFor(r), 0), host);
+          const pdf = new jsPDF({ unit:'mm', format:'a4', orientation:'p', compress:true });
+          pdf.addImage(jpeg, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+          let di = domainOrder.indexOf(r.domain); if(di===-1){ domainOrder.push(r.domain); di = domainOrder.length-1; }
+          const folder = `Domain-${String(di+1).padStart(2,'0')}`;
+          const file = `${(r.project_id||'project').replace(/[^a-zA-Z0-9._-]/g,'_')}.pdf`;
+          zip.folder(folder).file(file, pdf.output('blob'));
+          manifest.push([folder, r.domain, r.project_id, r.project_name, `${folder}/${file}`]);
+        }catch(e){ failed++; console.error('[التيزر] تعذّر إنشاء ملف', r.project_id, e); }
+        done++; updateBatchProgress(done, rows.length, failed);
+      }
+      if(batchCancelled){ showToast('تم إلغاء التصدير'); return; }
+      zip.file('manifest.csv', '\uFEFF' + manifest.map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n'));
+      const blob = await zip.generateAsync({ type:'blob', compression:'DEFLATE', compressionOptions:{ level:6 } });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `teaser-pages-by-project-${new Date().toISOString().slice(0,10)}.zip`;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      showToast(`تم تنزيل ${rows.length-failed} ملف PDF${failed?` — فشل ${failed}`:''}`);
+    }
+  }catch(e){
+    console.error(e); showToast('تعذّر إنشاء الملف: '+(e.message||'خطأ غير معروف'));
+  }finally{
+    closeBatchProgressModal();
+    host.remove();
+  }
+}
+
 async function renderDataCenterTab(){
   const el = document.getElementById('view-datacenter');
   el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
@@ -5031,6 +5354,9 @@ async function renderDataCenterTab(){
       </div>
     </div>
 
+    <div class="ac-title" style="margin-bottom:10px">📘 ملف التيزر — استكمال بيانات المشاريع المحكَّمة</div>
+    <div id="teaserAdminBox" style="margin-bottom:20px"></div>
+
     <div class="ac-title" style="margin-bottom:10px">💾 نسخ احتياطية</div>
     <div class="card" style="margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
@@ -5075,6 +5401,7 @@ async function renderDataCenterTab(){
     <div class="req-banner">كل التصديرات تُنشأ بمتصفحك مباشرة (ما تمر بأي خادم خارجي) — احفظها بمكان آمن بعد التنزيل.</div>
   `;
   document.getElementById('dcExportJudgingProjectsBtn').addEventListener('click', ()=>runExportJudgingProjectsExcel(classified, 'dcExportJudgingProjectsBtn'));
+  renderTeaserAdminBox();
   document.getElementById('dcGotoRankingBtn').addEventListener('click', ()=>{ activeTab='judging'; judgingSubtab='ranking'; renderTabs(); renderAll(); });
   document.getElementById('dcGotoReportBtn').addEventListener('click', ()=>{ activeTab='report'; renderTabs(); renderAll(); });
   document.getElementById('quickBackupBtn').addEventListener('click', ()=>runBackup(false));
