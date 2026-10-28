@@ -1398,7 +1398,7 @@ function renderThankYouScreen(){
       ${QUALIFICATION_BADGE==='ok' ? qualifiedDetails + judgingSessionDetails : notQualifiedMessage}` : ''}
       ${TEASER_ELIGIBLE ? `<div style="max-width:480px;margin:0 auto 22px;padding:16px 18px;border-radius:12px;background:var(--gold-100,#FBF0DA);border:1px solid var(--gold-300,#E6C570);text-align:right">
         <div style="font-weight:800;font-size:14px;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:6px">★ استكمال بيانات دليل المشاريع</div>
-        <div style="font-size:12.5px;color:var(--ink-900);line-height:1.9;margin-bottom:10px">أضيفوا نبذة مشروعكم وشعاره وبيانات التواصل وأعضاء الفريق لتظهر في الملف الموزَّع على المشاركين. ${(TEASER && TEASER.is_complete) ? '<b style="color:var(--success)">✓ بياناتكم مكتملة</b>' : (TEASER_OPEN ? '' : '<b style="color:var(--danger)">انتهت فترة الاستكمال</b>')}</div>
+        <div style="font-size:12.5px;color:var(--ink-900);line-height:1.9;margin-bottom:10px">نأمل التكرُّم باستكمال نبذة المشروع وشعاره وبيانات التواصل وأعضاء الفريق، تمهيدًا لإدراجها في دليل المشاريع الموزَّع على المشاركين. ${(TEASER && TEASER.is_complete) ? '<b style="color:var(--success)">✓ بياناتكم مكتملة</b>' : (TEASER_OPEN ? '' : '<b style="color:var(--danger)">انتهت فترة الاستكمال</b>')}</div>
         <button class="btn btn-gold" id="btnGoToTeaser">${(TEASER && TEASER.is_complete) ? 'مراجعة البيانات' : 'استكمال البيانات'}</button>
       </div>` : ''}
       ${PUBLISHED_REPORT ? `<div style="margin-bottom:22px"><button class="btn btn-primary" id="btnGoToReport">${icon('file-text',{size:14})} عرض تقرير مشروعكم</button></div>` : ''}
@@ -1772,7 +1772,7 @@ function renderTeaserScreen(){
     <div style="padding:20px 20px 8px"><button class="btn btn-ghost btn-sm" id="btnBackFromTeaser">${icon('arrow-right',{size:13})} رجوع</button></div>
     <div style="padding:8px 22px 30px;max-width:760px;margin:0 auto">
       <div style="font-size:20px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:6px">استكمال البيانات</div>
-      <div style="font-size:13px;color:var(--ink-600);line-height:1.9;margin-bottom:14px">تهانينا على اجتياز مرحلة التحكيم. نرجو استكمال البيانات أدناه لإدراج مشروعكم في <b>دليل المشاريع</b> الذي يُوزَّع على المشاركين.</div>
+      <div style="font-size:13px;color:var(--ink-600);line-height:1.9;margin-bottom:14px">يسرّ فريق حاضنة ابتكار تهنئتكم على اجتياز مرحلة التحكيم. وتمهيدًا لإدراج مشروعكم في <b>دليل المشاريع</b> المخصَّص للمشاركين في الحاضنة، نأمل التكرُّم باستكمال البيانات الواردة أدناه والتأكد من صحتها.</div>
       ${locked ? `<div class="req-banner" style="background:var(--danger-100);color:var(--danger);margin-bottom:14px"><b>🔒 انتهت فترة استكمال البيانات.</b>&nbsp;يمكنكم الاطلاع على ما تم حفظه، لكن لا يمكن تعديله. للاستفسار: <span class="mono">icip@qu.edu.sa</span></div>` : ''}
 
       <div id="teaserChecklist" style="margin-bottom:18px"></div>
