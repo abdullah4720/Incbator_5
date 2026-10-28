@@ -5036,13 +5036,21 @@ async function fetchTeaserRows(){
   }).sort((a,b)=> a.domain.localeCompare(b.domain,'ar') || a.project_id.localeCompare(b.project_id,'ar',{numeric:true}));
 }
 
-async function renderTeaserAdminBox(){
+let TEASER_CLASSIFIED_CACHE = null;
+async function renderTeaserAdminBox(classified){
   const box = document.getElementById('teaserAdminBox');
   if(!box) return;
   box.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
-  let rows, settings;
+  let rows, settings, excludedNotQualified = 0;
   try{
-    rows = await fetchTeaserRows();
+    // المتأهِّلة فقط (مستوفية أو مرشَّحة للتأهل) — نفس تصنيف لوحة القيادة بالضبط
+    if(classified) TEASER_CLASSIFIED_CACHE = classified;
+    classified = TEASER_CLASSIFIED_CACHE || await computeQualificationClassification();
+    TEASER_CLASSIFIED_CACHE = classified;
+    const qualifiedIds = new Set(classified.filter(r=>r.docStatus!=='none' || r.candidateWithoutReg).map(r=>r.form_id));
+    const allJudged = await fetchTeaserRows();
+    rows = allJudged.filter(r=>qualifiedIds.has(r.form_id));
+    excludedNotQualified = allJudged.length - rows.length;
     const { data, error } = await sb.from('form_settings').select('teaser_is_open, teaser_deadline_at').eq('id', 1).maybeSingle();
     if(error) throw error;
     settings = data || {};
@@ -5061,13 +5069,14 @@ async function renderTeaserAdminBox(){
   box.innerHTML = `
     <div class="card" style="margin-bottom:12px">
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-        <div class="card kpi-card" style="flex:1;min-width:110px"><div class="kval mono">${n.all}</div><div class="klabel">مشاريع محكَّمة (مشمولة)</div></div>
+        <div class="card kpi-card" style="flex:1;min-width:110px"><div class="kval mono">${n.all}</div><div class="klabel">مشاريع متأهِّلة محكَّمة (مشمولة)</div></div>
         <div class="card kpi-card" style="flex:1;min-width:110px"><div class="kval mono">${n.complete}</div><div class="klabel">مكتملة</div></div>
         <div class="card kpi-card" style="flex:1;min-width:110px"><div class="kval mono">${n.partial}</div><div class="klabel">قيد الاستكمال</div></div>
         <div class="card kpi-card" style="flex:1;min-width:110px"><div class="kval mono">${n.none}</div><div class="klabel">لم تبدأ</div></div>
         <div class="card kpi-card" style="flex:1;min-width:110px"><div class="kval mono">${consented}</div><div class="klabel">وافقت على النشر</div></div>
       </div>
 
+      ${excludedNotQualified ? `<div style="font-size:12px;color:var(--ink-400);margin-bottom:12px">يشمل الدليل المشاريع المتأهِّلة المحكَّمة فقط — استُبعد ${excludedNotQualified} مشروعًا محكَّمًا غير مصنَّف متأهِّلًا.</div>` : ''}
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 0;border-top:1px solid var(--line)">
         <div style="flex:1;min-width:200px">
           <b>فترة استكمال البيانات</b>
@@ -5401,7 +5410,7 @@ async function renderDataCenterTab(){
     <div class="req-banner">كل التصديرات تُنشأ بمتصفحك مباشرة (ما تمر بأي خادم خارجي) — احفظها بمكان آمن بعد التنزيل.</div>
   `;
   document.getElementById('dcExportJudgingProjectsBtn').addEventListener('click', ()=>runExportJudgingProjectsExcel(classified, 'dcExportJudgingProjectsBtn'));
-  renderTeaserAdminBox();
+  renderTeaserAdminBox(classified);
   document.getElementById('dcGotoRankingBtn').addEventListener('click', ()=>{ activeTab='judging'; judgingSubtab='ranking'; renderTabs(); renderAll(); });
   document.getElementById('dcGotoReportBtn').addEventListener('click', ()=>{ activeTab='report'; renderTabs(); renderAll(); });
   document.getElementById('quickBackupBtn').addEventListener('click', ()=>runBackup(false));
