@@ -4974,7 +4974,7 @@ async function fetchAllRowsPaginated(tableName){
 }
 
 /* ==========================================================================
-   ملف التيزر (استكمال البيانات) — متابعة الفرق وإصدار الملف
+   دليل المشاريع (استكمال البيانات) — متابعة الفرق وإصدار الملف
    المشاريع المشمولة: المتأهِّلة التي لها تقييم محكَّم واحد على الأقل مُرسَل.
    لا يُدرَج في الملف أي مشروع لم يوافق فريقه صراحةً على نشر بياناته.
    ========================================================================== */
@@ -5048,7 +5048,7 @@ async function renderTeaserAdminBox(){
     settings = data || {};
   }catch(e){
     console.error(e);
-    box.innerHTML = `<div class="req-banner" style="background:var(--danger-100);color:var(--danger)">تعذّر تحميل بيانات التيزر: ${escHtml(e.message||'')}.<br>تأكد من تشغيل ملف <span class="mono">add-teaser-profiles.sql</span> في Supabase SQL Editor.</div>`;
+    box.innerHTML = `<div class="req-banner" style="background:var(--danger-100);color:var(--danger)">تعذّر تحميل بيانات الدليل: ${escHtml(e.message||'')}.<br>تأكد من تشغيل ملف <span class="mono">add-teaser-profiles.sql</span> في Supabase SQL Editor.</div>`;
     return;
   }
   const n = { all: rows.length, complete: rows.filter(r=>r.status==='complete').length, partial: rows.filter(r=>r.status==='partial').length, none: rows.filter(r=>r.status==='none').length };
@@ -5080,11 +5080,11 @@ async function renderTeaserAdminBox(){
 
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--line)">
         <button class="btn btn-ghost btn-sm" id="teaserTrackerBtn">${icon('download',{size:13})} متابعة الفرق (Excel)</button>
-        <select id="teaserExportMode" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px" title="أي المشاريع تدخل ملف التيزر؟ لا يُدرَج أبدًا مشروع لم يوافق على النشر">
+        <select id="teaserExportMode" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px" title="أي المشاريع تدخل دليل المشاريع؟ لا يُدرَج أبدًا مشروع لم يوافق على النشر">
           <option value="complete">المكتملة فقط (${n.complete})</option>
           <option value="consented">كل من وافق على النشر (${consented})</option>
         </select>
-        <button class="btn btn-primary btn-sm" id="teaserPdfBtn">${icon('download',{size:13})} ملف التيزر (PDF واحد)</button>
+        <button class="btn btn-primary btn-sm" id="teaserPdfBtn">${icon('download',{size:13})} دليل المشاريع (PDF واحد)</button>
         <button class="btn btn-ghost btn-sm" id="teaserZipBtn">${icon('download',{size:13})} PDF لكل مشروع (ZIP)</button>
       </div>
     </div>
@@ -5138,8 +5138,8 @@ function exportTeaserTracker(rows){
   ws['!cols'] = [{wch:22},{wch:20},{wch:30},{wch:14},{wch:34},{wch:10},{wch:8},{wch:28},{wch:12},{wch:10},{wch:22},{wch:30},{wch:16}];
   ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:0,c:aoa[0].length-1} }) };
   ws['!views'] = [{ state:'frozen', ySplit:1 }];
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'متابعة التيزر');
-  XLSX.writeFile(wb, `متابعة_استكمال_بيانات_التيزر_${new Date().toISOString().slice(0,10)}.xlsx`);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'متابعة الدليل');
+  XLSX.writeFile(wb, `متابعة_استكمال_بيانات_دليل_المشاريع_${new Date().toISOString().slice(0,10)}.xlsx`);
   showToast(`تم تصدير ${sorted.length} مشروعًا`);
 }
 
@@ -5154,7 +5154,7 @@ function teaserPageShell(inner){
   d.innerHTML = inner;
   return d;
 }
-const TEASER_FOOTER = `<div style="position:absolute;bottom:0;left:0;right:0;height:46px;background:#0B0B3D;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 40px;font-size:12px"><span>حاضنة ابتكار 5 — ملف المشاريع</span><span style="color:#E6C570">مركز الابتكار والملكية الفكرية — جامعة القصيم</span></div><div style="position:absolute;bottom:46px;left:0;right:0;height:4px;background:linear-gradient(90deg,#C9A24B,#2C8C8B,#6B3FA0)"></div>`;
+const TEASER_FOOTER = `<div style="position:absolute;bottom:0;left:0;right:0;height:46px;background:#0B0B3D;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 40px;font-size:12px"><span>حاضنة ابتكار 5 — دليل المشاريع</span><span style="color:#E6C570">مركز الابتكار والملكية الفكرية — جامعة القصيم</span></div><div style="position:absolute;bottom:46px;left:0;right:0;height:4px;background:linear-gradient(90deg,#C9A24B,#2C8C8B,#6B3FA0)"></div>`;
 
 function teaserProjectPage(r, logoDataUrl, seq){
   const prof = r.profile;
@@ -5191,7 +5191,7 @@ function teaserCoverPage(total, domains){
     <div style="position:absolute;top:0;left:0;right:0;height:8px;background:linear-gradient(90deg,#C9A24B,#2C8C8B,#6B3FA0)"></div>
     <div style="position:relative;padding:260px 60px 0;text-align:center;color:#fff">
       <div style="font-size:18px;color:#E6C570;font-family:'Cairo',sans-serif;margin-bottom:18px">حاضنة ابتكار — النسخة الخامسة</div>
-      <div style="font-size:54px;font-weight:900;font-family:'Cairo',sans-serif;line-height:1.5">ملف المشاريع</div>
+      <div style="font-size:54px;font-weight:900;font-family:'Cairo',sans-serif;line-height:1.5">دليل المشاريع</div>
       <div style="font-size:20px;margin-top:10px;color:rgba(255,255,255,.85)">تعريف بالمشاريع المتأهِّلة والمحكَّمة</div>
       <div style="width:120px;height:4px;background:#C9A24B;margin:38px auto"></div>
       <div style="font-size:17px;color:rgba(255,255,255,.8);line-height:2.2">${total} مشروعًا • ${domains} مجالات<br>${new Date().toLocaleDateString('ar-SA',{year:'numeric',month:'long'})}</div>
@@ -5239,7 +5239,7 @@ async function runExportTeaserPdf(rows, mode){
   const domainsCount = new Set(rows.map(r=>r.domain)).size;
   const tocPages = mode==='single' ? teaserTocPages(rows) : [];
   const extra = mode==='single' ? (1 + tocPages.length) : 0;
-  showBatchProgressModal(rows.length + extra, mode==='single' ? 'جارٍ إنشاء ملف التيزر…' : 'جارٍ إنشاء ملفات المشاريع…');
+  showBatchProgressModal(rows.length + extra, mode==='single' ? 'جارٍ إنشاء دليل المشاريع…' : 'جارٍ إنشاء ملفات المشاريع…');
   let done = 0, failed = 0;
   try{
     if(mode==='single'){
@@ -5253,12 +5253,12 @@ async function runExportTeaserPdf(rows, mode){
         if(batchCancelled) break;
         seq++;
         try{ addPage(await teaserRenderToJpeg(teaserProjectPage(r, await teaserLogoFor(r), seq), host)); }
-        catch(e){ failed++; console.error('[التيزر] تعذّر إنشاء صفحة', r.project_id, e); }
+        catch(e){ failed++; console.error('[دليل المشاريع] تعذّر إنشاء صفحة', r.project_id, e); }
         done++; updateBatchProgress(done, rows.length+extra, failed);
       }
       if(batchCancelled){ showToast('تم إلغاء التصدير'); return; }
-      pdf.save(`ملف-التيزر-حاضنة-ابتكار-5-${new Date().toISOString().slice(0,10)}.pdf`);
-      showToast(`تم إنشاء ملف التيزر (${rows.length-failed} مشروعًا${failed?` — فشل ${failed}`:''})`);
+      pdf.save(`دليل-المشاريع-حاضنة-ابتكار-5-${new Date().toISOString().slice(0,10)}.pdf`);
+      showToast(`تم إنشاء دليل المشاريع (${rows.length-failed} مشروعًا${failed?` — فشل ${failed}`:''})`);
     } else {
       // ZIP: ملف PDF لكل مشروع — مجلد لكل مجال، بأسماء إنجليزية داخل الأرشيف + manifest.csv (نفس درس مستخرج ويندوز)
       const zip = new JSZip();
@@ -5275,7 +5275,7 @@ async function runExportTeaserPdf(rows, mode){
           const file = `${(r.project_id||'project').replace(/[^a-zA-Z0-9._-]/g,'_')}.pdf`;
           zip.folder(folder).file(file, pdf.output('blob'));
           manifest.push([folder, r.domain, r.project_id, r.project_name, `${folder}/${file}`]);
-        }catch(e){ failed++; console.error('[التيزر] تعذّر إنشاء ملف', r.project_id, e); }
+        }catch(e){ failed++; console.error('[دليل المشاريع] تعذّر إنشاء ملف', r.project_id, e); }
         done++; updateBatchProgress(done, rows.length, failed);
       }
       if(batchCancelled){ showToast('تم إلغاء التصدير'); return; }
@@ -5354,7 +5354,7 @@ async function renderDataCenterTab(){
       </div>
     </div>
 
-    <div class="ac-title" style="margin-bottom:10px">📘 ملف التيزر — استكمال بيانات المشاريع المحكَّمة</div>
+    <div class="ac-title" style="margin-bottom:10px">📘 دليل المشاريع — استكمال بيانات المشاريع المحكَّمة</div>
     <div id="teaserAdminBox" style="margin-bottom:20px"></div>
 
     <div class="ac-title" style="margin-bottom:10px">💾 نسخ احتياطية</div>
