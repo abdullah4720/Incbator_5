@@ -5101,7 +5101,7 @@ async function renderTeaserAdminBox(classified){
     <details class="card">
       <summary style="cursor:pointer;font-weight:700">قائمة المشاريع وحالة الاستكمال (${n.all})</summary>
       <div class="table-wrap" style="margin-top:10px"><table>
-        <thead><tr><th>المجال</th><th>رقم المشروع</th><th>اسم المشروع</th><th>الحالة</th><th>النواقص</th><th>كلمات النبذة</th></tr></thead>
+        <thead><tr><th>المجال</th><th>رقم المشروع</th><th>اسم المشروع</th><th>الحالة</th><th>النواقص</th><th>كلمات النبذة</th><th></th></tr></thead>
         <tbody>${rows.map(r=>`<tr>
           <td style="font-size:12px">${escHtml(r.domain)}</td>
           <td class="mono">${escHtml(r.project_id)}</td>
@@ -5109,10 +5109,12 @@ async function renderTeaserAdminBox(classified){
           <td>${badge(r.status)}</td>
           <td style="font-size:12px;color:var(--ink-600)">${r.missing.length ? escHtml(r.missing.join('، ')) : '—'}</td>
           <td class="mono">${r.words}</td>
+          <td>${r.profile ? `<button class="btn btn-ghost btn-sm" data-teaserview="${r.form_id}">عرض / تعديل</button>` : '<span style="font-size:11px;color:var(--ink-400)">لم يبدأ</span>'}</td>
         </tr>`).join('')}</tbody>
       </table></div>
     </details>`;
 
+  box.querySelectorAll('[data-teaserview]').forEach(b=>b.addEventListener('click', ()=>openTeaserDetailModal(rows.find(r=>r.form_id===b.dataset.teaserview))));
   document.getElementById('teaserToggleOpenBtn').addEventListener('click', async ()=>{
     const { error } = await sb.from('form_settings').update({ teaser_is_open: !isOpen }).eq('id', 1);
     if(error){ showToast('تعذّر التحديث: '+error.message); return; }
@@ -5132,19 +5134,78 @@ async function renderTeaserAdminBox(classified){
   document.getElementById('teaserZipBtn').addEventListener('click', ()=>runExportTeaserPdf(pick(), 'zip'));
 }
 
+
+/* عرض بيانات الدليل لمشروع واحد (النبذة، الشعار، التواصل، الفريق) مع إمكانية تعديلها قبل الإصدار */
+async function openTeaserDetailModal(r){
+  if(!r || !r.profile){ return; }
+  const modal = document.getElementById('confirmModal');
+  const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '640px';
+  const q = (v)=>String(v||'').replace(/"/g,'&quot;');
+  const prof = r.profile;
+  box.innerHTML = `<h3>${escHtml(r.project_name)}</h3><div class="empty-hint">جارٍ التحميل…</div>`;
+  modal.classList.add('show');
+  let logoUrl = null;
+  if(prof.logo_path){
+    try{ const { data: blob } = await sb.storage.from('form-attachments').download(prof.logo_path); if(blob) logoUrl = URL.createObjectURL(blob); }catch(e){ console.error(e); }
+  }
+  const members = r.members.filter(m=>(m.full_name||'').trim());
+  box.innerHTML = `
+    <h3>${escHtml(r.project_name)} <span class="mono" style="font-size:12px;color:var(--ink-400)">${escHtml(r.project_id)}</span></h3>
+    <div style="font-size:12px;color:var(--ink-400);margin-bottom:12px">${escHtml(r.domain)} • ${escHtml(r.track||'')} • ${prof.is_complete ? 'مكتمل' : 'قيد الاستكمال'} • الموافقة على النشر: <b>${prof.consent_publish ? 'نعم' : 'لا'}</b> • تأكيد البريد: <b>${prof.contact_confirmed ? 'نعم' : 'لا'}</b></div>
+    <div style="max-height:60vh;overflow-y:auto;padding-left:6px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <div style="width:76px;height:76px;border:1px solid var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff;flex-shrink:0">${logoUrl ? `<img src="${logoUrl}" style="width:100%;height:100%;object-fit:contain">` : '<span style="font-size:11px;color:var(--ink-400)">بدون شعار</span>'}</div>
+        <div style="font-size:12.5px;color:var(--ink-600)">${prof.logo_name ? escHtml(prof.logo_name) : 'لم يرفع الفريق شعارًا'}</div>
+      </div>
+      <div class="field-inline"><label class="flabel">نبذة المشروع <span id="tdWordCount" class="mono" style="color:var(--ink-400)"></span></label>
+        <textarea id="tdSummary" rows="8" style="width:100%">${escHtml(prof.summary||'')}</textarea></div>
+      <div class="field-inline"><label class="flabel">بريد التواصل</label><input type="text" id="tdEmail" dir="ltr" value="${q(prof.contact_email)}"></div>
+      <div class="field-inline"><label class="flabel">جوال التواصل</label><input type="text" id="tdPhone" dir="ltr" value="${q(prof.contact_phone)}"></div>
+      <div class="field-inline"><label class="flabel">رابط المشروع / المنصة</label><input type="text" id="tdUrl" dir="ltr" value="${q(prof.project_url)}"></div>
+      <div class="flabel" style="margin-top:10px">أعضاء الفريق (${members.length})${prof.show_members===false?' — الفريق اختار عدم إظهارهم في الدليل':''}</div>
+      <div style="font-size:12.5px;line-height:2;color:var(--ink-900)">${members.length ? members.map(m=>`• ${escHtml(m.full_name)}${m.is_leader?' (قائد الفريق)':(m.role_in_project?' — '+escHtml(m.role_in_project):'')}`).join('<br>') : '—'}</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="tdClose">إغلاق</button>
+      <button class="btn btn-primary" id="tdSave">حفظ التعديلات</button>
+    </div>`;
+  const sumEl = document.getElementById('tdSummary');
+  const upd = ()=>{ const w = teaserWords(sumEl.value); const c = document.getElementById('tdWordCount'); c.textContent = `(${w} / ${TEASER_MAX_W} كلمة)`; c.style.color = w>TEASER_MAX_W ? 'var(--danger)' : 'var(--ink-400)'; };
+  sumEl.addEventListener('input', upd); upd();
+  const close = ()=>{ if(logoUrl) URL.revokeObjectURL(logoUrl); modal.classList.remove('show'); restoreConfirmModal(); };
+  document.getElementById('tdClose').addEventListener('click', close);
+  document.getElementById('tdSave').addEventListener('click', async ()=>{
+    if(teaserWords(sumEl.value) > TEASER_MAX_W){ showToast(`النبذة تتجاوز ${TEASER_MAX_W} كلمة`); return; }
+    const btn = document.getElementById('tdSave'); btn.disabled = true; btn.textContent = 'جارٍ الحفظ…';
+    const payload = { ...prof,
+      summary: sumEl.value.trim() || null,
+      contact_email: document.getElementById('tdEmail').value.trim() || null,
+      contact_phone: document.getElementById('tdPhone').value.trim() || null,
+      project_url: document.getElementById('tdUrl').value.trim() || null };
+    delete payload.is_complete; delete payload.completed_at; delete payload.updated_at;
+    const { error } = await sb.from('teaser_profiles').upsert(payload, { onConflict: 'form_id' });
+    if(error){ btn.disabled = false; btn.textContent = 'حفظ التعديلات'; showToast('تعذّر الحفظ: '+error.message); return; }
+    showToast('تم حفظ التعديلات');
+    close();
+    renderTeaserAdminBox();
+  });
+}
+
 function exportTeaserTracker(rows){
   if(typeof XLSX === 'undefined'){ showToast('تعذّر تحميل مكتبة التصدير'); return; }
   const stLabel = { complete:'مكتمل', partial:'قيد الاستكمال', none:'لم يبدأ' };
   const rank = { none:0, partial:1, complete:2 };
   const sorted = rows.slice().sort((a,b)=> a.domain.localeCompare(b.domain,'ar') || rank[a.status]-rank[b.status] || a.project_id.localeCompare(b.project_id,'ar',{numeric:true}));
-  const aoa = [['المجال','رقم المشروع','اسم المشروع','الحالة','النواقص','كلمات النبذة','شعار','بريد التواصل','موافقة النشر','عدد الأعضاء','اسم قائد الفريق','بريد قائد الفريق (للتذكير)','جوال قائد الفريق']];
+  const aoa = [['المجال','رقم المشروع','اسم المشروع','الحالة','النواقص','كلمات النبذة','شعار','بريد التواصل','موافقة النشر','عدد الأعضاء','اسم قائد الفريق','بريد قائد الفريق (للتذكير)','جوال قائد الفريق','نبذة المشروع','رابط المشروع','جوال التواصل']];
   sorted.forEach(r=>aoa.push([
     r.domain, r.project_id, r.project_name, stLabel[r.status], r.missing.join('، '), r.words,
     r.profile && r.profile.logo_path ? 'نعم' : 'لا', r.profile ? (r.profile.contact_email||'') : '',
     r.profile && r.profile.consent_publish ? 'نعم' : 'لا', r.members.length, r.leader_name, r.leader_email, r.leader_phone,
+    r.profile ? (r.profile.summary||'') : '', r.profile ? (r.profile.project_url||'') : '', r.profile ? (r.profile.contact_phone||'') : '',
   ]));
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{wch:22},{wch:20},{wch:30},{wch:14},{wch:34},{wch:10},{wch:8},{wch:28},{wch:12},{wch:10},{wch:22},{wch:30},{wch:16}];
+  ws['!cols'] = [{wch:22},{wch:20},{wch:30},{wch:14},{wch:34},{wch:10},{wch:8},{wch:28},{wch:12},{wch:10},{wch:22},{wch:30},{wch:16},{wch:60},{wch:30},{wch:16}];
   ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:0,c:aoa[0].length-1} }) };
   ws['!views'] = [{ state:'frozen', ySplit:1 }];
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'متابعة الدليل');
