@@ -5197,16 +5197,17 @@ function exportTeaserTracker(rows){
   const stLabel = { complete:'مكتمل', partial:'قيد الاستكمال', none:'لم يبدأ' };
   const rank = { none:0, partial:1, complete:2 };
   const sorted = rows.slice().sort((a,b)=> a.domain.localeCompare(b.domain,'ar') || rank[a.status]-rank[b.status] || a.project_id.localeCompare(b.project_id,'ar',{numeric:true}));
-  const aoa = [['المجال','رقم المشروع','اسم المشروع','الحالة','النواقص','كلمات النبذة','شعار','بريد التواصل','موافقة النشر','عدد الأعضاء','اسم قائد الفريق','بريد قائد الفريق (للتذكير)','جوال قائد الفريق','نبذة المشروع','رابط المشروع','جوال التواصل','أعضاء الفريق']];
+  const aoa = [['المجال','رقم المشروع','اسم المشروع','الحالة','النواقص','كلمات النبذة','شعار','بريد التواصل','موافقة النشر','عدد الأعضاء','اسم قائد الفريق','بريد قائد الفريق (للتذكير)','جوال قائد الفريق','نبذة المشروع','رابط المشروع','جوال التواصل']];
+  const maxM = Math.max(1, ...sorted.map(r=>r.members.length));
+  for(let i=1;i<=maxM;i++) aoa[0].push(`عضو ${i} - الاسم`, `عضو ${i} - الدور`, `عضو ${i} - الجوال`, `عضو ${i} - البريد`);
   sorted.forEach(r=>aoa.push([
     r.domain, r.project_id, r.project_name, stLabel[r.status], r.missing.join('، '), r.words,
     r.profile && r.profile.logo_path ? 'نعم' : 'لا', r.profile ? (r.profile.contact_email||'') : '',
     r.profile && r.profile.consent_publish ? 'نعم' : 'لا', r.members.length, r.leader_name, r.leader_email, r.leader_phone,
     r.profile ? (r.profile.summary||'') : '', r.profile ? (r.profile.project_url||'') : '', r.profile ? (r.profile.contact_phone||'') : '',
-    r.members.map(m=>(m.full_name||'')+(m.is_leader?' (قائد)':(m.role_in_project?' — '+m.role_in_project:''))).join('\n'),
-  ]));
+  ].concat(Array.from({length:maxM}).flatMap((_,i)=>{ const m = r.members[i]; return m ? [m.full_name||'', m.is_leader?'قائد الفريق':(m.role_in_project||''), m.phone||'', m.email||''] : ['','','','']; }))));
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{wch:22},{wch:20},{wch:30},{wch:14},{wch:34},{wch:10},{wch:8},{wch:28},{wch:12},{wch:10},{wch:22},{wch:30},{wch:16},{wch:60},{wch:30},{wch:16},{wch:45}];
+  ws['!cols'] = [{wch:22},{wch:20},{wch:30},{wch:14},{wch:34},{wch:10},{wch:8},{wch:28},{wch:12},{wch:10},{wch:22},{wch:30},{wch:16},{wch:60},{wch:30},{wch:16}].concat(Array.from({length:maxM}).flatMap(()=>[{wch:24},{wch:20},{wch:15},{wch:28}]));
   ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:0,c:aoa[0].length-1} }) };
   ws['!views'] = [{ state:'frozen', ySplit:1 }];
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'متابعة الدليل');
