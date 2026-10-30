@@ -12,6 +12,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <style>
 :root{
   --navy-950:#12103C; --navy-800:#1A1852; --navy-700:#242066;
@@ -5094,6 +5095,7 @@ async function renderTeaserAdminBox(classified){
           <option value="consented">كل من وافق على النشر (${consented})</option>
         </select>
         <button class="btn btn-primary btn-sm" id="teaserPdfBtn">${icon('download',{size:13})} دليل المشاريع (PDF واحد)</button>
+        <button class="btn btn-ghost btn-sm" id="teaserPptxBtn">${icon('download',{size:13})} دليل المشاريع (PowerPoint)</button>
         <button class="btn btn-ghost btn-sm" id="teaserZipBtn">${icon('download',{size:13})} PDF لكل مشروع (ZIP)</button>
       </div>
     </div>
@@ -5131,6 +5133,7 @@ async function renderTeaserAdminBox(classified){
   document.getElementById('teaserTrackerBtn').addEventListener('click', ()=>exportTeaserTracker(rows));
   const pick = ()=> rows.filter(r=> r.profile && r.profile.consent_publish && (document.getElementById('teaserExportMode').value==='consented' ? true : r.status==='complete'));
   document.getElementById('teaserPdfBtn').addEventListener('click', ()=>runExportTeaserPdf(pick(), 'single'));
+  document.getElementById('teaserPptxBtn').addEventListener('click', ()=>runExportTeaserPptx(pick()));
   document.getElementById('teaserZipBtn').addEventListener('click', ()=>runExportTeaserPdf(pick(), 'zip'));
 }
 
@@ -5370,6 +5373,96 @@ async function runExportTeaserPdf(rows, mode){
   }finally{
     closeBatchProgressModal();
     host.remove();
+  }
+}
+
+/* ---------------- PowerPoint (قابل للتحرير) ---------------- */
+async function runExportTeaserPptx(rows){
+  if(!rows.length){ showToast('لا توجد مشاريع مستوفية الشروط للتصدير — تأكد من موافقة الفرق على النشر'); return; }
+  if(typeof PptxGenJS === 'undefined'){ showToast('تعذّر تحميل مكتبة PowerPoint — تحقق من الاتصال وأعد تحميل الصفحة'); return; }
+  showBatchProgressModal(rows.length, 'جارٍ إنشاء ملف PowerPoint…');
+  let done = 0, failed = 0;
+  try{
+    const NAVY='0B0B3D', GOLD='C9A24B', GOLDL='E6C570', INK='1A1A2E', GRAY='6B6B80';
+    const FONT='Cairo';
+    const pptx = new PptxGenJS();
+    pptx.layout = 'LAYOUT_16x9'; // 10 x 5.625 in
+    pptx.rtlMode = true;
+    pptx.title = 'دليل المشاريع — حاضنة ابتكار 5';
+    pptx.author = 'مركز الابتكار والملكية الفكرية — جامعة القصيم';
+    const W = 10, H = 5.625;
+    const T = (txt, o)=>({ text: txt, options: Object.assign({ fontFace: FONT, rtlMode: true, align: 'right' }, o||{}) });
+    const footer = (s)=>{
+      s.addShape(pptx.ShapeType.rect, { x:0, y:H-0.34, w:W, h:0.34, fill:{ color:NAVY }, line:{ color:NAVY } });
+      s.addText('حاضنة ابتكار 5 — دليل المشاريع', { x:5.2, y:H-0.34, w:4.5, h:0.34, fontFace:FONT, fontSize:9, color:'FFFFFF', align:'right', rtlMode:true, valign:'middle' });
+      s.addText('مركز الابتكار والملكية الفكرية — جامعة القصيم', { x:0.3, y:H-0.34, w:4.5, h:0.34, fontFace:FONT, fontSize:9, color:GOLDL, align:'left', valign:'middle' });
+    };
+    // الغلاف
+    const domains = [...new Set(rows.map(r=>r.domain))];
+    let s = pptx.addSlide(); s.background = { color: NAVY };
+    s.addShape(pptx.ShapeType.rect, { x:0, y:0, w:W, h:0.12, fill:{ color:GOLD }, line:{ color:GOLD } });
+    s.addText('حاضنة ابتكار — النسخة الخامسة', { x:0.5, y:1.3, w:9, h:0.5, fontFace:FONT, fontSize:18, color:GOLDL, align:'center', rtlMode:true });
+    s.addText('دليل المشاريع', { x:0.5, y:1.85, w:9, h:1.1, fontFace:FONT, fontSize:48, bold:true, color:'FFFFFF', align:'center', rtlMode:true });
+    s.addText('تعريف بالمشاريع المتأهِّلة والمحكَّمة', { x:0.5, y:2.95, w:9, h:0.5, fontFace:FONT, fontSize:18, color:'DDDDEE', align:'center', rtlMode:true });
+    s.addShape(pptx.ShapeType.rect, { x:4.2, y:3.65, w:1.6, h:0.05, fill:{ color:GOLD }, line:{ color:GOLD } });
+    s.addText(`${rows.length} مشروعًا • ${domains.length} مجالات`, { x:0.5, y:3.85, w:9, h:0.4, fontFace:FONT, fontSize:15, color:'DDDDEE', align:'center', rtlMode:true });
+    s.addText('مركز الابتكار والملكية الفكرية — جامعة القصيم', { x:0.5, y:H-0.8, w:9, h:0.4, fontFace:FONT, fontSize:12, color:GOLDL, align:'center', rtlMode:true });
+
+    let curDomain = null, seq = 0;
+    for(const r of rows){
+      if(batchCancelled) break;
+      try{
+        if(r.domain !== curDomain){
+          curDomain = r.domain;
+          const d = pptx.addSlide(); d.background = { color: NAVY };
+          d.addShape(pptx.ShapeType.rect, { x:8.9, y:1.9, w:0.08, h:1.6, fill:{ color:GOLD }, line:{ color:GOLD } });
+          d.addText('المجال', { x:0.5, y:1.9, w:8.2, h:0.4, fontFace:FONT, fontSize:14, color:GOLDL, align:'right', rtlMode:true });
+          d.addText(curDomain, { x:0.5, y:2.3, w:8.2, h:1.2, fontFace:FONT, fontSize:34, bold:true, color:'FFFFFF', align:'right', rtlMode:true, valign:'top', fit:'shrink' });
+          d.addText(`${rows.filter(x=>x.domain===curDomain).length} مشروعًا`, { x:0.5, y:3.6, w:8.2, h:0.4, fontFace:FONT, fontSize:14, color:'DDDDEE', align:'right', rtlMode:true });
+        }
+        seq++;
+        const prof = r.profile || {};
+        const logo = await teaserLogoFor(r);
+        const sl = pptx.addSlide(); sl.background = { color:'FFFFFF' };
+        sl.addShape(pptx.ShapeType.rect, { x:0, y:0, w:W, h:1.45, fill:{ color:NAVY }, line:{ color:NAVY } });
+        // الشعار (يمين)
+        sl.addShape(pptx.ShapeType.roundRect, { x:8.15, y:0.2, w:1.55, h:1.05, fill:{ color:'FFFFFF' }, line:{ color:'FFFFFF' }, rectRadius:0.1 });
+        if(logo){ sl.addImage({ data: logo, x:8.2, y:0.25, w:1.45, h:0.95, sizing:{ type:'contain', w:1.45, h:0.95 } }); }
+        else { sl.addText(((r.project_name||'؟').trim()[0])||'؟', { x:8.15, y:0.2, w:1.55, h:1.05, fontFace:FONT, fontSize:36, bold:true, color:NAVY, align:'center', valign:'middle', rtlMode:true }); }
+        sl.addText(`حاضنة ابتكار 5 — ${r.domain}`, { x:0.4, y:0.15, w:7.6, h:0.3, fontFace:FONT, fontSize:11, color:GOLDL, align:'right', rtlMode:true });
+        sl.addText(r.project_name, { x:0.4, y:0.45, w:7.6, h:0.65, fontFace:FONT, fontSize:24, bold:true, color:'FFFFFF', align:'right', rtlMode:true, valign:'middle', fit:'shrink' });
+        sl.addText(`${r.track||''}  •  ${seq}`, { x:0.4, y:1.08, w:7.6, h:0.3, fontFace:FONT, fontSize:10.5, color:'DDDDEE', align:'right', rtlMode:true });
+        // النبذة
+        sl.addText('نبذة عن المشروع', { x:5.1, y:1.6, w:4.6, h:0.35, fontFace:FONT, fontSize:14, bold:true, color:NAVY, align:'right', rtlMode:true });
+        sl.addShape(pptx.ShapeType.rect, { x:8.5, y:1.95, w:1.2, h:0.03, fill:{ color:GOLD }, line:{ color:GOLD } });
+        sl.addText((prof.summary||'').trim(), { x:0.4, y:2.05, w:9.3, h:1.75, fontFace:FONT, fontSize:12, color:INK, align:'right', rtlMode:true, valign:'top', lineSpacingMultiple:1.25, fit:'shrink', paraSpaceAfter:0 });
+        // الفريق (يمين) + التواصل (يسار)
+        const members = (prof.show_members === false) ? [] : r.members.filter(m=>(m.full_name||'').trim());
+        if(members.length){
+          sl.addText('فريق المشروع', { x:6.2, y:3.85, w:3.5, h:0.3, fontFace:FONT, fontSize:12, bold:true, color:NAVY, align:'right', rtlMode:true });
+          sl.addText(members.map(m=>({ text: `• ${m.full_name}${m.is_leader?' (قائد الفريق)':(m.role_in_project?' — '+m.role_in_project:'')}`, options:{ breakLine:true } })),
+            { x:3.9, y:4.15, w:5.8, h:1.15, fontFace:FONT, fontSize:10.5, color:INK, align:'right', rtlMode:true, valign:'top', fit:'shrink' });
+        }
+        const contact = [];
+        if(prof.contact_email) contact.push({ text: prof.contact_email, options:{ breakLine:true } });
+        if(prof.contact_phone) contact.push({ text: prof.contact_phone, options:{ breakLine:true } });
+        if(prof.project_url) contact.push({ text: prof.project_url, options:{ breakLine:true, hyperlink:{ url: /^https?:/i.test(prof.project_url)?prof.project_url:('https://'+prof.project_url) } } });
+        if(contact.length){
+          sl.addShape(pptx.ShapeType.roundRect, { x:0.4, y:3.9, w:3.4, h:1.35, fill:{ color:'F7F7FB' }, line:{ color:'E4E4EE', width:1 }, rectRadius:0.08 });
+          sl.addText('للتواصل مع الفريق', { x:0.5, y:3.93, w:3.2, h:0.28, fontFace:FONT, fontSize:11, bold:true, color:NAVY, align:'right', rtlMode:true });
+          sl.addText(contact, { x:0.5, y:4.2, w:3.2, h:1.0, fontFace:FONT, fontSize:9.5, color:INK, align:'left', valign:'top', fit:'shrink' });
+        }
+        footer(sl);
+      }catch(e){ failed++; console.error('[دليل المشاريع] تعذّر إنشاء شريحة', r.project_id, e); }
+      done++; updateBatchProgress(done, rows.length, failed);
+    }
+    if(batchCancelled){ showToast('تم إلغاء التصدير'); return; }
+    await pptx.writeFile({ fileName: `دليل-المشاريع-حاضنة-ابتكار-5-${new Date().toISOString().slice(0,10)}.pptx` });
+    showToast(`تم إنشاء ملف PowerPoint (${rows.length-failed} مشروعًا${failed?` — فشل ${failed}`:''})`);
+  }catch(e){
+    console.error(e); showToast('تعذّر إنشاء الملف: '+(e.message||'خطأ غير معروف'));
+  }finally{
+    closeBatchProgressModal();
   }
 }
 
