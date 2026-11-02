@@ -5027,7 +5027,7 @@ async function fetchTeaserRows(){
     if(!prof || !prof.contact_confirmed) missing.push('تأكيد بريد التواصل');
     if(!prof || !prof.consent_publish) missing.push('الموافقة على النشر');
     return {
-      form_id: f.id, project_id: f.project_id, project_name: proj.project_name || f.project_id,
+      form_id: f.id, project_id: f.project_id, project_name: (prof && (prof.project_title||'').trim()) || proj.project_name || f.project_id, original_name: proj.project_name || f.project_id,
       track: proj.track || '', domain: proj.domain || 'بدون مجال',
       leader_name: proj.team_leader_name || '', leader_email: proj.team_leader_email || '', leader_phone: proj.team_leader_phone || '',
       profile: prof, members: memByForm[f.id] || [], words,
@@ -5161,6 +5161,7 @@ async function openTeaserDetailModal(r){
         <div style="width:76px;height:76px;border:1px solid var(--line);border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff;flex-shrink:0">${logoUrl ? `<img src="${logoUrl}" style="width:100%;height:100%;object-fit:contain">` : '<span style="font-size:11px;color:var(--ink-400)">بدون شعار</span>'}</div>
         <div style="font-size:12.5px;color:var(--ink-600)">${prof.logo_name ? escHtml(prof.logo_name) : 'لم يرفع الفريق شعارًا'}</div>
       </div>
+      <div class="field-inline"><label class="flabel">اسم المشروع في الدليل${r.original_name!==r.project_name?` <span style="color:var(--ink-400);font-weight:400">(الأصلي: ${escHtml(r.original_name)})</span>`:''}</label><input type="text" id="tdTitle" value="${q(r.project_name)}"></div>
       <div class="field-inline"><label class="flabel">نبذة المشروع <span id="tdWordCount" class="mono" style="color:var(--ink-400)"></span></label>
         <textarea id="tdSummary" rows="8" style="width:100%">${escHtml(prof.summary||'')}</textarea></div>
       <div class="field-inline"><label class="flabel">بريد التواصل</label><input type="text" id="tdEmail" dir="ltr" value="${q(prof.contact_email)}"></div>
@@ -5182,6 +5183,7 @@ async function openTeaserDetailModal(r){
     if(teaserWords(sumEl.value) > TEASER_MAX_W){ showToast(`النبذة تتجاوز ${TEASER_MAX_W} كلمة`); return; }
     const btn = document.getElementById('tdSave'); btn.disabled = true; btn.textContent = 'جارٍ الحفظ…';
     const payload = { ...prof,
+      project_title: (document.getElementById('tdTitle').value.trim() && document.getElementById('tdTitle').value.trim() !== r.original_name) ? document.getElementById('tdTitle').value.trim() : null,
       summary: sumEl.value.trim() || null,
       contact_email: document.getElementById('tdEmail').value.trim() || null,
       contact_phone: document.getElementById('tdPhone').value.trim() || null,

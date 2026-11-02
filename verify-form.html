@@ -418,6 +418,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_URvlZnzYTl0CwwVxCikLvA_OeGSzhJh";
 let PROJECT_ID = null;
 let FORM_ID = null;
 let PROJECT_NAME = '';
+function teaserTitle(){ return ((typeof TEASER!=='undefined' && TEASER && (TEASER.project_title||'').trim()) || PROJECT_NAME || ''); }
 let ASSIGNED_COMMITTEE_NAME = null;
 let ASSIGNED_PERIOD = null; // { name, start_time, end_time }
 let JUDGING_CRITERIA_LIST = [];
@@ -1660,6 +1661,7 @@ async function loadTeaser(){
     const { data: prof } = await SB.from('teaser_profiles').select('*').eq('form_id', FORM_ID).maybeSingle();
     TEASER = {
       summary: (prof && prof.summary) || '',
+      project_title: (prof && prof.project_title) || '',
       logo_path: prof ? prof.logo_path : null, logo_name: prof ? prof.logo_name : null,
       project_url: (prof && prof.project_url) || '',
       contact_email: prof && prof.contact_email ? prof.contact_email : ((PROJECT_META && PROJECT_META.team_leader_email) || ''),
@@ -1707,7 +1709,7 @@ function teaserChecklist(){
 }
 
 function teaserPreviewHTML(){
-  const initial = escHtml(((PROJECT_NAME||'؟').trim()[0]) || '؟');
+  const initial = escHtml(((teaserTitle()||'؟').trim()[0]) || '؟');
   const logo = TEASER_LOGO_URL
     ? `<img src="${escHtml(TEASER_LOGO_URL)}" alt="" style="width:100%;height:100%;object-fit:contain;display:block">`
     : `<span style="font-size:30px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif">${initial}</span>`;
@@ -1720,7 +1722,7 @@ function teaserPreviewHTML(){
       <div style="width:64px;height:64px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">${logo}</div>
       <div style="min-width:0">
         <div style="font-size:10.5px;color:var(--gold-300,#E6C570);font-family:'Cairo',sans-serif">حاضنة ابتكار 5</div>
-        <div style="font-size:16px;font-weight:800;color:#fff;font-family:'Cairo',sans-serif;margin-top:2px;overflow-wrap:anywhere">${escHtml(PROJECT_NAME||'')}</div>
+        <div style="font-size:16px;font-weight:800;color:#fff;font-family:'Cairo',sans-serif;margin-top:2px;overflow-wrap:anywhere">${escHtml(teaserTitle())}</div>
         ${meta ? `<div style="font-size:11px;color:rgba(255,255,255,.75);margin-top:3px">${meta}</div>` : ''}
       </div>
     </div>
@@ -1787,6 +1789,10 @@ function renderTeaserScreen(){
       <div id="teaserChecklist" style="margin-bottom:18px"></div>
 
       <div class="ac-title" style="font-weight:800;color:var(--navy-800);margin:6px 0 10px">١) هوية المشروع</div>
+      <div class="field">
+        <div class="field-label">اسم المشروع <span style="color:var(--ink-400);font-weight:400">(يمكنكم تعديله ليظهر في الدليل بالصيغة المناسبة)</span></div>
+        <input type="text" id="teaserTitle" maxlength="120" ${dis} value="${q(TEASER.project_title || PROJECT_NAME)}">
+      </div>
       <div class="field">
         <div class="field-label">شعار المشروع <span style="color:var(--ink-400);font-weight:400">(اختياري — PNG أو JPG أو SVG، حتى 2 م.ب)</span></div>
         ${TEASER.logo_path ? `<div class="file-chip" style="margin-bottom:8px"><span class="fc-name">${icon('file-text',{size:13})} ${escHtml(TEASER.logo_name||'الشعار')}</span>${locked?'':`<button type="button" class="fc-remove" id="teaserLogoRemove">إزالة</button>`}</div>` : ''}
@@ -1870,6 +1876,7 @@ async function saveTeaserProfile(silent){
   const payload = {
     form_id: FORM_ID,
     summary: TEASER.summary.trim() || null,
+    project_title: ((TEASER.project_title||'').trim() && (TEASER.project_title||'').trim() !== (PROJECT_NAME||'').trim()) ? TEASER.project_title.trim() : null,
     logo_path: TEASER.logo_path || null, logo_name: TEASER.logo_name || null,
     project_url: url,
     contact_email: (TEASER.contact_email||'').trim() || null,
@@ -1915,7 +1922,7 @@ function bindTeaserEvents(){
   if(!TEASER_OPEN) return;
 
   const bindText = (id, key)=>{ const el=document.getElementById(id); if(el) el.addEventListener('input', ()=>{ TEASER[key]=el.value; if(key==='contact_email'||key==='contact_phone'){ /* تغيير البريد يُلغي التأكيد السابق */ if(key==='contact_email' && TEASER.contact_confirmed){ TEASER.contact_confirmed=false; const c=document.getElementById('teaserConfirm'); if(c) c.checked=false; } } refreshTeaserLive(); scheduleTeaserAutosave(); }); };
-  bindText('teaserSummary','summary'); bindText('teaserUrl','project_url'); bindText('teaserEmail','contact_email'); bindText('teaserPhone','contact_phone');
+  bindText('teaserTitle','project_title'); bindText('teaserSummary','summary'); bindText('teaserUrl','project_url'); bindText('teaserEmail','contact_email'); bindText('teaserPhone','contact_phone');
   const bindCheck = (id, key)=>{ const el=document.getElementById(id); if(el) el.addEventListener('change', ()=>{ TEASER[key]=el.checked; refreshTeaserLive(); scheduleTeaserAutosave(); }); };
   bindCheck('teaserConfirm','contact_confirmed'); bindCheck('teaserConsent','consent_publish'); bindCheck('teaserShowMembers','show_members');
   const urlEl = document.getElementById('teaserUrl');
