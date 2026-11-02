@@ -5682,7 +5682,8 @@ async function renderPartnersAdminBox(){
     <div style="font-size:12px;color:var(--ink-400);margin-bottom:12px">إجمالي الراغبين في الحضور من الشركاء: <b>${totalAtt}</b> • جهات ترغب بجناح: <b>${wantBooth}</b></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       <button class="btn btn-ghost btn-sm" id="ptExportBtn">${icon('download',{size:13})} بيانات الشركاء (Excel)</button>
-      <button class="btn btn-ghost btn-sm" id="ptCopyAllBtn">نسخ روابط جميع الشركاء</button>
+      <button class="btn btn-primary btn-sm" id="ptPublicBtn">نسخ الرابط الواحد للجميع</button>
+      <button class="btn btn-ghost btn-sm" id="ptCopyAllBtn">نسخ الروابط الخاصة لكل شريك</button>
     </div>
     <div class="table-wrap" style="max-height:480px;overflow:auto"><table><thead><tr><th>#</th><th>الجهة</th><th>الحالة</th><th>النواقص</th><th>آخر تحديث</th><th></th></tr></thead><tbody>
       ${sts.map((x,i)=>{ const [lb,cl]=PARTNER_ST[x.st]; return `<tr>
@@ -5701,6 +5702,7 @@ async function renderPartnersAdminBox(){
   box.querySelectorAll('[data-ptcopy]').forEach(b=>b.addEventListener('click', ()=>copy(partnerLink(byId(b.dataset.ptcopy).token))));
   box.querySelectorAll('[data-ptview]').forEach(b=>b.addEventListener('click', ()=>openPartnerModal(byId(b.dataset.ptview))));
   box.querySelectorAll('[data-ptlock]').forEach(b=>b.addEventListener('click', async ()=>{ const r=byId(b.dataset.ptlock); const { error } = await sb.from('partners').update({ is_locked: !r.is_locked }).eq('id', r.id); if(error){ showToast('تعذّر التحديث: '+error.message); return; } renderPartnersAdminBox(); }));
+  document.getElementById('ptPublicBtn').addEventListener('click', ()=>copy(new URL('partners.html', location.href).href.split('?')[0]));
   document.getElementById('ptCopyAllBtn').addEventListener('click', ()=>copy(rows.map(r=>`${r.org_name}: ${partnerLink(r.token)}`).join('\n')));
   document.getElementById('ptAddBtn').addEventListener('click', async ()=>{
     const n = document.getElementById('ptNewName').value.trim(); if(!n){ showToast('اكتب اسم الجهة'); return; }

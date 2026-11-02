@@ -66,7 +66,9 @@ input:disabled,textarea:disabled,select:disabled{background:#F4F4F9;color:var(--
 <div class="bar" id="bar" style="display:none"><div class="st" id="saveState"></div><button class="btn pri" id="btnSubmit">اعتماد وإرسال البيانات</button></div>
 <script>
 const SB = window.supabase.createClient("https://zxruviveljkywxbdqjxc.supabase.co","sb_publishable_URvlZnzYTl0CwwVxCikLvA_OeGSzhJh");
-const TOKEN = new URLSearchParams(location.search).get('t') || '';
+let TOKEN = new URLSearchParams(location.search).get('t') || '';
+const TOKEN_FROM_URL = !!TOKEN;
+const LS_KEY = 'partner_token_v1';
 const esc = s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const words = t=>{ t=(t||'').trim(); return t ? t.split(/\s+/).length : 0; };
 const emailOk = v=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((v||'').trim());
@@ -194,7 +196,9 @@ function render(){
       </div>
     </div>
 
-    <div class="card"><h2>متطلبات الاعتماد</h2><ul class="chk" id="chk"></ul></div>`;
+    <div class="card"><h2>متطلبات الاعتماد</h2><ul class="chk" id="chk"></ul></div>
+    ${TOKEN_FROM_URL?'':'<div style="text-align:center;margin-bottom:70px"><button class="btn sm" id="changeOrg">ليست جهتكم؟ تغيير الجهة</button></div>'}`;
+  const co = document.getElementById('changeOrg'); if(co) co.addEventListener('click', changeOrg);
   document.getElementById('bar').style.display = LOCKED ? 'none' : 'flex';
   bind(); live();
 }
@@ -250,11 +254,32 @@ document.getElementById('btnSubmit').addEventListener('click', async ()=>{
   if(missingList(D).length) return;
   if(await save(true)){ render(); window.scrollTo({top:0,behavior:'smooth'}); setState('تم اعتماد البيانات'); }
 });
+async function showPicker(){
+  const app = document.getElementById('app'); document.getElementById('bar').style.display='none';
+  document.getElementById('orgName').textContent = 'اختاروا جهتكم';
+  app.innerHTML = '<div class="card">جارٍ التحميل…</div>';
+  const { data, error } = await SB.rpc('partner_list');
+  if(error || !Array.isArray(data)){ console.error(error); app.innerHTML = '<div class="card err">تعذّر تحميل قائمة الجهات.'+(error?`<div dir="ltr" style="font-size:11px;opacity:.7">${esc(error.message)}</div>`:'')+'</div>'; return; }
+  app.innerHTML = `<div class="card"><h2>اختيار الجهة</h2><div class="sub">اختاروا اسم جهتكم من القائمة لاستكمال بياناتها. تُحفَظ البيانات تلقائيًا ويمكن الرجوع إليها وتعديلها في أي وقت من هذا الرابط نفسه.</div>
+    <label>الجهة <span class="req">*</span></label>
+    <select id="orgSelect"><option value="">— اختاروا الجهة —</option>${data.map(o=>`<option value="${esc(o.token)}">${esc(o.org_name)}${o.submitted?' ✓ (معتمد)':(o.started?' (قيد الاستكمال)':'')}</option>`).join('')}</select>
+    <div style="margin-top:14px"><button class="btn pri" id="orgGo" disabled>متابعة</button></div></div>`;
+  const sel = document.getElementById('orgSelect'), go = document.getElementById('orgGo');
+  sel.addEventListener('change', ()=>{ go.disabled = !sel.value; });
+  go.addEventListener('click', ()=>{ TOKEN = sel.value; try{ localStorage.setItem(LS_KEY, TOKEN); }catch(e){} loadPartner(); });
+}
+function changeOrg(){ if(SAVE_T){ clearTimeout(SAVE_T); save(false); } try{ localStorage.removeItem(LS_KEY); }catch(e){} TOKEN=''; showPicker(); window.scrollTo({top:0}); }
 async function init(){
   const app = document.getElementById('app');
-  if(!/^[0-9a-f-]{36}$/i.test(TOKEN)){ app.innerHTML = '<div class="card err">الرابط غير صحيح.<br>تأكدوا من نسخ الرابط كاملًا أو تواصلوا مع فريق البرنامج.</div>'; document.getElementById('orgName').textContent=''; return; }
+  if(TOKEN_FROM_URL){ if(!/^[0-9a-f-]{36}$/i.test(TOKEN)){ app.innerHTML = '<div class="card err">الرابط غير صحيح.<br>تأكدوا من نسخ الرابط كاملًا أو تواصلوا مع فريق البرنامج.</div>'; document.getElementById('orgName').textContent=''; return; } return loadPartner(); }
+  let saved=''; try{ saved = localStorage.getItem(LS_KEY)||''; }catch(e){}
+  if(/^[0-9a-f-]{36}$/i.test(saved)){ TOKEN = saved; return loadPartner(true); }
+  showPicker();
+}
+async function loadPartner(fromSaved){
+  const app = document.getElementById('app');
   const { data, error } = await SB.rpc('partner_get', { p_token: TOKEN });
-  if(error || !data || !data.ok){ console.error(error); app.innerHTML = '<div class="card err">الرابط غير صحيح أو غير مفعَّل.<br>تواصلوا مع فريق البرنامج.'+(error?`<div dir="ltr" style="font-size:11px;opacity:.7">${esc(error.message)}</div>`:'')+'</div>'; document.getElementById('orgName').textContent=''; return; }
+  if(error || !data || !data.ok){ console.error(error); if(!TOKEN_FROM_URL){ try{ localStorage.removeItem(LS_KEY); }catch(e){} TOKEN=''; return showPicker(); } app.innerHTML = '<div class="card err">الرابط غير صحيح أو غير مفعَّل.<br>تواصلوا مع فريق البرنامج.'+(error?`<div dir="ltr" style="font-size:11px;opacity:.7">${esc(error.message)}</div>`:'')+'</div>'; document.getElementById('orgName').textContent=''; return; }
   P = data; D = normalize(data.data); LOCKED = !!data.is_locked;
   render();
 }
