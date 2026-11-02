@@ -948,7 +948,7 @@ function renderSection(){
     <div class="section-desc">${section.desc}</div>
   </div>`;
   if(section.banner) inner += `<div class="req-banner"><b>تنبيه:</b>&nbsp;${section.banner}</div>`;
-  if(IS_READONLY) inner += `<div class="req-banner" style="background:var(--danger-100);color:var(--danger)"><b>🔒 هذا النموذج مقفل للتعديل حاليًا من قبل فريق البرنامج.</b>&nbsp;تقدر تتصفح بياناتك، لكن أي تعديل لن يُحفظ.</div>`;
+  if(IS_READONLY) inner += `<div class="req-banner" style="background:var(--danger-100);color:var(--danger)"><div style="line-height:1.9"><b>🔒 هذا النموذج مقفل للتعديل حاليًا من قبل فريق البرنامج.</b>&nbsp;تقدر تتصفح بياناتك، لكن أي تعديل لن يُحفظ.</div></div>`;
 
   if(section.isTeamSection) inner += renderTeamSection(section);
   else if(section.isStageSection) inner += renderStageSection(section);
@@ -1783,8 +1783,8 @@ function renderTeaserScreen(){
     <div style="padding:8px 22px 30px;max-width:760px;margin:0 auto">
       <div style="font-size:20px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:6px">استكمال البيانات</div>
       <div style="font-size:13px;color:var(--ink-600);line-height:1.9;margin-bottom:14px">يسرّ فريق حاضنة ابتكار تهنئتكم على اجتياز مرحلة التحكيم. وتمهيدًا لإدراج مشروعكم في <b>دليل المشاريع</b> للحاضنة، الذي سيُوزَّع على الحضور والمهتمين، نأمل التكرُّم باستكمال البيانات الواردة أدناه والتأكد من صحتها.</div>
-      ${(!locked && TEASER_DEADLINE) ? `<div class="req-banner" style="background:var(--gold-100,#FBF0DA);color:var(--amber,#8A6D00);margin-bottom:14px"><b>⏰ آخر موعد لاستكمال البيانات:</b>&nbsp;${teaserDeadlineText()}</div>` : ''}
-      ${locked ? `<div class="req-banner" style="background:var(--danger-100);color:var(--danger);margin-bottom:14px"><b>🔒 انتهت فترة استكمال البيانات.</b>&nbsp;يمكنكم الاطلاع على ما تم حفظه، لكن لا يمكن تعديله. للاستفسار: <span class="mono">icip@qu.edu.sa</span></div>` : ''}
+      ${(!locked && TEASER_DEADLINE) ? `<div class="req-banner" style="background:var(--gold-100,#FBF0DA);color:var(--amber,#8A6D00);margin-bottom:14px"><div style="line-height:1.9"><b>⏰ آخر موعد لاستكمال البيانات:</b>&nbsp;${teaserDeadlineText()}</div></div>` : ''}
+      ${locked ? `<div class="req-banner" style="background:var(--danger-100);color:var(--danger);margin-bottom:14px"><div style="line-height:1.9"><b>🔒 انتهت فترة استكمال البيانات.</b>&nbsp;يمكنكم الاطلاع على ما تم حفظه، لكن لا يمكن تعديله. للاستفسار: <span class="mono">icip@qu.edu.sa</span></div></div>` : ''}
 
       <div id="teaserChecklist" style="margin-bottom:18px"></div>
 
@@ -1810,7 +1810,14 @@ function renderTeaserScreen(){
       </div>
 
       <div class="ac-title" style="font-weight:800;color:var(--navy-800);margin:22px 0 10px">٢) التواصل مع الفريق</div>
-      <div class="req-banner" style="margin-bottom:12px"><b>تنبيه:</b>&nbsp;دليل المشاريع سيكون <b>متاحًا للعموم</b> (الحضور والمهتمين)، وسيُنشر فيه بريد التواصل والجوال (إن أدخلتموه). نوصي باستخدام بريد وجوال مخصصين للمشروع، وبإدخال ما ترغبون في نشره فقط.</div>
+      <div class="req-banner" style="margin-bottom:14px;padding:14px 16px;gap:12px;align-items:flex-start">
+        <span style="font-size:20px;line-height:1.4">ⓘ</span>
+        <div style="line-height:1.9">
+          <div style="font-weight:800;color:#5C4315;font-size:13.5px;margin-bottom:2px">دليل المشاريع متاح للعموم</div>
+          <div>سيُتاح الدليل للحضور والمهتمين، وسيُنشر فيه بريد التواصل والجوال (إن أدخلتموه).</div>
+          <div style="margin-top:4px">نوصي باستخدام بريد وجوال مخصصين للمشروع، وبإدخال ما ترغبون في نشره فقط.</div>
+        </div>
+      </div>
       <div class="two-col">
         <div class="field"><div class="field-label">بريد التواصل<span class="req-star">*</span></div><input type="email" id="teaserEmail" dir="ltr" value="${q(TEASER.contact_email)}" ${dis}></div>
         <div class="field"><div class="field-label">جوال التواصل <span style="color:var(--ink-400);font-weight:400">(اختياري)</span></div><input type="text" id="teaserPhone" dir="ltr" value="${q(TEASER.contact_phone)}" ${dis}></div>
