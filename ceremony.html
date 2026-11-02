@@ -105,7 +105,7 @@ function renderLookup(msg){
     go.disabled = true; go.textContent = 'جارٍ البحث…';
     let res = null;
     try{ const { data, error } = await SB.rpc('ceremony_lookup', { p_phone: phone, p_email: email }); if(error) throw error; res = data; }
-    catch(e){ console.error(e); renderLookup('تعذّر الاتصال، أعيدوا المحاولة.'); return; }
+    catch(e){ console.error(e); renderLookup('تعذّر الاتصال، أعيدوا المحاولة.' + (e && e.message ? ' <span dir="ltr" style="display:block;font-size:11px;opacity:.8;margin-top:4px">'+esc(e.message)+'</span>' : '')); return; }
     if(!res || !res.ok){ renderLookup('لم نجد بيانات مطابقة. تأكدوا من الجوال والبريد كما سُجِّلا في المنصة، أو تواصلوا مع قائد فريقكم.'); return; }
     if(res.matches.length === 1){ chooseToken(res.matches[0].token); return; }
     card.innerHTML = `<div class="name" style="margin-bottom:8px">اختاروا مشروعكم</div>` + res.matches.map((m,i)=>`<button class="pick" data-i="${i}"><b>${esc(m.project_name)}</b><br><span style="color:var(--gray);font-size:12.5px">${esc(m.member_name)}</span></button>`).join('');
