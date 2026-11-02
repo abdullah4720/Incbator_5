@@ -2075,11 +2075,16 @@ function renderCeremonyScreen(){
         <div style="flex:1;min-width:90px;text-align:center;background:#F1F1F6;border-radius:12px;padding:10px"><div style="font-size:22px;font-weight:800;color:var(--ink-600)">${c.pending}</div><div style="font-size:12px;color:var(--ink-600)">لم يردّوا</div></div>
       </div>
       ${rows}
+      <div style="margin-top:14px;padding:12px 14px;border:1px dashed var(--line);border-radius:12px;font-size:12.5px;line-height:1.9;color:var(--ink-600)">
+        <b>أو أرسلوا رابطًا واحدًا لجميع الأعضاء:</b> يدخل كل عضو بجواله وبريده المسجَّلين في بيانات الفريق ثم يؤكد حضوره.
+        <div style="margin-top:6px"><button class="btn btn-ghost btn-sm" id="btnCopyPublicLink">نسخ الرابط العام</button></div>
+      </div>
       <div style="margin-top:6px"><button class="btn btn-ghost btn-sm" id="btnCopyAllLinks">نسخ روابط جميع الأعضاء</button> <button class="btn btn-ghost btn-sm" id="btnRefreshCeremony">تحديث الحالات</button></div>
     </div>`;
   const copy = async (txt)=>{ try{ await navigator.clipboard.writeText(txt); showToast('تم النسخ'); }catch(e){ window.prompt('انسخوا النص:', txt); } };
   document.getElementById('btnBackFromCeremony').addEventListener('click', ()=>{ showingCeremony=false; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
   document.getElementById('btnRefreshCeremony').addEventListener('click', async ()=>{ await loadCeremony(); renderCeremonyScreen(); showToast('تم التحديث'); });
+  document.getElementById('btnCopyPublicLink').addEventListener('click', ()=>copy(new URL('ceremony.html', location.href).href.split('?')[0]));
   document.getElementById('btnCopyAllLinks').addEventListener('click', ()=>copy(CEREMONY.members.map(m=>`${m.full_name}: ${ceremonyLink(m.token)}`).join('\n')));
   card.querySelectorAll('[data-ccopy]').forEach(b=>b.addEventListener('click', ()=>{ const m = CEREMONY.members.find(x=>String(x.member_id)===b.dataset.ccopy); if(m) copy(ceremonyLink(m.token)); }));
   card.querySelectorAll('[data-cset]').forEach(b=>b.addEventListener('click', async ()=>{

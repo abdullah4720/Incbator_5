@@ -34,6 +34,14 @@ body{margin:0;font-family:'IBM Plex Sans Arabic',sans-serif;background:#F4F4F9;c
 .warn{margin-top:12px;font-size:12.5px;color:#8A6D00}
 .err{text-align:center;padding:10px;color:var(--no);line-height:2}
 .foot{font-size:12px;color:var(--gray);margin:0 0 24px;text-align:center}
+input.f{width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:12px;font-family:inherit;font-size:15px;margin-bottom:12px;direction:ltr;text-align:right}
+input.f:focus{outline:none;border-color:var(--navy2)}
+.lbl{font-size:13px;font-weight:600;margin-bottom:6px}
+.go{width:100%;padding:14px;border:0;border-radius:12px;background:var(--navy2);color:#fff;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer}
+.go:disabled{opacity:.6}
+.pick{display:block;width:100%;text-align:right;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-family:inherit;font-size:14px;cursor:pointer;margin-bottom:8px}
+.pick:hover{border-color:var(--navy2)}
+.lnk{background:none;border:0;color:var(--navy2);font-family:inherit;font-size:12.5px;cursor:pointer;text-decoration:underline;margin-top:14px;padding:0}
 </style>
 </head>
 <body>
@@ -46,7 +54,9 @@ body{margin:0;font-family:'IBM Plex Sans Arabic',sans-serif;background:#F4F4F9;c
 <div class="foot">مركز الابتكار والملكية الفكرية — جامعة القصيم</div>
 <script>
 const SB = window.supabase.createClient("https://zxruviveljkywxbdqjxc.supabase.co","sb_publishable_URvlZnzYTl0CwwVxCikLvA_OeGSzhJh");
-const TOKEN = new URLSearchParams(location.search).get('t') || '';
+let TOKEN = new URLSearchParams(location.search).get('t') || '';
+const TOKEN_FROM_URL = !!TOKEN;
+const LS_KEY = 'ceremony_token_v1';
 const esc = s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let DATA = null;
 function fmtDeadline(d){ const x=new Date(d); return x.toLocaleDateString('ar-SA')+' — '+x.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}); }
@@ -70,6 +80,7 @@ function render(){
     </div>
     ${s ? `<div class="status ${s==='attending'?'ok':'no'}">${s==='attending'?'تم تسجيل حضوركم. ننتظركم في الحفل.':'تم تسجيل اعتذاركم.'}${DATA.by_role==='leader'?' (سُجِّل بواسطة قائد الفريق — يمكنكم تعديله بنفسكم)':''}${open?' يمكنكم تغيير اختياركم في أي وقت قبل انتهاء الموعد.':''}</div>` : `<div class="status">لم يُسجَّل ردّكم بعد.</div>`}
     ${open ? (st.deadline ? `<div class="warn">⏰ آخر موعد للتأكيد: ${fmtDeadline(st.deadline)}</div>` : '') : `<div class="warn" style="color:var(--no)">انتهت فترة تأكيد الحضور، ولا يمكن التعديل حاليًا.</div>`}`;
+  if(!TOKEN_FROM_URL){ card.insertAdjacentHTML('beforeend', `<button class="lnk" id="lkSwitch">لست ${esc(DATA.member_name)}؟ الدخول بحساب آخر</button>`); document.getElementById('lkSwitch').addEventListener('click', switchPerson); }
   card.querySelectorAll('[data-s]').forEach(b=>b.addEventListener('click', async ()=>{
     card.querySelectorAll('[data-s]').forEach(x=>x.disabled=true);
     const { error } = await SB.rpc('ceremony_respond', { p_token: TOKEN, p_status: b.dataset.s });
@@ -77,6 +88,34 @@ function render(){
     await load();
   }));
 }
+function renderLookup(msg){
+  const card = document.getElementById('card');
+  card.innerHTML = `
+    <div class="name" style="margin-bottom:6px">تأكيد الحضور</div>
+    <div class="proj" style="color:var(--gray);line-height:1.9">للتعرّف عليكم، أدخلوا رقم الجوال والبريد الإلكتروني <b>المسجَّلين في بيانات فريقكم</b> في المنصة.</div>
+    <div class="lbl">رقم الجوال</div>
+    <input class="f" id="lkPhone" type="tel" inputmode="tel" placeholder="05xxxxxxxx" autocomplete="tel">
+    <div class="lbl">البريد الإلكتروني</div>
+    <input class="f" id="lkEmail" type="email" inputmode="email" placeholder="name@example.com" autocomplete="email">
+    ${msg ? `<div class="status no" style="margin:0 0 12px">${msg}</div>` : ''}
+    <button class="go" id="lkGo">متابعة</button>`;
+  const go = document.getElementById('lkGo');
+  const run = async ()=>{
+    const phone = document.getElementById('lkPhone').value, email = document.getElementById('lkEmail').value;
+    go.disabled = true; go.textContent = 'جارٍ البحث…';
+    let res = null;
+    try{ const { data, error } = await SB.rpc('ceremony_lookup', { p_phone: phone, p_email: email }); if(error) throw error; res = data; }
+    catch(e){ console.error(e); renderLookup('تعذّر الاتصال، أعيدوا المحاولة.'); return; }
+    if(!res || !res.ok){ renderLookup('لم نجد بيانات مطابقة. تأكدوا من الجوال والبريد كما سُجِّلا في المنصة، أو تواصلوا مع قائد فريقكم.'); return; }
+    if(res.matches.length === 1){ chooseToken(res.matches[0].token); return; }
+    card.innerHTML = `<div class="name" style="margin-bottom:8px">اختاروا مشروعكم</div>` + res.matches.map((m,i)=>`<button class="pick" data-i="${i}"><b>${esc(m.project_name)}</b><br><span style="color:var(--gray);font-size:12.5px">${esc(m.member_name)}</span></button>`).join('');
+    card.querySelectorAll('[data-i]').forEach(b=>b.addEventListener('click', ()=>chooseToken(res.matches[+b.dataset.i].token)));
+  };
+  go.addEventListener('click', run);
+  card.querySelectorAll('input').forEach(i=>i.addEventListener('keydown', e=>{ if(e.key==='Enter') run(); }));
+}
+function chooseToken(t){ TOKEN = t; try{ localStorage.setItem(LS_KEY, t); }catch(e){} load(); }
+function switchPerson(){ try{ localStorage.removeItem(LS_KEY); }catch(e){} TOKEN=''; DATA=null; renderLookup(); }
 async function load(){
   try{
     const { data, error } = await SB.rpc('ceremony_get', { p_token: TOKEN });
@@ -85,7 +124,12 @@ async function load(){
   }catch(e){ console.error(e); DATA = { ok:false }; }
   render();
 }
-if(!/^[0-9a-f-]{36}$/i.test(TOKEN)){ DATA = { ok:false }; render(); } else load();
+const UUID_RE = /^[0-9a-f-]{36}$/i;
+if(TOKEN_FROM_URL){ if(UUID_RE.test(TOKEN)) load(); else { DATA = { ok:false }; render(); } }
+else {
+  let saved = ''; try{ saved = localStorage.getItem(LS_KEY) || ''; }catch(e){}
+  if(UUID_RE.test(saved)){ TOKEN = saved; load().then(()=>{ if(!DATA || !DATA.ok) switchPerson(); }); } else renderLookup();
+}
 </script>
 </body>
 </html>
