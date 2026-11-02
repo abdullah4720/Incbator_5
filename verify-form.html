@@ -689,7 +689,7 @@ function renderStepper(){
       if(showingThankYou && (!ALLOW_EDIT_AFTER_SUBMIT || IS_READONLY)) return; // التعديل بعد الإرسال أو بعد الإقفال غير متاح
       showingThankYou = false;
       showingReport = false;
-      showingTeaser = false;
+      showingTeaser = false; showingCeremony = false;
       state.current=parseInt(n.dataset.goto); renderAll(); window.scrollTo({top:0,behavior:'smooth'});
     });
   });
@@ -697,8 +697,16 @@ function renderStepper(){
     const t = document.createElement('div');
     t.className = 'step-item' + (showingTeaser ? ' active' : '') + ((TEASER && TEASER.is_complete) ? ' done' : ' warn');
     t.innerHTML = `<div class="step-num">${(TEASER && TEASER.is_complete) ? icon('check',{size:13}) : '★'}</div><div class="step-title">استكمال بيانات الدليل</div>`;
-    t.addEventListener('click', ()=>{ showingReport=false; showingTeaser=true; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
+    t.addEventListener('click', ()=>{ showingReport=false; showingCeremony=false; showingTeaser=true; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
     el.appendChild(t);
+  }
+  if(CEREMONY){
+    const c = ceremonyCounts();
+    const t2 = document.createElement('div');
+    t2.className = 'step-item' + (showingCeremony ? ' active' : '') + (c.pending===0 ? ' done' : ' warn');
+    t2.innerHTML = `<div class="step-num">${c.pending===0 ? icon('check',{size:13}) : '★'}</div><div class="step-title">تأكيد حضور الحفل الختامي</div>`;
+    t2.addEventListener('click', ()=>{ showingReport=false; showingTeaser=false; showingCeremony=true; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
+    el.appendChild(t2);
   }
 }
 
@@ -1397,6 +1405,11 @@ function renderThankYouScreen(){
         <div style="font-size:14px;font-weight:800;font-family:'Cairo',sans-serif">${QUALIFICATION_BADGE==='ok'?'مشروعكم متأهِّل للانتقال إلى مرحلة التحكيم':'مشروعكم غير متأهِّل حاليًا للانتقال إلى مرحلة التحكيم'}</div>
       </div>
       ${QUALIFICATION_BADGE==='ok' ? qualifiedDetails + judgingSessionDetails : notQualifiedMessage}` : ''}
+      ${CEREMONY ? (()=>{ const c = ceremonyCounts(); const st = CEREMONY.settings||{}; return `<div style="max-width:480px;margin:0 auto 22px;padding:16px 18px;border-radius:12px;background:#EEF0FB;border:1px solid #C9CFF0;text-align:right">
+        <div style="font-weight:800;font-size:14px;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:6px">🎉 تأكيد حضور ${escHtml(st.title||'الحفل الختامي')}${st.date_text?' — '+escHtml(st.date_text):''}</div>
+        <div style="font-size:12.5px;color:var(--ink-900);line-height:1.9;margin-bottom:10px">نأمل من كل عضو في الفريق تأكيد حضوره عبر رابطه الشخصي. حتى الآن: <b style="color:#1E7D4F">${c.yes}</b> سيحضر، <b style="color:#B3261E">${c.no}</b> يعتذر، <b>${c.pending}</b> لم يردّ.${st.is_open===false?' <b style="color:var(--danger)">انتهت فترة التأكيد.</b>':''}</div>
+        <button class="btn btn-primary" id="btnGoToCeremony">متابعة تأكيد الحضور وإرسال الروابط</button>
+      </div>`; })() : ''}
       ${TEASER_ELIGIBLE ? `<div style="max-width:480px;margin:0 auto 22px;padding:16px 18px;border-radius:12px;background:var(--gold-100,#FBF0DA);border:1px solid var(--gold-300,#E6C570);text-align:right">
         <div style="font-weight:800;font-size:14px;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:6px">★ استكمال بيانات دليل المشاريع</div>
         <div style="font-size:12.5px;color:var(--ink-900);line-height:1.9;margin-bottom:10px">نأمل التكرُّم باستكمال نبذة المشروع وشعاره وبيانات التواصل وأعضاء الفريق، تمهيدًا لإدراجها في دليل المشاريع للحاضنة. ${(TEASER && TEASER.is_complete) ? '<b style="color:var(--success)">✓ بياناتكم مكتملة</b>' : (TEASER_OPEN ? '' : '<b style="color:var(--danger)">انتهت فترة الاستكمال</b>')}</div>
@@ -1425,8 +1438,10 @@ function renderThankYouScreen(){
     renderAll();
     window.scrollTo({top:0,behavior:'smooth'});
   });
+  const goCerBtn = document.getElementById('btnGoToCeremony');
+  if(goCerBtn) goCerBtn.addEventListener('click', ()=>{ showingCeremony = true; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
   const goTeaserBtn = document.getElementById('btnGoToTeaser');
-  if(goTeaserBtn) goTeaserBtn.addEventListener('click', ()=>{ showingTeaser = true; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
+  if(goTeaserBtn) goTeaserBtn.addEventListener('click', ()=>{ showingCeremony = false; showingTeaser = true; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
   const goReportBtn = document.getElementById('btnGoToReport');
   if(goReportBtn) goReportBtn.addEventListener('click', ()=>{
     showingReport = true;
@@ -1994,11 +2009,94 @@ function bindTeaserEvents(){
   });
 }
 
+/* ============================================================
+   تأكيد حضور الحفل الختامي — القائد يتابع أعضاء فريقه ويرسل لهم روابطهم الشخصية
+   ============================================================ */
+let showingCeremony = false;
+let CEREMONY = null; // { settings, members[] } أو null إن لم تتوفر
+async function loadCeremony(){
+  try{
+    const { data, error } = await SB.rpc('ceremony_leader_list', { p_form_id: FORM_ID });
+    if(error) throw error;
+    CEREMONY = (data && data.ok) ? data : null;
+  }catch(e){ console.warn('[الحفل] غير متاح (شغّل add-ceremony-rsvp.sql):', e.message||e); CEREMONY = null; }
+}
+function ceremonyCounts(){
+  const m = (CEREMONY && CEREMONY.members) || [];
+  return { total: m.length, yes: m.filter(x=>x.status==='attending').length, no: m.filter(x=>x.status==='declined').length, pending: m.filter(x=>!x.status).length };
+}
+function ceremonyLink(token){ return new URL('ceremony.html', location.href).href.split('?')[0] + '?t=' + token; }
+function ceremonyWaNumber(phone){
+  let d = String(phone||'').replace(/\D/g,'');
+  if(d.startsWith('00')) d = d.slice(2);
+  if(d.startsWith('05') && d.length===10) d = '966'+d.slice(1);
+  else if(d.startsWith('5') && d.length===9) d = '966'+d;
+  return d;
+}
+function ceremonyMessage(m){
+  const st = (CEREMONY && CEREMONY.settings) || {};
+  return `السلام عليكم ${m.full_name}،\nنرجو تأكيد حضوركم ${st.title||'الحفل الختامي'}${st.date_text?' ('+st.date_text+')':''} عبر رابطكم الشخصي:\n${ceremonyLink(m.token)}`;
+}
+function renderCeremonyScreen(){
+  const card = document.getElementById('sectionCard');
+  if(!CEREMONY){ card.innerHTML = `<div class="empty-hint" style="padding:40px">تأكيد الحضور غير متاح حاليًا</div>`; return; }
+  const st = CEREMONY.settings || {};
+  const open = st.is_open !== false;
+  const c = ceremonyCounts();
+  const badge = (m)=> m.status==='attending' ? `<span style="background:#E6F4EC;color:#1E7D4F;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700">سيحضر</span>`
+    : m.status==='declined' ? `<span style="background:#FBE9E7;color:#B3261E;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700">لن يحضر</span>`
+    : `<span style="background:#F1F1F6;color:var(--ink-400);padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700">لم يردّ</span>`;
+  const rows = CEREMONY.members.map(m=>{
+    const personal = m.by_role==='member';
+    return `<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:#fff">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap">
+        <div style="font-weight:700;font-size:14px">${escHtml(m.full_name)}${m.is_leader?' <span style="color:#B8860B;font-size:12px">(قائد الفريق)</span>':''}</div>
+        ${badge(m)}
+      </div>
+      <div style="font-size:11.5px;color:var(--ink-400);margin:4px 0 8px">${m.status ? (personal ? 'ردّ بنفسه عبر رابطه الشخصي' : 'سُجِّل بواسطتكم') : 'لم يردّ بعد'}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${(!open || personal) ? '' : `<button class="btn btn-ghost btn-sm" data-cset="${m.member_id}|attending">✓ سيحضر</button><button class="btn btn-ghost btn-sm" data-cset="${m.member_id}|declined">✕ لن يحضر</button>${m.status?`<button class="btn btn-ghost btn-sm" data-cset="${m.member_id}|pending">مسح</button>`:''}`}
+        <button class="btn btn-ghost btn-sm" data-ccopy="${m.member_id}">نسخ الرابط الشخصي</button>
+        ${ceremonyWaNumber(m.phone) ? `<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://wa.me/${ceremonyWaNumber(m.phone)}?text=${encodeURIComponent(ceremonyMessage(m))}" style="text-decoration:none">إرسال عبر واتساب</a>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  card.innerHTML = `
+    <div style="padding:20px 20px 8px"><button class="btn btn-ghost btn-sm" id="btnBackFromCeremony">${icon('arrow-right',{size:13})} رجوع</button></div>
+    <div style="padding:8px 22px 30px;max-width:760px;margin:0 auto">
+      <div style="font-size:20px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:4px">${escHtml(st.title||'تأكيد حضور الحفل الختامي')}</div>
+      <div style="font-size:13px;color:var(--gold-700,#8A6D00);font-weight:700;margin-bottom:10px">${escHtml(st.date_text||'')}</div>
+      <div style="font-size:13px;color:var(--ink-600);line-height:1.9;margin-bottom:14px">نأمل من كل عضو في الفريق تأكيد حضوره عبر رابطه الشخصي أدناه. يمكنكم إرسال الرابط لكل عضو، كما يمكنكم تسجيل حضور من لم يردّ نيابةً عنه.</div>
+      ${st.details ? `<div class="req-banner" style="margin-bottom:14px"><div style="line-height:1.9;white-space:pre-wrap">${escHtml(st.details)}</div></div>` : ''}
+      ${!open ? `<div class="req-banner" style="background:var(--danger-100);color:var(--danger);margin-bottom:14px"><div style="line-height:1.9"><b>🔒 انتهت فترة تأكيد الحضور.</b></div></div>` : (st.deadline ? `<div class="req-banner" style="margin-bottom:14px"><div style="line-height:1.9"><b>⏰ آخر موعد للتأكيد:</b>&nbsp;${new Date(st.deadline).toLocaleDateString('ar-SA')} — ${new Date(st.deadline).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</div></div>` : '')}
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:90px;text-align:center;background:#E6F4EC;border-radius:12px;padding:10px"><div style="font-size:22px;font-weight:800;color:#1E7D4F">${c.yes}</div><div style="font-size:12px;color:#1E7D4F">سيحضرون</div></div>
+        <div style="flex:1;min-width:90px;text-align:center;background:#FBE9E7;border-radius:12px;padding:10px"><div style="font-size:22px;font-weight:800;color:#B3261E">${c.no}</div><div style="font-size:12px;color:#B3261E">يعتذرون</div></div>
+        <div style="flex:1;min-width:90px;text-align:center;background:#F1F1F6;border-radius:12px;padding:10px"><div style="font-size:22px;font-weight:800;color:var(--ink-600)">${c.pending}</div><div style="font-size:12px;color:var(--ink-600)">لم يردّوا</div></div>
+      </div>
+      ${rows}
+      <div style="margin-top:6px"><button class="btn btn-ghost btn-sm" id="btnCopyAllLinks">نسخ روابط جميع الأعضاء</button> <button class="btn btn-ghost btn-sm" id="btnRefreshCeremony">تحديث الحالات</button></div>
+    </div>`;
+  const copy = async (txt)=>{ try{ await navigator.clipboard.writeText(txt); showToast('تم النسخ'); }catch(e){ window.prompt('انسخوا النص:', txt); } };
+  document.getElementById('btnBackFromCeremony').addEventListener('click', ()=>{ showingCeremony=false; renderAll(); window.scrollTo({top:0,behavior:'smooth'}); });
+  document.getElementById('btnRefreshCeremony').addEventListener('click', async ()=>{ await loadCeremony(); renderCeremonyScreen(); showToast('تم التحديث'); });
+  document.getElementById('btnCopyAllLinks').addEventListener('click', ()=>copy(CEREMONY.members.map(m=>`${m.full_name}: ${ceremonyLink(m.token)}`).join('\n')));
+  card.querySelectorAll('[data-ccopy]').forEach(b=>b.addEventListener('click', ()=>{ const m = CEREMONY.members.find(x=>String(x.member_id)===b.dataset.ccopy); if(m) copy(ceremonyLink(m.token)); }));
+  card.querySelectorAll('[data-cset]').forEach(b=>b.addEventListener('click', async ()=>{
+    const [id, status] = b.dataset.cset.split('|');
+    b.disabled = true;
+    const { error } = await SB.rpc('ceremony_leader_set', { p_form_id: FORM_ID, p_member_id: parseInt(id), p_status: status });
+    if(error){ showToast(error.message||'تعذّر الحفظ'); }
+    await loadCeremony(); renderCeremonyScreen();
+  }));
+}
+
 function renderAll(){
   renderStepper();
   renderAnnouncementsBanner();
   if(showingReport){ renderReportScreen(); updateTopbar(); return; }
   if(showingTeaser && TEASER_ELIGIBLE){ renderTeaserScreen(); updateTopbar(); return; }
+  if(showingCeremony && CEREMONY){ renderCeremonyScreen(); updateTopbar(); return; }
   if(showingThankYou){ renderThankYouScreen(); updateTopbar(); return; }
   renderSection();
   updateTopbar();
@@ -2184,6 +2282,7 @@ async function initApp(){
     if(form.status === 'submitted'){
       showingThankYou = true;
       await loadTeaser(); // استكمال البيانات — للمشاريع المتأهِّلة المحكَّمة فقط
+      await loadCeremony(); // تأكيد حضور الحفل الختامي
     }
     FORM_STATUS = form.status;
   } catch(e){

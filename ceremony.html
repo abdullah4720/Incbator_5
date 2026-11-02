@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تأكيد حضور الحفل الختامي — حاضنة ابتكار 5</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Cairo:wght@700;800;900&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+:root{--navy:#12103C;--navy2:#1A1852;--gold:#C9A24B;--gold-l:#FBF0DA;--ink:#1A1A2E;--gray:#6B6B80;--line:#E4E4EE;--ok:#1E7D4F;--ok-bg:#E6F4EC;--no:#B3261E;--no-bg:#FBE9E7;}
+*{box-sizing:border-box}
+body{margin:0;font-family:'IBM Plex Sans Arabic',sans-serif;background:#F4F4F9;color:var(--ink);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+.hero{width:100%;background:linear-gradient(160deg,#12103C,#1A1852 60%,#2a1d5e);color:#fff;text-align:center;padding:34px 20px 70px;position:relative}
+.hero:before{content:"";position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,#C9A24B,#2C8C8B,#6B3FA0)}
+.hero .k{color:#E6C570;font-size:13px;font-family:'Cairo',sans-serif}
+.hero h1{font-family:'Cairo',sans-serif;font-size:26px;margin:8px 0 6px;line-height:1.5}
+.hero .d{display:inline-block;margin-top:6px;background:rgba(255,255,255,.12);border:1px solid rgba(230,197,112,.5);padding:6px 16px;border-radius:999px;font-size:14px;color:#E6C570;font-weight:600}
+.card{width:calc(100% - 32px);max-width:560px;background:#fff;border:1px solid var(--line);border-radius:18px;margin:-44px 16px 24px;padding:26px 22px;box-shadow:0 8px 28px rgba(18,16,60,.08)}
+.hi{font-size:13px;color:var(--gray)}
+.name{font-family:'Cairo',sans-serif;font-weight:800;font-size:20px;color:var(--navy);margin:2px 0}
+.proj{font-size:14px;color:var(--ink);margin-bottom:16px}
+.proj b{color:var(--navy2)}
+.details{background:var(--gold-l);border:1px solid #E9D6AB;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.9;color:#5C4315;white-space:pre-wrap;margin-bottom:18px}
+.q{font-weight:700;font-size:15px;margin-bottom:10px}
+.btns{display:flex;gap:10px}
+.btn{flex:1;padding:14px 8px;border-radius:12px;border:2px solid var(--line);background:#fff;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:.15s}
+.btn:hover{border-color:var(--navy2)}
+.btn.yes.on{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.btn.no.on{background:var(--no-bg);border-color:var(--no);color:var(--no)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.status{margin-top:14px;font-size:13px;padding:10px 12px;border-radius:10px;background:#F7F7FB;color:var(--gray);line-height:1.8}
+.status.ok{background:var(--ok-bg);color:var(--ok)}.status.no{background:var(--no-bg);color:var(--no)}
+.warn{margin-top:12px;font-size:12.5px;color:#8A6D00}
+.err{text-align:center;padding:10px;color:var(--no);line-height:2}
+.foot{font-size:12px;color:var(--gray);margin:0 0 24px;text-align:center}
+</style>
+</head>
+<body>
+<div class="hero">
+  <div class="k">حاضنة ابتكار — النسخة الخامسة</div>
+  <h1 id="title">تأكيد حضور الحفل الختامي</h1>
+  <div class="d" id="date"></div>
+</div>
+<div class="card" id="card"><div class="hi">جارٍ التحميل…</div></div>
+<div class="foot">مركز الابتكار والملكية الفكرية — جامعة القصيم</div>
+<script>
+const SB = window.supabase.createClient("https://zxruviveljkywxbdqjxc.supabase.co","sb_publishable_URvlZnzYTl0CwwVxCikLvA_OeGSzhJh");
+const TOKEN = new URLSearchParams(location.search).get('t') || '';
+const esc = s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let DATA = null;
+function fmtDeadline(d){ const x=new Date(d); return x.toLocaleDateString('ar-SA')+' — '+x.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}); }
+function render(){
+  const card = document.getElementById('card');
+  if(!DATA || !DATA.ok){ card.innerHTML = `<div class="err">الرابط غير صحيح أو غير مفعَّل.<br>تأكدوا من نسخ الرابط كاملًا، أو تواصلوا مع قائد فريقكم.</div>`; return; }
+  const st = DATA.settings || {};
+  document.getElementById('title').textContent = st.title || 'الحفل الختامي';
+  document.getElementById('date').textContent = st.date_text || '';
+  const open = st.is_open !== false;
+  const s = DATA.status;
+  card.innerHTML = `
+    <div class="hi">مرحبًا</div>
+    <div class="name">${esc(DATA.member_name)}</div>
+    <div class="proj">عضو فريق مشروع: <b>${esc(DATA.project_name)}</b></div>
+    ${st.details ? `<div class="details">${esc(st.details)}</div>` : ''}
+    <div class="q">هل ستحضرون الحفل الختامي؟</div>
+    <div class="btns">
+      <button class="btn yes ${s==='attending'?'on':''}" data-s="attending" ${open?'':'disabled'}>✓ سأحضر</button>
+      <button class="btn no ${s==='declined'?'on':''}" data-s="declined" ${open?'':'disabled'}>✕ لن أحضر</button>
+    </div>
+    ${s ? `<div class="status ${s==='attending'?'ok':'no'}">${s==='attending'?'تم تسجيل حضوركم. ننتظركم في الحفل.':'تم تسجيل اعتذاركم.'}${DATA.by_role==='leader'?' (سُجِّل بواسطة قائد الفريق — يمكنكم تعديله بنفسكم)':''}${open?' يمكنكم تغيير اختياركم في أي وقت قبل انتهاء الموعد.':''}</div>` : `<div class="status">لم يُسجَّل ردّكم بعد.</div>`}
+    ${open ? (st.deadline ? `<div class="warn">⏰ آخر موعد للتأكيد: ${fmtDeadline(st.deadline)}</div>` : '') : `<div class="warn" style="color:var(--no)">انتهت فترة تأكيد الحضور، ولا يمكن التعديل حاليًا.</div>`}`;
+  card.querySelectorAll('[data-s]').forEach(b=>b.addEventListener('click', async ()=>{
+    card.querySelectorAll('[data-s]').forEach(x=>x.disabled=true);
+    const { error } = await SB.rpc('ceremony_respond', { p_token: TOKEN, p_status: b.dataset.s });
+    if(error){ alert('تعذّر الحفظ: '+(error.message||'')); }
+    await load();
+  }));
+}
+async function load(){
+  try{
+    const { data, error } = await SB.rpc('ceremony_get', { p_token: TOKEN });
+    if(error) throw error;
+    DATA = data;
+  }catch(e){ console.error(e); DATA = { ok:false }; }
+  render();
+}
+if(!/^[0-9a-f-]{36}$/i.test(TOKEN)){ DATA = { ok:false }; render(); } else load();
+</script>
+</body>
+</html>

@@ -5468,6 +5468,135 @@ async function runExportTeaserPptx(rows){
   }
 }
 
+/* ============================================================
+   تأكيد حضور الحفل الختامي — متابعة الإدارة
+   ============================================================ */
+async function fetchAllRows(table, select, orderCol){
+  const out = []; let from = 0; const PAGE = 1000;
+  while(true){
+    let q = sb.from(table).select(select).range(from, from+PAGE-1);
+    if(orderCol) q = q.order(orderCol);
+    const { data, error } = await q;
+    if(error) throw error;
+    out.push(...(data||[]));
+    if(!data || data.length < PAGE) break;
+    from += PAGE;
+  }
+  return out;
+}
+async function fetchCeremonyData(){
+  const [forms, members, rsvps, projects] = await Promise.all([
+    (async()=>{ const out=[]; let from=0; while(true){ const { data, error } = await sb.from('verification_forms').select('id, project_id').eq('status','submitted').order('id').range(from,from+999); if(error) throw error; out.push(...(data||[])); if(!data||data.length<1000) break; from+=1000; } return out; })(),
+    fetchAllRows('team_members', 'id, form_id, full_name, phone, email, role_in_project, is_leader, order_index, rsvp_token', 'id'),
+    fetchAllRows('ceremony_rsvp', 'member_id, form_id, status, by_role, responded_at', 'member_id'),
+    fetchAllRows('eligible_projects', 'project_id, project_name, domain', 'project_id'),
+  ]);
+  const pm = {}; projects.forEach(p=>{ pm[p.project_id] = p; });
+  const rm = {}; rsvps.forEach(r=>{ rm[r.member_id] = r; });
+  const fm = {}; forms.forEach(f=>{ fm[f.id] = f; });
+  const byForm = {};
+  members.filter(m=>fm[m.form_id]).forEach(m=>{ (byForm[m.form_id] = byForm[m.form_id]||[]).push(Object.assign({}, m, { rsvp: rm[m.id]||null })); });
+  const teams = forms.map(f=>({
+    form_id: f.id, project_id: f.project_id,
+    project_name: (pm[f.project_id]||{}).project_name || f.project_id, domain: (pm[f.project_id]||{}).domain || 'بدون مجال',
+    members: (byForm[f.id]||[]).sort((a,b)=> (b.is_leader?1:0)-(a.is_leader?1:0) || (a.order_index||0)-(b.order_index||0)),
+  })).sort((a,b)=> a.domain.localeCompare(b.domain,'ar') || a.project_id.localeCompare(b.project_id,'ar',{numeric:true}));
+  return teams;
+}
+async function renderCeremonyAdminBox(){
+  const box = document.getElementById('ceremonyAdminBox');
+  if(!box) return;
+  box.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  let teams, st;
+  try{
+    const { data, error } = await sb.from('form_settings').select('ceremony_is_open, ceremony_deadline_at, ceremony_title, ceremony_date_text, ceremony_details').eq('id',1).maybeSingle();
+    if(error) throw error;
+    st = data || {};
+    teams = await fetchCeremonyData();
+  }catch(e){
+    console.error(e);
+    box.innerHTML = `<div class="empty-hint">تعذّر تحميل تأكيد الحضور: ${escHtml(e.message||'')} — تأكد من تشغيل add-ceremony-rsvp.sql في Supabase</div>`;
+    return;
+  }
+  const allM = teams.flatMap(t=>t.members);
+  const yes = allM.filter(m=>m.rsvp && m.rsvp.status==='attending').length;
+  const no = allM.filter(m=>m.rsvp && m.rsvp.status==='declined').length;
+  const pending = allM.length - yes - no;
+  const teamsAny = teams.filter(t=>t.members.some(m=>m.rsvp && m.rsvp.status==='attending')).length;
+  const teamsNone = teams.filter(t=>t.members.length && t.members.every(m=>!m.rsvp)).length;
+  const isOpen = st.ceremony_is_open !== false;
+  const dl = st.ceremony_deadline_at ? new Date(st.ceremony_deadline_at) : null;
+  const dlLocal = dl ? new Date(dl.getTime() - dl.getTimezoneOffset()*60000).toISOString().slice(0,16) : '';
+  const kpi = (n,l,c)=>`<div style="flex:1;min-width:120px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:${c}">${n}</div><div style="font-size:12px;color:var(--ink-400)">${l}</div></div>`;
+  const stBadge = (m)=> m.rsvp ? (m.rsvp.status==='attending' ? '<span style="color:#1E7D4F;font-weight:700">سيحضر</span>' : '<span style="color:#B3261E;font-weight:700">لن يحضر</span>') + `<span style="font-size:10.5px;color:var(--ink-400)"> (${m.rsvp.by_role==='member'?'بنفسه':'القائد'})</span>` : '<span style="color:var(--ink-400)">لم يردّ</span>';
+  box.innerHTML = `
+    <div class="card" style="padding:16px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        ${kpi(teams.length,'فريقًا (نماذج مُرسَلة)','var(--navy-800)')}${kpi(allM.length,'عضوًا مسجَّلًا','var(--navy-800)')}
+        ${kpi(yes,'سيحضرون','#1E7D4F')}${kpi(no,'يعتذرون','#B3261E')}${kpi(pending,'لم يردّوا','var(--ink-600)')}
+      </div>
+      <div style="font-size:12px;color:var(--ink-400);margin-bottom:14px">فرق فيها حاضر واحد على الأقل: <b>${teamsAny}</b> • فرق لم يردّ أي عضو منها: <b>${teamsNone}</b></div>
+      <div style="display:grid;gap:8px;grid-template-columns:1fr 1fr;margin-bottom:10px">
+        <div><div class="flabel" style="font-size:12px">عنوان الحفل</div><input type="text" id="cerTitle" value="${escHtml(st.ceremony_title||'')}" style="width:100%"></div>
+        <div><div class="flabel" style="font-size:12px">التاريخ (نص يظهر للمشاركين)</div><input type="text" id="cerDate" value="${escHtml(st.ceremony_date_text||'')}" style="width:100%"></div>
+      </div>
+      <div class="flabel" style="font-size:12px">تفاصيل الحفل (المكان والوقت والزي… تظهر للمشاركين)</div>
+      <textarea id="cerDetails" rows="3" style="width:100%;margin-bottom:10px">${escHtml(st.ceremony_details||'')}</textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+        <input type="datetime-local" id="cerDeadline" value="${dlLocal}" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px" title="موعد إغلاق تلقائي (اختياري)">
+        <button class="btn btn-primary btn-sm" id="cerSaveBtn">حفظ الإعدادات</button>
+        <button class="btn ${isOpen?'btn-ghost':'btn-primary'} btn-sm" id="cerToggleBtn">${isOpen?'إغلاق التأكيد الآن':'إعادة فتح التأكيد'}</button>
+        <span style="font-size:12px;color:var(--ink-400)">${isOpen ? (dl ? 'مفتوح — يُغلَق تلقائيًا '+dl.toLocaleString('ar-SA') : 'مفتوح حتى تغلقه يدويًا') : 'مغلق'}</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--line)">
+        <button class="btn btn-ghost btn-sm" id="cerExportBtn">${icon('download',{size:13})} كشف الحضور (Excel)</button>
+        <button class="btn btn-ghost btn-sm" id="cerExportPendingBtn">${icon('download',{size:13})} من لم يردّوا + روابطهم (Excel)</button>
+      </div>
+      <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:700;font-size:13px">حالة الفرق (${teams.length})</summary>
+        <div class="table-wrap" style="margin-top:8px;max-height:420px;overflow:auto"><table><thead><tr><th>المجال</th><th>رقم المشروع</th><th>اسم المشروع</th><th>سيحضر</th><th>يعتذر</th><th>لم يردّ</th></tr></thead><tbody>
+        ${teams.map(t=>{ const y=t.members.filter(m=>m.rsvp&&m.rsvp.status==='attending').length, n=t.members.filter(m=>m.rsvp&&m.rsvp.status==='declined').length; return `<tr><td>${escHtml(t.domain)}</td><td class="mono">${escHtml(t.project_id)}</td><td>${escHtml(t.project_name)}</td><td class="mono">${y}</td><td class="mono">${n}</td><td class="mono">${t.members.length-y-n}</td></tr>`; }).join('')}
+        </tbody></table></div></details>
+    </div>`;
+  const baseUrl = new URL('ceremony.html', location.href).href.split('?')[0];
+  const mkRows = (onlyPending)=>{
+    const aoa = [['المجال','رقم المشروع','اسم المشروع','اسم العضو','الدور','قائد الفريق','الجوال','البريد','الحالة','بواسطة','وقت الرد','الرابط الشخصي']];
+    teams.forEach(t=>t.members.forEach(m=>{
+      if(onlyPending && m.rsvp) return;
+      aoa.push([t.domain, t.project_id, t.project_name, m.full_name||'', m.is_leader?'قائد الفريق':(m.role_in_project||''), m.is_leader?'نعم':'لا', m.phone||'', m.email||'',
+        m.rsvp ? (m.rsvp.status==='attending'?'سيحضر':'لن يحضر') : 'لم يردّ', m.rsvp ? (m.rsvp.by_role==='member'?'العضو نفسه':'القائد') : '', m.rsvp ? new Date(m.rsvp.responded_at).toLocaleString('ar-SA') : '', baseUrl+'?t='+m.rsvp_token]);
+    }));
+    return aoa;
+  };
+  const exportX = (aoa, name)=>{
+    if(typeof XLSX==='undefined'){ showToast('تعذّر تحميل مكتبة التصدير'); return; }
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{wch:22},{wch:20},{wch:30},{wch:26},{wch:20},{wch:10},{wch:15},{wch:28},{wch:12},{wch:12},{wch:22},{wch:60}];
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:0,c:aoa[0].length-1} }) };
+    ws['!views'] = [{ state:'frozen', ySplit:1 }];
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'الحضور');
+    XLSX.writeFile(wb, `${name}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast(`تم التصدير (${aoa.length-1} صفًا)`);
+  };
+  document.getElementById('cerExportBtn').addEventListener('click', ()=>exportX(mkRows(false), 'كشف_حضور_الحفل_الختامي'));
+  document.getElementById('cerExportPendingBtn').addEventListener('click', ()=>exportX(mkRows(true), 'من_لم_يؤكدوا_الحضور'));
+  document.getElementById('cerSaveBtn').addEventListener('click', async ()=>{
+    const v = document.getElementById('cerDeadline').value;
+    const { error } = await sb.from('form_settings').update({
+      ceremony_title: document.getElementById('cerTitle').value.trim() || 'الحفل الختامي — حاضنة ابتكار 5',
+      ceremony_date_text: document.getElementById('cerDate').value.trim() || '19 نوفمبر 2026',
+      ceremony_details: document.getElementById('cerDetails').value.trim() || null,
+      ceremony_deadline_at: v ? new Date(v).toISOString() : null,
+    }).eq('id', 1);
+    if(error){ showToast('تعذّر الحفظ: '+error.message); return; }
+    showToast('تم حفظ الإعدادات'); renderCeremonyAdminBox();
+  });
+  document.getElementById('cerToggleBtn').addEventListener('click', async ()=>{
+    const { error } = await sb.from('form_settings').update({ ceremony_is_open: !isOpen }).eq('id', 1);
+    if(error){ showToast('تعذّر التحديث: '+error.message); return; }
+    showToast(isOpen ? 'تم إغلاق التأكيد' : 'تم فتح التأكيد'); renderCeremonyAdminBox();
+  });
+}
+
 async function renderDataCenterTab(){
   const el = document.getElementById('view-datacenter');
   el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
@@ -5530,6 +5659,8 @@ async function renderDataCenterTab(){
 
     <div class="ac-title" style="margin-bottom:10px">📘 دليل المشاريع — استكمال بيانات المشاريع المحكَّمة</div>
     <div id="teaserAdminBox" style="margin-bottom:20px"></div>
+    <div class="ac-title" style="margin-bottom:10px">🎉 تأكيد حضور الحفل الختامي</div>
+    <div id="ceremonyAdminBox" style="margin-bottom:20px"></div>
 
     <div class="ac-title" style="margin-bottom:10px">💾 نسخ احتياطية</div>
     <div class="card" style="margin-bottom:16px">
@@ -5576,6 +5707,7 @@ async function renderDataCenterTab(){
   `;
   document.getElementById('dcExportJudgingProjectsBtn').addEventListener('click', ()=>runExportJudgingProjectsExcel(classified, 'dcExportJudgingProjectsBtn'));
   renderTeaserAdminBox(classified);
+  renderCeremonyAdminBox();
   document.getElementById('dcGotoRankingBtn').addEventListener('click', ()=>{ activeTab='judging'; judgingSubtab='ranking'; renderTabs(); renderAll(); });
   document.getElementById('dcGotoReportBtn').addEventListener('click', ()=>{ activeTab='report'; renderTabs(); renderAll(); });
   document.getElementById('quickBackupBtn').addEventListener('click', ()=>runBackup(false));
