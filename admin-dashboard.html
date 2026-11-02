@@ -5647,7 +5647,7 @@ function partnerMissing(d){
   const m=[]; const pOk=p=>(p.name||'').trim()&&(p.position||'').trim()&&P_PHONE(p.phone)&&P_EMAIL(p.email);
   if(!(d.contact.name||'').trim()||!P_PHONE(d.contact.phone)||!P_EMAIL(d.contact.email)) m.push('ممثل التواصل');
   if(!pOk(d.honoree)) m.push('ممثل التكريم');
-  if(d.attendees.list&&d.attendees.list.length){ if(!d.attendees.list.every(pOk)) m.push('بيانات الحاضرين'); } else if(d.attendees.count===''||d.attendees.count==null||isNaN(+d.attendees.count)) m.push('عدد الحضور');
+  if(d.attendees.count===''||d.attendees.count==null||isNaN(+d.attendees.count)) m.push('عدد الحضور'); else if((d.attendees.list||[]).length<+d.attendees.count||(d.attendees.list||[]).slice(0,+d.attendees.count).some(a=>!pOk(a))) m.push('بيانات الحاضرين');
   if(d.wants_booth===null) m.push('الجناح'); else if(d.wants_booth===true&&!pOk(d.booth)) m.push('ممثل الجناح');
   const svcOk=d.services.length&&d.services.every(s=>(s.title||'').trim()&&(s.description||'').trim()&&P_WORDS(s.description)<=100);
   if(!svcOk&&!d.guide_file) m.push('الخدمات/الدليل');
