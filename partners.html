@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>بيانات شركاء النجاح — حاضنة ابتكار 5</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Cairo:wght@700;800;900&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<style>
+:root{--navy:#12103C;--navy2:#1A1852;--gold:#C9A24B;--gold-l:#FBF0DA;--teal:#10B98F;--ink:#1A1A2E;--gray:#6B6B80;--line:#E4E4EE;--ok:#1E7D4F;--ok-bg:#E6F4EC;--no:#B3261E;--no-bg:#FBE9E7;}
+*{box-sizing:border-box}
+body{margin:0;font-family:'IBM Plex Sans Arabic',sans-serif;background:#F4F4F9;color:var(--ink);line-height:1.7}
+.hero{background:linear-gradient(160deg,#12103C,#1A1852 60%,#2a1d5e);color:#fff;padding:34px 20px 74px;text-align:center;position:relative}
+.hero:before{content:"";position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,#C9A24B,#10B98F,#6B3FA0)}
+.hero .k{color:#E6C570;font-size:13px;font-family:'Cairo',sans-serif}
+.hero h1{font-family:'Cairo',sans-serif;font-size:26px;margin:8px 0 6px}
+.hero .org{display:inline-block;margin-top:8px;background:rgba(255,255,255,.12);border:1px solid rgba(230,197,112,.5);padding:6px 18px;border-radius:999px;font-size:15px;color:#E6C570;font-weight:600}
+.wrap{max-width:820px;margin:-46px auto 40px;padding:0 16px}
+.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;margin-bottom:16px;box-shadow:0 6px 22px rgba(18,16,60,.06)}
+.card h2{font-family:'Cairo',sans-serif;font-size:18px;color:var(--navy);margin:0 0 4px;display:flex;align-items:center;gap:10px}
+.card h2 .n{width:30px;height:30px;border-radius:50%;background:var(--navy2);color:#fff;font-size:14px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.card .sub{font-size:12.5px;color:var(--gray);margin-bottom:14px}
+h3{font-size:14.5px;color:var(--navy2);margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--gold);display:inline-block}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+.full{grid-column:1/-1}
+@media(max-width:620px){.grid{grid-template-columns:1fr}}
+label{display:block;font-size:12.5px;font-weight:600;margin-bottom:4px;color:var(--ink)}
+.req{color:var(--no)}
+input[type=text],input[type=email],input[type=tel],input[type=url],input[type=number],textarea,select{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;font-family:inherit;font-size:14px;background:#fff;color:var(--ink)}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--navy2)}
+input.ltr,textarea.ltr{direction:ltr;text-align:right}
+textarea{resize:vertical;min-height:90px}
+input:disabled,textarea:disabled,select:disabled{background:#F4F4F9;color:var(--gray)}
+.radio{display:flex;gap:10px;margin:4px 0 8px}
+.radio button{flex:1;padding:12px;border:2px solid var(--line);background:#fff;border-radius:12px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.radio button.on.y{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.radio button.on.n{background:var(--no-bg);border-color:var(--no);color:var(--no)}
+.svc{border:1.5px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px;background:#FAFAFD}
+.svc .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-weight:700;font-size:13.5px}
+.btn{padding:10px 18px;border-radius:10px;border:1.5px solid var(--line);background:#fff;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;color:var(--ink)}
+.btn:hover{border-color:var(--navy2)}
+.btn.pri{background:var(--navy2);border-color:var(--navy2);color:#fff}
+.btn.pri:disabled{opacity:.5;cursor:not-allowed}
+.btn.sm{padding:6px 12px;font-size:12px}
+.wc{font-size:12px;margin-top:4px;color:var(--gray)}.wc.bad{color:var(--no);font-weight:700}
+.note{background:var(--gold-l);border:1px solid #E9D6AB;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.9;color:#5C4315;margin-bottom:14px;white-space:pre-wrap}
+.lock{background:var(--no-bg);color:var(--no);border-radius:12px;padding:12px 14px;font-weight:700;margin-bottom:14px;font-size:13.5px}
+.chk{list-style:none;margin:0;padding:0;font-size:13px}
+.chk li{padding:3px 0;display:flex;gap:8px}.chk .d{color:var(--ok)}.chk .m{color:var(--no)}
+.bar{position:sticky;bottom:0;background:rgba(255,255,255,.96);backdrop-filter:blur(6px);border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:10px;align-items:center;justify-content:space-between;z-index:5}
+.bar .st{font-size:12.5px;color:var(--gray)}
+.file{border:1.5px dashed var(--line);border-radius:12px;padding:14px;text-align:center;font-size:13px;color:var(--gray);cursor:pointer}
+.chip{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#F4F4F9;border-radius:10px;padding:8px 12px;font-size:13px;margin-bottom:8px}
+.err{text-align:center;padding:30px 10px;color:var(--no);line-height:2}
+.done{background:var(--ok-bg);color:var(--ok);border-radius:12px;padding:12px 14px;font-weight:700;font-size:13.5px;margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="hero">
+  <div class="k">حاضنة ابتكار — النسخة الخامسة</div>
+  <h1>بيانات شركاء النجاح</h1>
+  <div class="org" id="orgName">…</div>
+</div>
+<div class="wrap" id="app"><div class="card">جارٍ التحميل…</div></div>
+<div class="bar" id="bar" style="display:none"><div class="st" id="saveState"></div><button class="btn pri" id="btnSubmit">اعتماد وإرسال البيانات</button></div>
+<script>
+const SB = window.supabase.createClient("https://zxruviveljkywxbdqjxc.supabase.co","sb_publishable_URvlZnzYTl0CwwVxCikLvA_OeGSzhJh");
+const TOKEN = new URLSearchParams(location.search).get('t') || '';
+const esc = s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const words = t=>{ t=(t||'').trim(); return t ? t.split(/\s+/).length : 0; };
+const emailOk = v=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((v||'').trim());
+const phoneOk = v=>String(v||'').replace(/\D/g,'').length>=9;
+const urlNorm = v=>{ v=(v||'').trim(); if(!v) return ''; if(!/^https?:\/\//i.test(v)) v='https://'+v; try{ const u=new URL(v); return u.hostname.includes('.')?u.href:null; }catch(e){ return null; } };
+const MAX_SVC_WORDS = 100, MAX_SVC = 15;
+let P = null, D = {}, LOCKED = false, SAVE_T = null, SAVING = false;
+
+function blankPerson(){ return { position:'', title:'', name:'', phone:'', email:'' }; }
+function normalize(d){
+  d = d || {};
+  const o = { display_name:'', contact:blankPerson(), honoree:blankPerson(), attendees:{count:'',names:''}, wants_booth:null, booth:blankPerson(),
+    services:[], guide_file:null, inquiry:{email:'',phone:'',website:''}, media:{name:'',position:'',phone:'',email:'',social:''}, pr:blankPerson() };
+  for(const k of Object.keys(o)){ if(d[k]!==undefined && d[k]!==null){ o[k] = (typeof o[k]==='object' && !Array.isArray(o[k]) && o[k]!==null && typeof d[k]==='object') ? Object.assign({}, o[k], d[k]) : d[k]; } }
+  if(!Array.isArray(o.services)) o.services = [];
+  return o;
+}
+function getP(p){ return p.split('.').reduce((a,k)=>a==null?'':a[k],D); }
+function setP(p,v){ const ks=p.split('.'); let c=D; ks.slice(0,-1).forEach(k=>{ c[k]=c[k]||{}; c=c[k]; }); c[ks[ks.length-1]]=v; }
+
+function personOk(p, needTitle){ return p && (p.name||'').trim() && (p.position||'').trim() && phoneOk(p.phone) && emailOk(p.email); }
+function missingList(d){
+  const m = [];
+  if(!(d.contact.name||'').trim() || !phoneOk(d.contact.phone) || !emailOk(d.contact.email)) m.push('ممثل الجهة للتواصل (الاسم والجوال والبريد)');
+  if(!personOk(d.honoree)) m.push('ممثل الجهة في التكريم (المنصب والاسم والجوال والبريد)');
+  if(d.attendees.count === '' || d.attendees.count == null || isNaN(+d.attendees.count) || +d.attendees.count < 0) m.push('عدد الراغبين في الحضور');
+  if(d.wants_booth === null) m.push('الرغبة في جناح مخصص');
+  if(d.wants_booth === true && !personOk(d.booth)) m.push('ممثل الجهة في الجناح');
+  const svcOk = d.services.length && d.services.every(s=>(s.title||'').trim() && (s.description||'').trim() && words(s.description)<=MAX_SVC_WORDS && (!(s.url||'').trim() || urlNorm(s.url)));
+  if(!svcOk && !d.guide_file) m.push('خدمات الجهة للمبتكرين (أو رفع دليل متكامل)');
+  if(d.services.length && !svcOk) { if(!m.includes('خدمات الجهة للمبتكرين (أو رفع دليل متكامل)')) m.push('إكمال بيانات الخدمات المُدخلة'); }
+  if(!emailOk(d.inquiry.email) && !phoneOk(d.inquiry.phone)) m.push('بيانات التواصل للاستفسارات (بريد أو جوال)');
+  if(!(d.media.name||'').trim() || !emailOk(d.media.email)) m.push('بيانات التواصل الإعلامي (الاسم والبريد)');
+  if(!(d.pr.name||'').trim() || !phoneOk(d.pr.phone) || !emailOk(d.pr.email)) m.push('ممثل العلاقات العامة (الاسم والجوال والبريد)');
+  return m;
+}
+
+function field(path, label, opts){
+  opts = opts||{};
+  const v = esc(getP(path)), dis = LOCKED?'disabled':'';
+  const cls = (opts.ltr?'ltr':'');
+  const req = opts.req ? ' <span class="req">*</span>' : '';
+  const list = opts.list ? ` list="${opts.list}"` : '';
+  const type = opts.type||'text';
+  return `<div class="${opts.full?'full':''}"><label>${label}${req}</label><input type="${type}" class="${cls}" data-p="${path}" value="${v}" ${dis}${list} ${opts.ph?`placeholder="${opts.ph}"`:''} ${type==='number'?'min="0" inputmode="numeric"':''}></div>`;
+}
+function person(prefix, o){
+  o = o||{};
+  return `<div class="grid">
+    ${field(prefix+'.position','المنصب',{req:true})}
+    ${o.noTitle?'':field(prefix+'.title','اللقب',{list:'titles',ph:'مثال: م. / د. / أ.'})}
+    ${field(prefix+'.name','الاسم',{req:true})}
+    ${field(prefix+'.phone','الجوال',{req:true,ltr:true,type:'tel'})}
+    ${field(prefix+'.email','البريد الإلكتروني',{req:true,ltr:true,type:'email'})}
+  </div>`;
+}
+function svcHTML(s,i){
+  const w = words(s.description), dis = LOCKED?'disabled':'';
+  return `<div class="svc"><div class="hd"><span>الخدمة ${i+1}</span>${LOCKED?'':`<button class="btn sm" data-rmsvc="${i}">حذف</button>`}</div>
+    <div class="grid">
+      <div class="full"><label>عنوان الخدمة <span class="req">*</span></label><input type="text" data-svc="${i}.title" value="${esc(s.title)}" ${dis}></div>
+      <div class="full"><label>وصف مختصر (حتى ${MAX_SVC_WORDS} كلمة) <span class="req">*</span></label><textarea data-svc="${i}.description" ${dis}>${esc(s.description)}</textarea><div class="wc ${w>MAX_SVC_WORDS?'bad':''}" id="wc${i}">${w} / ${MAX_SVC_WORDS} كلمة</div></div>
+      <div class="full"><label>رابط الاستفادة من الخدمة</label><input type="text" class="ltr" data-svc="${i}.url" value="${esc(s.url)}" ${dis} placeholder="https://"></div>
+    </div></div>`;
+}
+function render(){
+  document.getElementById('orgName').textContent = P.org_name;
+  const c = P.ceremony || {};
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <datalist id="titles"><option value="معالي"><option value="سعادة"><option value="الدكتور"><option value="المهندس"><option value="الأستاذ"><option value="الأستاذة"><option value="الدكتورة"><option value="المهندسة"></datalist>
+    ${LOCKED?'<div class="lock">🔒 تم قفل البيانات من قِبل فريق البرنامج، ولا يمكن تعديلها حاليًا.</div>':''}
+    ${P.submitted_at?`<div class="done">✓ تم اعتماد بياناتكم بتاريخ ${new Date(P.submitted_at).toLocaleDateString('ar-SA')}. يمكنكم تعديلها وإعادة الاعتماد في أي وقت${LOCKED?'':' قبل القفل'}.</div>`:''}
+    <div class="note">يسرّنا في حاضنة ابتكار تعاونكم، ونأمل التكرُّم باستكمال البيانات أدناه لتنسيق مشاركتكم في الحفل الختامي${c.date_text?' ('+esc(c.date_text)+')':''} ودليل المشاركين. تُحفَظ البيانات تلقائيًا، ويمكنكم الرجوع للتعديل في أي وقت عبر الرابط نفسه.${c.details?'\n\n'+esc(c.details):''}</div>
+
+    <div class="card"><h2><span class="n">١</span> معلومات الحفل الختامي</h2><div class="sub">بيانات الجهة وممثليها في الحفل</div>
+      <h3>بيانات الجهة</h3>
+      <div class="grid">
+        <div class="full"><label>اسم الجهة (كما يُكتب في المطبوعات)</label><input type="text" data-p="display_name" value="${esc(D.display_name)}" placeholder="${esc(P.org_name)}" ${LOCKED?'disabled':''}></div>
+      </div>
+      <h3>ممثل الجهة للتواصل</h3>
+      <div class="grid">
+        ${field('contact.name','الاسم',{req:true})}${field('contact.position','المنصب')}
+        ${field('contact.phone','الجوال',{req:true,ltr:true,type:'tel'})}${field('contact.email','البريد الإلكتروني',{req:true,ltr:true,type:'email'})}
+      </div>
+      <h3>ممثل الجهة في التكريم</h3>${person('honoree')}
+      <h3>الحضور</h3>
+      <div class="grid">
+        ${field('attendees.count','عدد الراغبين في الحضور من الجهة (شاملًا ممثل التكريم)',{req:true,type:'number'})}
+        <div class="full"><label>أسماء الحاضرين ومناصبهم (اختياري، يفيد في إعداد البطاقات)</label><textarea data-p="attendees.names" ${LOCKED?'disabled':''}>${esc(D.attendees.names)}</textarea></div>
+      </div>
+      <h3>الجناح في المعرض</h3>
+      <label>هل لدى الجهة رغبة في وجود جناح مخصص في المعرض؟ <span class="req">*</span></label>
+      <div class="radio"><button type="button" class="y ${D.wants_booth===true?'on':''}" data-booth="1" ${LOCKED?'disabled':''}>نعم</button><button type="button" class="n ${D.wants_booth===false?'on':''}" data-booth="0" ${LOCKED?'disabled':''}>لا</button></div>
+      ${D.wants_booth===true?`<label style="margin-top:10px">بيانات ممثل الجهة في الجناح</label>${person('booth')}`:''}
+    </div>
+
+    <div class="card"><h2><span class="n">٢</span> دليل المشاركين</h2><div class="sub">الخدمات التي تقدمها الجهة للمبتكرين ورواد الأعمال</div>
+      <h3>الخدمات المقدّمة</h3>
+      <div id="svcList">${D.services.map(svcHTML).join('')}</div>
+      ${LOCKED||D.services.length>=MAX_SVC?'':'<button class="btn" id="addSvc">+ إضافة خدمة</button>'}
+      <h3>دليل متكامل (اختياري)</h3>
+      <div style="font-size:12.5px;color:var(--gray);margin-bottom:8px">إن كان لدى الجهة دليل متكامل لخدماتها، يمكنكم رفعه بصيغة PDF (حتى 20 م.ب).</div>
+      ${D.guide_file?`<div class="chip"><span>📎 ${esc(D.guide_file.name)}</span>${LOCKED?'':'<button class="btn sm" id="rmGuide">حذف</button>'}</div>`:''}
+      ${LOCKED?'':`<label class="file" for="guideInput" id="guideDrop">${D.guide_file?'اضغطوا لاستبدال الملف':'اضغطوا لرفع ملف الدليل (PDF)'}</label><input type="file" id="guideInput" accept="application/pdf,.pdf" style="display:none">`}
+      <h3>التواصل مع الجهة للاستفسارات والحصول على الخدمات</h3>
+      <div class="grid">
+        ${field('inquiry.email','البريد الإلكتروني',{ltr:true,type:'email'})}${field('inquiry.phone','الجوال / الهاتف',{ltr:true,type:'tel'})}
+        ${field('inquiry.website','الموقع الإلكتروني',{ltr:true,full:true,ph:'https://'})}
+      </div>
+    </div>
+
+    <div class="card"><h2><span class="n">٣</span> بيانات التواصل الإعلامي</h2><div class="sub">لتنسيق النشر والتغطية الإعلامية</div>
+      <div class="grid">
+        ${field('media.name','اسم المسؤول الإعلامي',{req:true})}${field('media.position','المنصب')}
+        ${field('media.phone','الجوال',{ltr:true,type:'tel'})}${field('media.email','البريد الإلكتروني',{req:true,ltr:true,type:'email'})}
+        <div class="full"><label>حسابات الجهة في وسائل التواصل (للإشارة إليها عند النشر)</label><textarea data-p="media.social" ${LOCKED?'disabled':''} placeholder="مثال: X: @name — لينكدإن: ..." class="ltr">${esc(D.media.social)}</textarea></div>
+      </div>
+    </div>
+
+    <div class="card"><h2><span class="n">٤</span> ممثل العلاقات العامة</h2><div class="sub">لتنسيق الحضور والبروتوكول مع الجهة</div>
+      <div class="grid">
+        ${field('pr.name','الاسم',{req:true})}${field('pr.position','المنصب')}
+        ${field('pr.phone','الجوال',{req:true,ltr:true,type:'tel'})}${field('pr.email','البريد الإلكتروني',{req:true,ltr:true,type:'email'})}
+      </div>
+    </div>
+
+    <div class="card"><h2>متطلبات الاعتماد</h2><ul class="chk" id="chk"></ul></div>`;
+  document.getElementById('bar').style.display = LOCKED ? 'none' : 'flex';
+  bind(); live();
+}
+function live(){
+  const m = missingList(D);
+  const all = ['ممثل الجهة للتواصل','ممثل التكريم','عدد الحضور','الجناح','الخدمات','التواصل للاستفسارات','التواصل الإعلامي','العلاقات العامة'];
+  const el = document.getElementById('chk');
+  if(el) el.innerHTML = m.length ? m.map(x=>`<li><span class="m">○</span>${esc(x)}</li>`).join('') : '<li><span class="d">✓</span>جميع البيانات المطلوبة مكتملة، ويمكنكم الاعتماد.</li>';
+  const b = document.getElementById('btnSubmit'); if(b) b.disabled = m.length>0 || SAVING;
+}
+function setState(t){ const e=document.getElementById('saveState'); if(e) e.textContent=t; }
+function schedule(){ setState('تعديلات غير محفوظة…'); clearTimeout(SAVE_T); SAVE_T = setTimeout(()=>save(false), 1200); }
+async function save(submit){
+  if(LOCKED) return false;
+  clearTimeout(SAVE_T);
+  for(const s of D.services){ if(words(s.description)>MAX_SVC_WORDS){ setState('وصف إحدى الخدمات يتجاوز '+MAX_SVC_WORDS+' كلمة'); if(submit) alert('وصف إحدى الخدمات يتجاوز '+MAX_SVC_WORDS+' كلمة'); return false; } }
+  SAVING = true; setState('جارٍ الحفظ…');
+  const data = JSON.parse(JSON.stringify(D));
+  data.services.forEach(s=>{ if((s.url||'').trim()){ const n=urlNorm(s.url); if(n) s.url=n; } });
+  const { data: res, error } = await SB.rpc('partner_save', { p_token: TOKEN, p_data: data, p_submit: !!submit });
+  SAVING = false;
+  if(error){ console.error(error); setState('تعذّر الحفظ: '+(error.message||'')); if(submit) alert('تعذّر الحفظ: '+(error.message||'')); live(); return false; }
+  if(submit && res && res.submitted_at){ P.submitted_at = res.submitted_at; }
+  setState('تم الحفظ — '+new Date().toLocaleTimeString('ar-SA'));
+  live(); return true;
+}
+function bind(){
+  const app = document.getElementById('app');
+  app.querySelectorAll('[data-p]').forEach(el=>el.addEventListener('input', ()=>{ setP(el.dataset.p, el.value); live(); schedule(); }));
+  app.querySelectorAll('[data-svc]').forEach(el=>el.addEventListener('input', ()=>{
+    const [i,k] = el.dataset.svc.split('.'); D.services[+i][k] = el.value;
+    if(k==='description'){ const w=words(el.value), e=document.getElementById('wc'+i); e.textContent = w+' / '+MAX_SVC_WORDS+' كلمة'; e.classList.toggle('bad', w>MAX_SVC_WORDS); }
+    live(); schedule();
+  }));
+  app.querySelectorAll('[data-booth]').forEach(b=>b.addEventListener('click', ()=>{ D.wants_booth = b.dataset.booth==='1'; render(); schedule(); }));
+  app.querySelectorAll('[data-rmsvc]').forEach(b=>b.addEventListener('click', ()=>{ if(confirm('حذف هذه الخدمة؟')){ D.services.splice(+b.dataset.rmsvc,1); render(); schedule(); } }));
+  const add = document.getElementById('addSvc'); if(add) add.addEventListener('click', ()=>{ D.services.push({title:'',description:'',url:''}); render(); schedule(); });
+  const rm = document.getElementById('rmGuide'); if(rm) rm.addEventListener('click', async ()=>{ if(!confirm('حذف ملف الدليل؟')) return; const f=D.guide_file; D.guide_file=null; try{ await SB.storage.from('form-attachments').remove([f.path]); }catch(e){} render(); schedule(); });
+  const gi = document.getElementById('guideInput'); if(gi) gi.addEventListener('change', async ()=>{
+    const f = gi.files[0]; if(!f) return;
+    if(!/\.pdf$/i.test(f.name) && f.type!=='application/pdf'){ alert('الملف يجب أن يكون PDF'); return; }
+    if(f.size > 20*1024*1024){ alert('حجم الملف يتجاوز 20 م.ب'); return; }
+    const drop = document.getElementById('guideDrop'); drop.textContent = 'جارٍ الرفع…';
+    const path = `partners/${P.id}/guide/${Date.now()}.pdf`;
+    const { error } = await SB.storage.from('form-attachments').upload(path, f, { contentType:'application/pdf', upsert:false });
+    if(error){ alert('تعذّر الرفع: '+error.message); render(); return; }
+    const old = D.guide_file; D.guide_file = { path, name: f.name, size: f.size };
+    if(old){ try{ await SB.storage.from('form-attachments').remove([old.path]); }catch(e){} }
+    render(); await save(false);
+  });
+}
+document.getElementById('btnSubmit').addEventListener('click', async ()=>{
+  if(missingList(D).length) return;
+  if(await save(true)){ render(); window.scrollTo({top:0,behavior:'smooth'}); setState('تم اعتماد البيانات'); }
+});
+async function init(){
+  const app = document.getElementById('app');
+  if(!/^[0-9a-f-]{36}$/i.test(TOKEN)){ app.innerHTML = '<div class="card err">الرابط غير صحيح.<br>تأكدوا من نسخ الرابط كاملًا أو تواصلوا مع فريق البرنامج.</div>'; document.getElementById('orgName').textContent=''; return; }
+  const { data, error } = await SB.rpc('partner_get', { p_token: TOKEN });
+  if(error || !data || !data.ok){ console.error(error); app.innerHTML = '<div class="card err">الرابط غير صحيح أو غير مفعَّل.<br>تواصلوا مع فريق البرنامج.'+(error?`<div dir="ltr" style="font-size:11px;opacity:.7">${esc(error.message)}</div>`:'')+'</div>'; document.getElementById('orgName').textContent=''; return; }
+  P = data; D = normalize(data.data); LOCKED = !!data.is_locked;
+  render();
+}
+init();
+</script>
+</body>
+</html>

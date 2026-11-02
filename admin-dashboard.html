@@ -5631,6 +5631,135 @@ async function renderCeremonyAdminBox(){
   });
 }
 
+/* ============================================================
+   شركاء النجاح — متابعة بيانات الشركاء (صفحة partners.html)
+   ============================================================ */
+const P_WORDS = t=>{ t=(t||'').trim(); return t ? t.split(/\s+/).length : 0; };
+const P_EMAIL = v=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((v||'').trim());
+const P_PHONE = v=>String(v||'').replace(/\D/g,'').length>=9;
+function partnerNorm(d){
+  d = d||{}; const pe = ()=>({position:'',title:'',name:'',phone:'',email:''});
+  return { display_name:d.display_name||'', contact:Object.assign(pe(),d.contact), honoree:Object.assign(pe(),d.honoree), attendees:Object.assign({count:'',names:''},d.attendees),
+    wants_booth: d.wants_booth===undefined?null:d.wants_booth, booth:Object.assign(pe(),d.booth), services:Array.isArray(d.services)?d.services:[], guide_file:d.guide_file||null,
+    inquiry:Object.assign({email:'',phone:'',website:''},d.inquiry), media:Object.assign({name:'',position:'',phone:'',email:'',social:''},d.media), pr:Object.assign(pe(),d.pr) };
+}
+function partnerMissing(d){
+  const m=[]; const pOk=p=>(p.name||'').trim()&&(p.position||'').trim()&&P_PHONE(p.phone)&&P_EMAIL(p.email);
+  if(!(d.contact.name||'').trim()||!P_PHONE(d.contact.phone)||!P_EMAIL(d.contact.email)) m.push('ممثل التواصل');
+  if(!pOk(d.honoree)) m.push('ممثل التكريم');
+  if(d.attendees.count===''||d.attendees.count==null||isNaN(+d.attendees.count)) m.push('عدد الحضور');
+  if(d.wants_booth===null) m.push('الجناح'); else if(d.wants_booth===true&&!pOk(d.booth)) m.push('ممثل الجناح');
+  const svcOk=d.services.length&&d.services.every(s=>(s.title||'').trim()&&(s.description||'').trim()&&P_WORDS(s.description)<=100);
+  if(!svcOk&&!d.guide_file) m.push('الخدمات/الدليل');
+  if(!P_EMAIL(d.inquiry.email)&&!P_PHONE(d.inquiry.phone)) m.push('تواصل الاستفسارات');
+  if(!(d.media.name||'').trim()||!P_EMAIL(d.media.email)) m.push('التواصل الإعلامي');
+  if(!(d.pr.name||'').trim()||!P_PHONE(d.pr.phone)||!P_EMAIL(d.pr.email)) m.push('العلاقات العامة');
+  return m;
+}
+function partnerStatus(row){
+  const empty = !row.data || !Object.keys(row.data).length;
+  const miss = partnerMissing(partnerNorm(row.data));
+  return { empty, miss, st: empty ? 'none' : (miss.length ? 'partial' : (row.submitted_at ? 'submitted' : 'complete')) };
+}
+const PARTNER_ST = { none:['لم يبدأ','#6B6B80'], partial:['قيد الاستكمال','#B8860B'], complete:['مكتمل (لم يُعتمد)','#2563EB'], submitted:['معتمد','#1E7D4F'] };
+function partnerLink(t){ return new URL('partners.html', location.href).href.split('?')[0] + '?t=' + t; }
+
+async function renderPartnersAdminBox(){
+  const box = document.getElementById('partnersAdminBox'); if(!box) return;
+  box.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  let rows;
+  try{ const { data, error } = await sb.from('partners').select('*').order('sort_order').order('created_at'); if(error) throw error; rows = data||[]; }
+  catch(e){ console.error(e); box.innerHTML = `<div class="empty-hint">تعذّر تحميل الشركاء: ${escHtml(e.message||'')} — تأكد من تشغيل add-partners.sql في Supabase</div>`; return; }
+  const sts = rows.map(r=>Object.assign({row:r}, partnerStatus(r)));
+  const cnt = k=>sts.filter(x=>x.st===k).length;
+  const kpi=(n,l,c)=>`<div style="flex:1;min-width:110px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:${c}">${n}</div><div style="font-size:12px;color:var(--ink-400)">${l}</div></div>`;
+  const wantBooth = sts.filter(x=>x.row.data && x.row.data.wants_booth===true).length;
+  const totalAtt = sts.reduce((a,x)=>a+(parseInt(x.row.data&&x.row.data.attendees&&x.row.data.attendees.count)||0),0);
+  box.innerHTML = `<div class="card" style="padding:16px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      ${kpi(rows.length,'شريكًا','var(--navy-800)')}${kpi(cnt('submitted'),'معتمد','#1E7D4F')}${kpi(cnt('complete'),'مكتمل','#2563EB')}${kpi(cnt('partial'),'قيد الاستكمال','#B8860B')}${kpi(cnt('none'),'لم يبدأ','var(--ink-600)')}
+    </div>
+    <div style="font-size:12px;color:var(--ink-400);margin-bottom:12px">إجمالي الراغبين في الحضور من الشركاء: <b>${totalAtt}</b> • جهات ترغب بجناح: <b>${wantBooth}</b></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn btn-ghost btn-sm" id="ptExportBtn">${icon('download',{size:13})} بيانات الشركاء (Excel)</button>
+      <button class="btn btn-ghost btn-sm" id="ptCopyAllBtn">نسخ روابط جميع الشركاء</button>
+    </div>
+    <div class="table-wrap" style="max-height:480px;overflow:auto"><table><thead><tr><th>#</th><th>الجهة</th><th>الحالة</th><th>النواقص</th><th>آخر تحديث</th><th></th></tr></thead><tbody>
+      ${sts.map((x,i)=>{ const [lb,cl]=PARTNER_ST[x.st]; return `<tr>
+        <td class="mono">${i+1}</td><td>${escHtml(x.row.org_name)}${x.row.is_locked?' <span title="مقفل">🔒</span>':''}</td>
+        <td><span style="color:${cl};font-weight:700">${lb}</span></td>
+        <td style="font-size:11.5px;color:var(--ink-400)">${x.empty?'—':escHtml(x.miss.join('، ')||'—')}</td>
+        <td style="font-size:11.5px">${x.row.updated_at && !x.empty ? new Date(x.row.updated_at).toLocaleDateString('ar-SA') : '—'}</td>
+        <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" data-ptview="${x.row.id}">عرض</button> <button class="btn btn-ghost btn-sm" data-ptcopy="${x.row.id}">رابط</button> <button class="btn btn-ghost btn-sm" data-ptlock="${x.row.id}">${x.row.is_locked?'فتح':'قفل'}</button></td></tr>`; }).join('')}
+    </tbody></table></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+      <input type="text" id="ptNewName" placeholder="إضافة شريك جديد: اسم الجهة" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:260px">
+      <button class="btn btn-ghost btn-sm" id="ptAddBtn">إضافة</button>
+    </div></div>`;
+  const byId = id=>rows.find(r=>r.id===id);
+  const copy = async t=>{ try{ await navigator.clipboard.writeText(t); showToast('تم النسخ'); }catch(e){ window.prompt('انسخ:', t); } };
+  box.querySelectorAll('[data-ptcopy]').forEach(b=>b.addEventListener('click', ()=>copy(partnerLink(byId(b.dataset.ptcopy).token))));
+  box.querySelectorAll('[data-ptview]').forEach(b=>b.addEventListener('click', ()=>openPartnerModal(byId(b.dataset.ptview))));
+  box.querySelectorAll('[data-ptlock]').forEach(b=>b.addEventListener('click', async ()=>{ const r=byId(b.dataset.ptlock); const { error } = await sb.from('partners').update({ is_locked: !r.is_locked }).eq('id', r.id); if(error){ showToast('تعذّر التحديث: '+error.message); return; } renderPartnersAdminBox(); }));
+  document.getElementById('ptCopyAllBtn').addEventListener('click', ()=>copy(rows.map(r=>`${r.org_name}: ${partnerLink(r.token)}`).join('\n')));
+  document.getElementById('ptAddBtn').addEventListener('click', async ()=>{
+    const n = document.getElementById('ptNewName').value.trim(); if(!n){ showToast('اكتب اسم الجهة'); return; }
+    const { error } = await sb.from('partners').insert({ org_name: n, sort_order: rows.length+1 });
+    if(error){ showToast('تعذّرت الإضافة: '+error.message); return; } showToast('تمت الإضافة'); renderPartnersAdminBox();
+  });
+  document.getElementById('ptExportBtn').addEventListener('click', ()=>exportPartners(rows));
+}
+function personStr(p){ return [p.title, p.name].filter(Boolean).join(' ') + (p.position?' — '+p.position:'') + (p.phone?' — '+p.phone:'') + (p.email?' — '+p.email:''); }
+async function openPartnerModal(r){
+  const d = partnerNorm(r.data); const modal = document.getElementById('confirmModal'); const box = modal.querySelector('.modal-box');
+  box.style.maxWidth = '680px';
+  let guideUrl = null;
+  if(d.guide_file){ try{ const { data } = await sb.storage.from('form-attachments').createSignedUrl(d.guide_file.path, 3600); guideUrl = data && data.signedUrl; }catch(e){} }
+  const row = (l,v)=>`<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13px"><div style="width:150px;flex-shrink:0;color:var(--ink-400)">${l}</div><div style="flex:1;overflow-wrap:anywhere">${v?escHtml(v):'<span style="color:var(--ink-400)">—</span>'}</div></div>`;
+  const sec = t=>`<div style="font-weight:800;color:var(--navy-800);margin:14px 0 4px;font-size:13.5px">${t}</div>`;
+  const [lb,cl] = PARTNER_ST[partnerStatus(r).st];
+  box.innerHTML = `<h3>${escHtml(r.org_name)} <span style="font-size:12px;color:${cl}">${lb}</span></h3>
+    <div style="max-height:62vh;overflow-y:auto;padding-left:6px">
+    ${sec('الحفل الختامي')}${row('الاسم في المطبوعات',d.display_name)}${row('ممثل التواصل',personStr(d.contact))}${row('ممثل التكريم',personStr(d.honoree))}${row('عدد الحضور',String(d.attendees.count))}${row('أسماء الحاضرين',d.attendees.names)}${row('جناح مخصص',d.wants_booth===null?'':(d.wants_booth?'نعم':'لا'))}${d.wants_booth?row('ممثل الجناح',personStr(d.booth)):''}
+    ${sec('دليل المشاركين')}${d.services.map((s,i)=>`<div style="padding:8px 10px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;font-size:13px"><b>${i+1}. ${escHtml(s.title)}</b><div style="margin:4px 0;white-space:pre-wrap">${escHtml(s.description)}</div><div dir="ltr" style="text-align:right;font-size:12px;color:var(--ink-400)">${escHtml(s.url||'')}</div></div>`).join('') || '<div style="font-size:12.5px;color:var(--ink-400)">لا توجد خدمات</div>'}
+    ${row('دليل متكامل', d.guide_file ? d.guide_file.name : '')}${guideUrl?`<div style="margin:4px 0"><a href="${guideUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="text-decoration:none">تحميل الدليل المرفوع</a></div>`:''}
+    ${row('بريد الاستفسارات',d.inquiry.email)}${row('جوال الاستفسارات',d.inquiry.phone)}${row('الموقع',d.inquiry.website)}
+    ${sec('التواصل الإعلامي')}${row('المسؤول',[d.media.name,d.media.position].filter(Boolean).join(' — '))}${row('الجوال',d.media.phone)}${row('البريد',d.media.email)}${row('حسابات التواصل',d.media.social)}
+    ${sec('العلاقات العامة')}${row('الممثل',personStr(d.pr))}
+    </div><div class="modal-actions"><button class="btn btn-ghost" id="ptClose">إغلاق</button></div>`;
+  modal.classList.add('show');
+  document.getElementById('ptClose').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
+}
+function exportPartners(rows){
+  if(typeof XLSX==='undefined'){ showToast('تعذّر تحميل مكتبة التصدير'); return; }
+  const P = (p,k)=>(p&&p[k])||'';
+  const hdr = ['#','الجهة','الحالة','النواقص','اعتُمدت في','الاسم في المطبوعات',
+    'ممثل التواصل - الاسم','ممثل التواصل - المنصب','ممثل التواصل - الجوال','ممثل التواصل - البريد',
+    'التكريم - المنصب','التكريم - اللقب','التكريم - الاسم','التكريم - الجوال','التكريم - البريد',
+    'عدد الحضور','أسماء الحاضرين','جناح مخصص','الجناح - المنصب','الجناح - اللقب','الجناح - الاسم','الجناح - الجوال','الجناح - البريد',
+    'عدد الخدمات','دليل متكامل','استفسارات - بريد','استفسارات - جوال','الموقع',
+    'إعلام - الاسم','إعلام - المنصب','إعلام - الجوال','إعلام - البريد','حسابات التواصل',
+    'علاقات عامة - الاسم','علاقات عامة - المنصب','علاقات عامة - الجوال','علاقات عامة - البريد','الرابط الخاص'];
+  const aoa=[hdr]; const svc=[['الجهة','#','عنوان الخدمة','الوصف','عدد الكلمات','رابط الاستفادة']];
+  rows.forEach((r,i)=>{ const d=partnerNorm(r.data), s=partnerStatus(r);
+    aoa.push([i+1,r.org_name,PARTNER_ST[s.st][0],s.empty?'':s.miss.join('، '),r.submitted_at?new Date(r.submitted_at).toLocaleDateString('ar-SA'):'',d.display_name,
+      d.contact.name,d.contact.position,d.contact.phone,d.contact.email,
+      d.honoree.position,d.honoree.title,d.honoree.name,d.honoree.phone,d.honoree.email,
+      d.attendees.count,d.attendees.names,d.wants_booth===null?'':(d.wants_booth?'نعم':'لا'),d.booth.position,d.booth.title,d.booth.name,d.booth.phone,d.booth.email,
+      d.services.length,d.guide_file?d.guide_file.name:'',d.inquiry.email,d.inquiry.phone,d.inquiry.website,
+      d.media.name,d.media.position,d.media.phone,d.media.email,d.media.social,
+      d.pr.name,d.pr.position,d.pr.phone,d.pr.email,partnerLink(r.token)]);
+    d.services.forEach((x,j)=>svc.push([r.org_name,j+1,x.title||'',x.description||'',P_WORDS(x.description),x.url||'']));
+  });
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=hdr.map((h,i)=>({wch:i===1?38:(i===3||i===16?34:20)})); ws['!views']=[{state:'frozen',ySplit:1,xSplit:2}];
+  XLSX.utils.book_append_sheet(wb,ws,'الشركاء');
+  const w2=XLSX.utils.aoa_to_sheet(svc); w2['!cols']=[{wch:38},{wch:5},{wch:30},{wch:70},{wch:10},{wch:40}]; w2['!views']=[{state:'frozen',ySplit:1}];
+  XLSX.utils.book_append_sheet(wb,w2,'خدمات الدليل');
+  XLSX.writeFile(wb,`بيانات_شركاء_النجاح_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast(`تم تصدير ${rows.length} شريكًا`);
+}
+
 async function renderDataCenterTab(){
   const el = document.getElementById('view-datacenter');
   el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
@@ -5695,6 +5824,8 @@ async function renderDataCenterTab(){
     <div id="teaserAdminBox" style="margin-bottom:20px"></div>
     <div class="ac-title" style="margin-bottom:10px">🎉 تأكيد حضور الحفل الختامي</div>
     <div id="ceremonyAdminBox" style="margin-bottom:20px"></div>
+    <div class="ac-title" style="margin-bottom:10px">🤝 شركاء النجاح — بيانات الحفل والدليل</div>
+    <div id="partnersAdminBox" style="margin-bottom:20px"></div>
 
     <div class="ac-title" style="margin-bottom:10px">💾 نسخ احتياطية</div>
     <div class="card" style="margin-bottom:16px">
@@ -5742,6 +5873,7 @@ async function renderDataCenterTab(){
   document.getElementById('dcExportJudgingProjectsBtn').addEventListener('click', ()=>runExportJudgingProjectsExcel(classified, 'dcExportJudgingProjectsBtn'));
   renderTeaserAdminBox(classified);
   renderCeremonyAdminBox();
+  renderPartnersAdminBox();
   document.getElementById('dcGotoRankingBtn').addEventListener('click', ()=>{ activeTab='judging'; judgingSubtab='ranking'; renderTabs(); renderAll(); });
   document.getElementById('dcGotoReportBtn').addEventListener('click', ()=>{ activeTab='report'; renderTabs(); renderAll(); });
   document.getElementById('quickBackupBtn').addEventListener('click', ()=>runBackup(false));
