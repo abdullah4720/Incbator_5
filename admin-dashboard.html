@@ -5485,6 +5485,11 @@ async function fetchAllRows(table, select, orderCol){
   return out;
 }
 async function fetchCeremonyData(){
+  const [elig, excs] = await Promise.all([ sb.rpc('ceremony_eligible_forms'), sb.from('ceremony_exceptions').select('form_id') ]);
+  if(elig.error) throw elig.error;
+  if(excs.error) throw excs.error;
+  const eligSet = new Set((elig.data||[]).map(x=>typeof x==='object'&&x!==null?Object.values(x)[0]:x));
+  const excSet = new Set((excs.data||[]).map(x=>x.form_id));
   const [forms, members, rsvps, projects] = await Promise.all([
     (async()=>{ const out=[]; let from=0; while(true){ const { data, error } = await sb.from('verification_forms').select('id, project_id').eq('status','submitted').order('id').range(from,from+999); if(error) throw error; out.push(...(data||[])); if(!data||data.length<1000) break; from+=1000; } return out; })(),
     fetchAllRows('team_members', 'id, form_id, full_name, phone, email, role_in_project, is_leader, order_index, rsvp_token', 'id'),
@@ -5497,7 +5502,7 @@ async function fetchCeremonyData(){
   const byForm = {};
   members.filter(m=>fm[m.form_id]).forEach(m=>{ (byForm[m.form_id] = byForm[m.form_id]||[]).push(Object.assign({}, m, { rsvp: rm[m.id]||null })); });
   const teams = forms.map(f=>({
-    form_id: f.id, project_id: f.project_id,
+    form_id: f.id, project_id: f.project_id, included: eligSet.has(f.id), exception: excSet.has(f.id),
     project_name: (pm[f.project_id]||{}).project_name || f.project_id, domain: (pm[f.project_id]||{}).domain || 'بدون مجال',
     members: (byForm[f.id]||[]).sort((a,b)=> (b.is_leader?1:0)-(a.is_leader?1:0) || (a.order_index||0)-(b.order_index||0)),
   })).sort((a,b)=> a.domain.localeCompare(b.domain,'ar') || a.project_id.localeCompare(b.project_id,'ar',{numeric:true}));
@@ -5507,12 +5512,13 @@ async function renderCeremonyAdminBox(){
   const box = document.getElementById('ceremonyAdminBox');
   if(!box) return;
   box.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
-  let teams, st;
+  let teams, st, allTeams;
   try{
     const { data, error } = await sb.from('form_settings').select('ceremony_is_open, ceremony_deadline_at, ceremony_title, ceremony_date_text, ceremony_details').eq('id',1).maybeSingle();
     if(error) throw error;
     st = data || {};
-    teams = await fetchCeremonyData();
+    allTeams = await fetchCeremonyData();
+    teams = allTeams.filter(t=>t.included);
   }catch(e){
     console.error(e);
     box.innerHTML = `<div class="empty-hint">تعذّر تحميل تأكيد الحضور: ${escHtml(e.message||'')} — تأكد من تشغيل add-ceremony-rsvp.sql في Supabase</div>`;
@@ -5532,7 +5538,7 @@ async function renderCeremonyAdminBox(){
   box.innerHTML = `
     <div class="card" style="padding:16px">
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-        ${kpi(teams.length,'فريقًا (نماذج مُرسَلة)','var(--navy-800)')}${kpi(allM.length,'عضوًا مسجَّلًا','var(--navy-800)')}
+        ${kpi(teams.length,'فريقًا محكَّمًا مشمولًا','var(--navy-800)')}${kpi(allM.length,'عضوًا مسجَّلًا','var(--navy-800)')}
         ${kpi(yes,'سيحضرون','#1E7D4F')}${kpi(no,'يعتذرون','#B3261E')}${kpi(pending,'لم يردّوا','var(--ink-600)')}
       </div>
       <div style="font-size:12px;color:var(--ink-400);margin-bottom:14px">فرق فيها حاضر واحد على الأقل: <b>${teamsAny}</b> • فرق لم يردّ أي عضو منها: <b>${teamsNone}</b></div>
@@ -5559,8 +5565,17 @@ async function renderCeremonyAdminBox(){
       </div>
       <details style="margin-top:12px"><summary style="cursor:pointer;font-weight:700;font-size:13px">حالة الفرق (${teams.length})</summary>
         <div class="table-wrap" style="margin-top:8px;max-height:420px;overflow:auto"><table><thead><tr><th>المجال</th><th>رقم المشروع</th><th>اسم المشروع</th><th>سيحضر</th><th>يعتذر</th><th>لم يردّ</th></tr></thead><tbody>
-        ${teams.map(t=>{ const y=t.members.filter(m=>m.rsvp&&m.rsvp.status==='attending').length, n=t.members.filter(m=>m.rsvp&&m.rsvp.status==='declined').length; return `<tr><td>${escHtml(t.domain)}</td><td class="mono">${escHtml(t.project_id)}</td><td>${escHtml(t.project_name)}</td><td class="mono">${y}</td><td class="mono">${n}</td><td class="mono">${t.members.length-y-n}</td></tr>`; }).join('')}
+        ${teams.map(t=>{ const y=t.members.filter(m=>m.rsvp&&m.rsvp.status==='attending').length, n=t.members.filter(m=>m.rsvp&&m.rsvp.status==='declined').length; return `<tr><td>${escHtml(t.domain)}</td><td class="mono">${escHtml(t.project_id)}</td><td>${escHtml(t.project_name)}${t.exception&&!t.judgedReal?' <span style="font-size:10.5px;color:#8A6D00">(استثناء)</span>':''}</td><td class="mono">${y}</td><td class="mono">${n}</td><td class="mono">${t.members.length-y-n}</td></tr>`; }).join('')}
         </tbody></table></div></details>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+        <div style="font-weight:700;font-size:13px;margin-bottom:4px">استثناءات (دعوة مشاريع غير محكَّمة)</div>
+        <div style="font-size:12px;color:var(--ink-400);margin-bottom:8px">التأكيد متاح تلقائيًا للمشاريع المحكَّمة فقط. أضف هنا أي مشروع تريد دعوته استثناءً.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <select id="cerExcSelect" style="padding:8px 10px;border:1px solid var(--line);border-radius:8px;min-width:260px;max-width:100%"><option value="">اختر مشروعًا…</option>${allTeams.filter(t=>!t.included).map(t=>`<option value="${t.form_id}">${escHtml(t.project_id)} — ${escHtml(t.project_name)}</option>`).join('')}</select>
+          <button class="btn btn-ghost btn-sm" id="cerExcAddBtn">إضافة استثناء</button>
+        </div>
+        ${allTeams.filter(t=>t.exception).length ? allTeams.filter(t=>t.exception).map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;font-size:12.5px"><span><span class="mono">${escHtml(t.project_id)}</span> — ${escHtml(t.project_name)}</span><button class="btn btn-ghost btn-sm" data-cerexcdel="${t.form_id}">إزالة</button></div>`).join('') : '<div style="font-size:12px;color:var(--ink-400)">لا توجد استثناءات.</div>'}
+      </div>
     </div>`;
   const baseUrl = new URL('ceremony.html', location.href).href.split('?')[0];
   const mkRows = (onlyPending)=>{
@@ -5584,6 +5599,18 @@ async function renderCeremonyAdminBox(){
   };
   document.getElementById('cerPublicLinkTxt').textContent = baseUrl;
   document.getElementById('cerCopyPublicBtn').addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(baseUrl); showToast('تم نسخ الرابط العام'); }catch(e){ window.prompt('انسخ الرابط:', baseUrl); } });
+  document.getElementById('cerExcAddBtn').addEventListener('click', async ()=>{
+    const v = document.getElementById('cerExcSelect').value;
+    if(!v){ showToast('اختر مشروعًا أولًا'); return; }
+    const { error } = await sb.from('ceremony_exceptions').upsert({ form_id: v }, { onConflict: 'form_id' });
+    if(error){ showToast('تعذّرت الإضافة: '+error.message); return; }
+    showToast('تمت إضافة الاستثناء'); renderCeremonyAdminBox();
+  });
+  box.querySelectorAll('[data-cerexcdel]').forEach(b=>b.addEventListener('click', async ()=>{
+    const { error } = await sb.from('ceremony_exceptions').delete().eq('form_id', b.dataset.cerexcdel);
+    if(error){ showToast('تعذّرت الإزالة: '+error.message); return; }
+    showToast('تمت إزالة الاستثناء'); renderCeremonyAdminBox();
+  }));
   document.getElementById('cerExportBtn').addEventListener('click', ()=>exportX(mkRows(false), 'كشف_حضور_الحفل_الختامي'));
   document.getElementById('cerExportPendingBtn').addEventListener('click', ()=>exportX(mkRows(true), 'من_لم_يؤكدوا_الحضور'));
   document.getElementById('cerSaveBtn').addEventListener('click', async ()=>{
