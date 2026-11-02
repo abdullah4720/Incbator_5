@@ -155,9 +155,7 @@ function render(){
     <datalist id="titles"><option value="معالي"><option value="سعادة"><option value="الدكتور"><option value="المهندس"><option value="الأستاذ"><option value="الأستاذة"><option value="الدكتورة"><option value="المهندسة"></datalist>
     ${LOCKED?'<div class="lock">🔒 تم قفل البيانات من قِبل فريق البرنامج، ولا يمكن تعديلها حاليًا.</div>':''}
     ${P.submitted_at?`<div class="done">✓ تم اعتماد بيانات الجهة بتاريخ ${new Date(P.submitted_at).toLocaleDateString('ar-SA')}. يمكنكم تعديلها وإعادة الاعتماد في أي وقت${LOCKED?'':' قبل إغلاق باب التعديل'}.</div>`:''}
-    <div class="note">الجهة الكريمة،
-يسرّ فريق حاضنة ابتكار أن يشكركم على شراكتكم، ويأمل التكرُّم باستكمال البيانات التالية لتنسيق مشاركتكم في الحفل الختامي${c.date_text?' ('+esc(c.date_text)+')':''} وفي دليل المشاركين.
-تُحفَظ البيانات تلقائيًا، ويمكنكم الرجوع إليها وتعديلها في أي وقت عبر الرابط نفسه.${c.details?'\n\n'+esc(c.details):''}</div>
+    ${c.details?`<div class="note">${esc(c.details)}</div>`:''}
 
     <div class="card">${hd(1,'بيانات الجهة والتواصل','اسم الجهة وممثلها لدى فريق البرنامج')}
       <div class="grid">
