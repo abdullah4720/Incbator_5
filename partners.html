@@ -91,10 +91,11 @@ let P = null, D = {}, LOCKED = false, SAVE_T = null, SAVING = false;
 function blankPerson(){ return { position:'', title:'', name:'', phone:'', email:'' }; }
 function normalize(d){
   d = d || {};
-  const o = { display_name:'', contact:blankPerson(), honoree:blankPerson(), attendees:{count:'',names:''}, wants_booth:null, booth:blankPerson(),
+  const o = { display_name:'', contact:blankPerson(), honoree:blankPerson(), attendees:{count:'',names:'',list:[]}, wants_booth:null, booth:blankPerson(),
     services:[], guide_file:null, inquiry:{email:'',phone:'',website:''}, media:{name:'',position:'',phone:'',email:'',social:''}, pr:blankPerson() };
   for(const k of Object.keys(o)){ if(d[k]!==undefined && d[k]!==null){ o[k] = (typeof o[k]==='object' && !Array.isArray(o[k]) && o[k]!==null && typeof d[k]==='object') ? Object.assign({}, o[k], d[k]) : d[k]; } }
   if(!Array.isArray(o.services)) o.services = [];
+  if(!Array.isArray(o.attendees.list)) o.attendees.list = [];
   return o;
 }
 function getP(p){ return p.split('.').reduce((a,k)=>a==null?'':a[k],D); }
@@ -106,7 +107,8 @@ function missingList(d){
   const m = [], add=(s,t)=>m.push({s,t});
   if(!(d.contact.name||'').trim() || !phoneOk(d.contact.phone) || !emailOk(d.contact.email)) add(1,'ممثل الجهة للتواصل: الاسم ورقم الجوال والبريد الإلكتروني');
   if(!personOk(d.honoree)) add(2,'ممثل الجهة في مراسم التكريم: المنصب والاسم والجوال والبريد الإلكتروني');
-  if(d.attendees.count === '' || d.attendees.count == null || isNaN(+d.attendees.count) || +d.attendees.count < 0) add(2,'عدد الراغبين في الحضور من الجهة');
+  if(d.attendees.list.length){ if(!d.attendees.list.every(a=>personOk(a))) add(2,'بيانات الحاضرين: الاسم والمنصب والجوال والبريد الإلكتروني لكل حاضر'); }
+  else if(d.attendees.count === '' || d.attendees.count == null || isNaN(+d.attendees.count) || +d.attendees.count < 0) add(2,'عدد الراغبين في الحضور من الجهة');
   if(d.wants_booth === null) add(2,'الإجابة عن الرغبة في تخصيص جناح للجهة');
   if(d.wants_booth === true && !personOk(d.booth)) add(2,'ممثل الجهة في الجناح: المنصب والاسم والجوال والبريد الإلكتروني');
   const svcOk = d.services.length && d.services.every(s=>(s.title||'').trim() && (s.description||'').trim() && words(s.description)<=MAX_SVC_WORDS && (!(s.url||'').trim() || urlNorm(s.url)));
@@ -136,6 +138,12 @@ function person(prefix, o){
     ${field(prefix+'.phone','رقم الجوال',{req:true,ltr:true,type:'tel'})}
     ${field(prefix+'.email','البريد الإلكتروني',{req:true,ltr:true,type:'email'})}
   </div>`;
+}
+function attHTML(a,i){
+  const dis = LOCKED?'disabled':'';
+  const f = (k,l,o)=>{ o=o||{}; return `<div class="${o.full?'full':''}"><label>${l}${o.req?' <span class="req">*</span>':''}</label><input type="${o.type||'text'}" class="${o.ltr?'ltr':''}" data-att="${i}.${k}" value="${esc(a[k])}" ${dis}${o.list?` list="${o.list}"`:''}${o.ph?` placeholder="${o.ph}"`:''}></div>`; };
+  return `<div class="svc"><div class="hd"><span>الحاضر ${i+1}</span>${LOCKED?'':`<button class="btn sm" data-rmatt="${i}">حذف</button>`}</div>
+    <div class="grid">${f('title','اللقب',{list:'titles',ph:'مثال: د. / م. / أ.'})}${f('name','الاسم الكامل',{req:true})}${f('position','المنصب الوظيفي',{req:true})}${f('phone','رقم الجوال',{req:true,ltr:true,type:'tel'})}${f('email','البريد الإلكتروني',{req:true,ltr:true,type:'email'})}</div></div>`;
 }
 function svcHTML(s,i){
   const w = words(s.description), dis = LOCKED?'disabled':'';
@@ -172,9 +180,13 @@ function render(){
       <h3>ممثل الجهة في مراسم التكريم</h3>${person('honoree')}
       <h3>الحضور</h3>
       <div class="grid">
-        ${field('attendees.count','عدد الراغبين في الحضور من الجهة (شاملًا ممثل التكريم)',{req:true,type:'number'})}
-        <div class="full"><label>أسماء الحاضرين ومناصبهم (اختياري، للمساعدة في إعداد البطاقات والتنسيق)</label><textarea data-p="attendees.names" ${LOCKED?'disabled':''}>${esc(D.attendees.names)}</textarea></div>
+        <div class="full"><label>عدد الراغبين في الحضور من الجهة (شاملًا ممثل التكريم) <span class="req">*</span></label>
+          <input type="number" min="0" inputmode="numeric" data-p="attendees.count" value="${esc(D.attendees.list.length ? D.attendees.list.length : D.attendees.count)}" ${(LOCKED||D.attendees.list.length)?'disabled':''}>
+          ${D.attendees.list.length?'<div class="wc">يُحتسب العدد تلقائيًا من قائمة الحاضرين أدناه.</div>':''}</div>
       </div>
+      <div style="font-size:13px;font-weight:700;margin:14px 0 4px;color:var(--navy2)">بيانات الحاضرين (اختياري، يُفضَّل إدخالها لإعداد البطاقات والتنسيق)</div>
+      <div id="attList">${D.attendees.list.map(attHTML).join('')}</div>
+      ${LOCKED||D.attendees.list.length>=30?'':'<button class="btn" id="addAtt">+ إضافة حاضر</button>'}
       <h3>الجناح في المعرض المصاحب</h3>
       <label>هل ترغب الجهة في تخصيص جناح لها في المعرض؟ <span class="req">*</span></label>
       <div class="radio"><button type="button" class="y ${D.wants_booth===true?'on':''}" data-booth="1" ${LOCKED?'disabled':''}>نعم، ترغب</button><button type="button" class="n ${D.wants_booth===false?'on':''}" data-booth="0" ${LOCKED?'disabled':''}>لا، لا ترغب</button></div>
@@ -250,6 +262,9 @@ function bind(){
     if(k==='description'){ const w=words(el.value), e=document.getElementById('wc'+i); e.textContent = w+' / '+MAX_SVC_WORDS+' كلمة'; e.classList.toggle('bad', w>MAX_SVC_WORDS); }
     live(); schedule();
   }));
+  app.querySelectorAll('[data-att]').forEach(el=>el.addEventListener('input', ()=>{ const [i,k] = el.dataset.att.split('.'); D.attendees.list[+i][k] = el.value; live(); schedule(); }));
+  app.querySelectorAll('[data-rmatt]').forEach(b=>b.addEventListener('click', ()=>{ if(confirm('حذف هذا الحاضر؟')){ D.attendees.list.splice(+b.dataset.rmatt,1); D.attendees.count = D.attendees.list.length || D.attendees.count; render(); schedule(); } }));
+  const addA = document.getElementById('addAtt'); if(addA) addA.addEventListener('click', ()=>{ D.attendees.list.push(blankPerson()); D.attendees.count = D.attendees.list.length; render(); schedule(); });
   app.querySelectorAll('[data-booth]').forEach(b=>b.addEventListener('click', ()=>{ D.wants_booth = b.dataset.booth==='1'; render(); schedule(); }));
   app.querySelectorAll('[data-rmsvc]').forEach(b=>b.addEventListener('click', ()=>{ if(confirm('حذف هذه الخدمة؟')){ D.services.splice(+b.dataset.rmsvc,1); render(); schedule(); } }));
   const add = document.getElementById('addSvc'); if(add) add.addEventListener('click', ()=>{ D.services.push({title:'',description:'',url:''}); render(); schedule(); });

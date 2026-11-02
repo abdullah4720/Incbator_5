@@ -5639,7 +5639,7 @@ const P_EMAIL = v=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((v||'').trim());
 const P_PHONE = v=>String(v||'').replace(/\D/g,'').length>=9;
 function partnerNorm(d){
   d = d||{}; const pe = ()=>({position:'',title:'',name:'',phone:'',email:''});
-  return { display_name:d.display_name||'', contact:Object.assign(pe(),d.contact), honoree:Object.assign(pe(),d.honoree), attendees:Object.assign({count:'',names:''},d.attendees),
+  return { display_name:d.display_name||'', contact:Object.assign(pe(),d.contact), honoree:Object.assign(pe(),d.honoree), attendees:Object.assign({count:'',names:'',list:[]},d.attendees),
     wants_booth: d.wants_booth===undefined?null:d.wants_booth, booth:Object.assign(pe(),d.booth), services:Array.isArray(d.services)?d.services:[], guide_file:d.guide_file||null,
     inquiry:Object.assign({email:'',phone:'',website:''},d.inquiry), media:Object.assign({name:'',position:'',phone:'',email:'',social:''},d.media), pr:Object.assign(pe(),d.pr) };
 }
@@ -5647,7 +5647,7 @@ function partnerMissing(d){
   const m=[]; const pOk=p=>(p.name||'').trim()&&(p.position||'').trim()&&P_PHONE(p.phone)&&P_EMAIL(p.email);
   if(!(d.contact.name||'').trim()||!P_PHONE(d.contact.phone)||!P_EMAIL(d.contact.email)) m.push('ممثل التواصل');
   if(!pOk(d.honoree)) m.push('ممثل التكريم');
-  if(d.attendees.count===''||d.attendees.count==null||isNaN(+d.attendees.count)) m.push('عدد الحضور');
+  if(d.attendees.list&&d.attendees.list.length){ if(!d.attendees.list.every(pOk)) m.push('بيانات الحاضرين'); } else if(d.attendees.count===''||d.attendees.count==null||isNaN(+d.attendees.count)) m.push('عدد الحضور');
   if(d.wants_booth===null) m.push('الجناح'); else if(d.wants_booth===true&&!pOk(d.booth)) m.push('ممثل الجناح');
   const svcOk=d.services.length&&d.services.every(s=>(s.title||'').trim()&&(s.description||'').trim()&&P_WORDS(s.description)<=100);
   if(!svcOk&&!d.guide_file) m.push('الخدمات/الدليل');
@@ -5674,7 +5674,7 @@ async function renderPartnersAdminBox(){
   const cnt = k=>sts.filter(x=>x.st===k).length;
   const kpi=(n,l,c)=>`<div style="flex:1;min-width:110px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:${c}">${n}</div><div style="font-size:12px;color:var(--ink-400)">${l}</div></div>`;
   const wantBooth = sts.filter(x=>x.row.data && x.row.data.wants_booth===true).length;
-  const totalAtt = sts.reduce((a,x)=>a+(parseInt(x.row.data&&x.row.data.attendees&&x.row.data.attendees.count)||0),0);
+  const totalAtt = sts.reduce((a,x)=>{ const at=x.row.data&&x.row.data.attendees; return a+((at&&Array.isArray(at.list)&&at.list.length)||parseInt(at&&at.count)||0); },0);
   box.innerHTML = `<div class="card" style="padding:16px">
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       ${kpi(rows.length,'شريكًا','var(--navy-800)')}${kpi(cnt('submitted'),'معتمد','#1E7D4F')}${kpi(cnt('complete'),'مكتمل','#2563EB')}${kpi(cnt('partial'),'قيد الاستكمال','#B8860B')}${kpi(cnt('none'),'لم يبدأ','var(--ink-600)')}
@@ -5722,7 +5722,7 @@ async function openPartnerModal(r){
   const [lb,cl] = PARTNER_ST[partnerStatus(r).st];
   box.innerHTML = `<h3>${escHtml(r.org_name)} <span style="font-size:12px;color:${cl}">${lb}</span></h3>
     <div style="max-height:62vh;overflow-y:auto;padding-left:6px">
-    ${sec('الحفل الختامي')}${row('الاسم في المطبوعات',d.display_name)}${row('ممثل التواصل',personStr(d.contact))}${row('ممثل التكريم',personStr(d.honoree))}${row('عدد الحضور',String(d.attendees.count))}${row('أسماء الحاضرين',d.attendees.names)}${row('جناح مخصص',d.wants_booth===null?'':(d.wants_booth?'نعم':'لا'))}${d.wants_booth?row('ممثل الجناح',personStr(d.booth)):''}
+    ${sec('الحفل الختامي')}${row('الاسم في المطبوعات',d.display_name)}${row('ممثل التواصل',personStr(d.contact))}${row('ممثل التكريم',personStr(d.honoree))}${row('عدد الحضور',String((d.attendees.list&&d.attendees.list.length)||d.attendees.count))}${(d.attendees.list||[]).map((a,i)=>row('الحاضر '+(i+1),personStr(a))).join('')}${row('ملاحظات الحضور',d.attendees.names)}${row('جناح مخصص',d.wants_booth===null?'':(d.wants_booth?'نعم':'لا'))}${d.wants_booth?row('ممثل الجناح',personStr(d.booth)):''}
     ${sec('دليل المشاركين')}${d.services.map((s,i)=>`<div style="padding:8px 10px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;font-size:13px"><b>${i+1}. ${escHtml(s.title)}</b><div style="margin:4px 0;white-space:pre-wrap">${escHtml(s.description)}</div><div dir="ltr" style="text-align:right;font-size:12px;color:var(--ink-400)">${escHtml(s.url||'')}</div></div>`).join('') || '<div style="font-size:12.5px;color:var(--ink-400)">لا توجد خدمات</div>'}
     ${row('دليل متكامل', d.guide_file ? d.guide_file.name : '')}${guideUrl?`<div style="margin:4px 0"><a href="${guideUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="text-decoration:none">تحميل الدليل المرفوع</a></div>`:''}
     ${row('بريد الاستفسارات',d.inquiry.email)}${row('جوال الاستفسارات',d.inquiry.phone)}${row('الموقع',d.inquiry.website)}
@@ -5742,7 +5742,7 @@ function exportPartners(rows){
     'عدد الخدمات','دليل متكامل','استفسارات - بريد','استفسارات - جوال','الموقع',
     'إعلام - الاسم','إعلام - المنصب','إعلام - الجوال','إعلام - البريد','حسابات التواصل',
     'علاقات عامة - الاسم','علاقات عامة - المنصب','علاقات عامة - الجوال','علاقات عامة - البريد','الرابط الخاص'];
-  const aoa=[hdr]; const svc=[['الجهة','#','عنوان الخدمة','الوصف','عدد الكلمات','رابط الاستفادة']];
+  const aoa=[hdr]; const svc=[['الجهة','#','عنوان الخدمة','الوصف','عدد الكلمات','رابط الاستفادة']]; const att=[['الجهة','#','اللقب','الاسم','المنصب','الجوال','البريد الإلكتروني']];
   rows.forEach((r,i)=>{ const d=partnerNorm(r.data), s=partnerStatus(r);
     aoa.push([i+1,r.org_name,PARTNER_ST[s.st][0],s.empty?'':s.miss.join('، '),r.submitted_at?new Date(r.submitted_at).toLocaleDateString('ar-SA'):'',d.display_name,
       d.contact.name,d.contact.position,d.contact.phone,d.contact.email,
@@ -5751,6 +5751,7 @@ function exportPartners(rows){
       d.services.length,d.guide_file?d.guide_file.name:'',d.inquiry.email,d.inquiry.phone,d.inquiry.website,
       d.media.name,d.media.position,d.media.phone,d.media.email,d.media.social,
       d.pr.name,d.pr.position,d.pr.phone,d.pr.email,partnerLink(r.token)]);
+    (d.attendees.list||[]).forEach((a,j)=>att.push([r.org_name,j+1,a.title||'',a.name||'',a.position||'',a.phone||'',a.email||'']));
     d.services.forEach((x,j)=>svc.push([r.org_name,j+1,x.title||'',x.description||'',P_WORDS(x.description),x.url||'']));
   });
   const wb=XLSX.utils.book_new();
@@ -5758,6 +5759,8 @@ function exportPartners(rows){
   XLSX.utils.book_append_sheet(wb,ws,'الشركاء');
   const w2=XLSX.utils.aoa_to_sheet(svc); w2['!cols']=[{wch:38},{wch:5},{wch:30},{wch:70},{wch:10},{wch:40}]; w2['!views']=[{state:'frozen',ySplit:1}];
   XLSX.utils.book_append_sheet(wb,w2,'خدمات الدليل');
+  const w3=XLSX.utils.aoa_to_sheet(att); w3['!cols']=[{wch:38},{wch:5},{wch:12},{wch:28},{wch:26},{wch:16},{wch:30}]; w3['!views']=[{state:'frozen',ySplit:1}];
+  XLSX.utils.book_append_sheet(wb,w3,'الحاضرون');
   XLSX.writeFile(wb,`بيانات_شركاء_النجاح_${new Date().toISOString().slice(0,10)}.xlsx`);
   showToast(`تم تصدير ${rows.length} شريكًا`);
 }
