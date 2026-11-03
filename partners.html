@@ -110,7 +110,7 @@ function missingList(d){
   if(!(d.contact.name||'').trim() || !phoneOk(d.contact.phone) || !emailOk(d.contact.email)) add(1,'ممثل الجهة للتواصل: الاسم ورقم الجوال والبريد الإلكتروني');
   if(!personOk(d.honoree)) add(2,'ممثل الجهة في مراسم التكريم: المنصب والاسم والجوال والبريد الإلكتروني');
   if(d.attendees.count === '' || d.attendees.count == null || isNaN(+d.attendees.count) || +d.attendees.count < 0) add(2,'عدد الراغبين في الحضور من الجهة');
-  else if(d.attendees.list.slice(0,+d.attendees.count).some(a=>!personOk(a))) add(2,'بيانات الضيوف: الاسم والمنصب والجوال والبريد الإلكتروني لكل ضيف');
+  else if(d.attendees.list.slice(0,+d.attendees.count).some(a=>!personOk(a))) add(2,'بيانات ممثلي الجهة الحاضرين: الاسم والمنصب والجوال والبريد الإلكتروني لكل ممثل');
   if(d.wants_booth === null) add(2,'الإجابة عن الرغبة في تخصيص جناح للجهة');
   if(d.wants_booth === true && !personOk(d.booth)) add(2,'ممثل الجهة في الجناح: المنصب والاسم والجوال والبريد الإلكتروني');
   const svcOk = d.services.length && d.services.every(s=>(s.title||'').trim() && (s.description||'').trim() && words(s.description)<=MAX_SVC_WORDS && (!(s.url||'').trim() || urlNorm(s.url)));
@@ -144,7 +144,7 @@ function person(prefix, o){
 function attHTML(a,i){
   const dis = LOCKED?'disabled':'';
   const f = (k,l,o)=>{ o=o||{}; return `<div class="${o.full?'full':''}"><label>${l}${o.req?' <span class="req">*</span>':''}</label><input type="${o.type||'text'}" class="${o.ltr?'ltr':''}" data-att="${i}.${k}" value="${esc(a[k])}" ${dis}${o.list?` list="${o.list}"`:''}${o.ph?` placeholder="${o.ph}"`:''}></div>`; };
-  return `<div class="svc"><div class="hd"><span>الضيف ${i+1}${i===0?' <span style="font-size:11.5px;color:var(--gray);font-weight:500">(مُعبَّأ مبدئيًا من ممثل التكريم، ويمكن تعديله)</span>':''}</span></div>
+  return `<div class="svc"><div class="hd"><span>ممثل الجهة ${i+1}${i===0?' <span style="font-size:11.5px;color:var(--gray);font-weight:500">(مُعبَّأ مبدئيًا من ممثل التكريم، ويمكن تعديله)</span>':''}</span></div>
     <div class="grid">${f('title','اللقب',{list:'titles',ph:'مثال: د. / م. / أ.'})}${f('name','الاسم الكامل',{req:true})}${f('position','المنصب الوظيفي',{req:true})}${f('phone','رقم الجوال',{req:true,ltr:true,type:'tel'})}${f('email','البريد الإلكتروني',{req:true,ltr:true,type:'email'})}</div></div>`;
 }
 function svcHTML(s,i){
@@ -184,9 +184,9 @@ function render(){
       <div class="grid">
         <div class="full"><label>عدد الراغبين في الحضور من الجهة (شاملًا ممثل التكريم) <span class="req">*</span></label>
           <input type="number" min="0" max="${MAX_ATT}" inputmode="numeric" id="attCount" value="${esc(D.attendees.count)}" ${LOCKED?'disabled':''}>
-          <div class="wc">عند إدخال العدد تظهر بطاقة لكل ضيف لتعبئة بياناته (الحد الأقصى ${MAX_ATT}).</div></div>
+          <div class="wc">عند إدخال العدد تظهر بطاقة لكل ممثل لتعبئة بياناته (الحد الأقصى ${MAX_ATT}).</div></div>
       </div>
-      ${D.attendees.list.length && +D.attendees.count>0 ? `<div style="font-size:13px;font-weight:700;margin:14px 0 4px;color:var(--navy2)">بيانات الضيوف (مطلوبة لإعداد البطاقات والتنسيق)</div>` : ''}
+      ${D.attendees.list.length && +D.attendees.count>0 ? `<div style="font-size:13px;font-weight:700;margin:14px 0 4px;color:var(--navy2)">بيانات ممثلي الجهة الحاضرين (مطلوبة لإعداد البطاقات والتنسيق)</div>` : ''}
       <div id="attList">${D.attendees.list.slice(0,+D.attendees.count||0).map(attHTML).join('')}</div>
       <h3>الجناح في المعرض المصاحب</h3>
       <label>هل ترغب الجهة في تخصيص جناح لها في المعرض؟ <span class="req">*</span></label>
@@ -274,7 +274,7 @@ function bind(){
       const L = D.attendees.list;
       if(n < L.length){
         const filled = L.slice(n).filter(a=>(a.name||'').trim()||(a.phone||'').trim()||(a.email||'').trim()||(a.position||'').trim());
-        if(filled.length && !confirm(`سيتم حذف بيانات ${filled.length} ضيف مُدخَلة. هل تريد المتابعة؟`)){ ac.value = D.attendees.count; return; }
+        if(filled.length && !confirm(`سيتم حذف بيانات ${filled.length} ممثل مُدخَلة. هل تريد المتابعة؟`)){ ac.value = D.attendees.count; return; }
         L.length = n;
       } else {
         const wasEmpty = L.length===0;

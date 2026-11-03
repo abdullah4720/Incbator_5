@@ -5647,7 +5647,7 @@ function partnerMissing(d){
   const m=[]; const pOk=p=>(p.name||'').trim()&&(p.position||'').trim()&&P_PHONE(p.phone)&&P_EMAIL(p.email);
   if(!(d.contact.name||'').trim()||!P_PHONE(d.contact.phone)||!P_EMAIL(d.contact.email)) m.push('ممثل التواصل');
   if(!pOk(d.honoree)) m.push('ممثل التكريم');
-  if(d.attendees.count===''||d.attendees.count==null||isNaN(+d.attendees.count)) m.push('عدد الحضور'); else if((d.attendees.list||[]).length<+d.attendees.count||(d.attendees.list||[]).slice(0,+d.attendees.count).some(a=>!pOk(a))) m.push('بيانات الضيوف');
+  if(d.attendees.count===''||d.attendees.count==null||isNaN(+d.attendees.count)) m.push('عدد الحضور'); else if((d.attendees.list||[]).length<+d.attendees.count||(d.attendees.list||[]).slice(0,+d.attendees.count).some(a=>!pOk(a))) m.push('بيانات ممثلي الجهة');
   if(d.wants_booth===null) m.push('الجناح'); else if(d.wants_booth===true&&!pOk(d.booth)) m.push('ممثل الجناح');
   const svcOk=d.services.length&&d.services.every(s=>(s.title||'').trim()&&(s.description||'').trim()&&P_WORDS(s.description)<=100);
   if(!svcOk&&!d.guide_file) m.push('الخدمات/الدليل');
@@ -5722,7 +5722,7 @@ async function openPartnerModal(r){
   const [lb,cl] = PARTNER_ST[partnerStatus(r).st];
   box.innerHTML = `<h3>${escHtml(r.org_name)} <span style="font-size:12px;color:${cl}">${lb}</span></h3>
     <div style="max-height:62vh;overflow-y:auto;padding-left:6px">
-    ${sec('الحفل الختامي')}${row('الاسم في المطبوعات',d.display_name)}${row('ممثل التواصل',personStr(d.contact))}${row('ممثل التكريم',personStr(d.honoree))}${row('عدد الحضور',String((d.attendees.list&&d.attendees.list.length)||d.attendees.count))}${(d.attendees.list||[]).map((a,i)=>row('الضيف '+(i+1),personStr(a))).join('')}${row('ملاحظات الحضور',d.attendees.names)}${row('جناح مخصص',d.wants_booth===null?'':(d.wants_booth?'نعم':'لا'))}${d.wants_booth?row('ممثل الجناح',personStr(d.booth)):''}
+    ${sec('الحفل الختامي')}${row('الاسم في المطبوعات',d.display_name)}${row('ممثل التواصل',personStr(d.contact))}${row('ممثل التكريم',personStr(d.honoree))}${row('عدد الحضور',String((d.attendees.list&&d.attendees.list.length)||d.attendees.count))}${(d.attendees.list||[]).map((a,i)=>row('ممثل الجهة '+(i+1),personStr(a))).join('')}${row('ملاحظات الحضور',d.attendees.names)}${row('جناح مخصص',d.wants_booth===null?'':(d.wants_booth?'نعم':'لا'))}${d.wants_booth?row('ممثل الجناح',personStr(d.booth)):''}
     ${sec('دليل المشاركين')}${d.services.map((s,i)=>`<div style="padding:8px 10px;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;font-size:13px"><b>${i+1}. ${escHtml(s.title)}</b><div style="margin:4px 0;white-space:pre-wrap">${escHtml(s.description)}</div><div dir="ltr" style="text-align:right;font-size:12px;color:var(--ink-400)">${escHtml(s.url||'')}</div></div>`).join('') || '<div style="font-size:12.5px;color:var(--ink-400)">لا توجد خدمات</div>'}
     ${row('دليل متكامل', d.guide_file ? d.guide_file.name : '')}${guideUrl?`<div style="margin:4px 0"><a href="${guideUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="text-decoration:none">تحميل الدليل المرفوع</a></div>`:''}
     ${row('بريد الاستفسارات',d.inquiry.email)}${row('جوال الاستفسارات',d.inquiry.phone)}${row('الموقع',d.inquiry.website)}
@@ -5760,7 +5760,7 @@ function exportPartners(rows){
   const w2=XLSX.utils.aoa_to_sheet(svc); w2['!cols']=[{wch:38},{wch:5},{wch:30},{wch:70},{wch:10},{wch:40}]; w2['!views']=[{state:'frozen',ySplit:1}];
   XLSX.utils.book_append_sheet(wb,w2,'خدمات الدليل');
   const w3=XLSX.utils.aoa_to_sheet(att); w3['!cols']=[{wch:38},{wch:5},{wch:12},{wch:28},{wch:26},{wch:16},{wch:30}]; w3['!views']=[{state:'frozen',ySplit:1}];
-  XLSX.utils.book_append_sheet(wb,w3,'الضيوف');
+  XLSX.utils.book_append_sheet(wb,w3,'ممثلو الجهة');
   XLSX.writeFile(wb,`بيانات_شركاء_النجاح_${new Date().toISOString().slice(0,10)}.xlsx`);
   showToast(`تم تصدير ${rows.length} شريكًا`);
 }
