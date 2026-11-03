@@ -5682,6 +5682,7 @@ async function renderPartnersAdminBox(){
     <div style="font-size:12px;color:var(--ink-400);margin-bottom:12px">إجمالي الراغبين في الحضور من الشركاء: <b>${totalAtt}</b> • جهات ترغب بجناح: <b>${wantBooth}</b></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
       <button class="btn btn-ghost btn-sm" id="ptExportBtn">${icon('download',{size:13})} بيانات الشركاء (Excel)</button>
+      <button class="btn btn-primary btn-sm" id="ptBundleBtn">${icon('download',{size:13})} حزمة متكاملة (Excel + ملفات الأدلة ZIP)</button>
       <button class="btn btn-primary btn-sm" id="ptPublicBtn">نسخ الرابط الواحد للجميع</button>
       <button class="btn btn-ghost btn-sm" id="ptCopyAllBtn">نسخ الروابط الخاصة لكل شريك</button>
     </div>
@@ -5710,6 +5711,7 @@ async function renderPartnersAdminBox(){
     if(error){ showToast('تعذّرت الإضافة: '+error.message); return; } showToast('تمت الإضافة'); renderPartnersAdminBox();
   });
   document.getElementById('ptExportBtn').addEventListener('click', ()=>exportPartners(rows));
+  document.getElementById('ptBundleBtn').addEventListener('click', ()=>exportPartnersBundle(rows));
 }
 function personStr(p){ return [p.title, p.name].filter(Boolean).join(' ') + (p.position?' — '+p.position:'') + (p.phone?' — '+p.phone:'') + (p.email?' — '+p.email:''); }
 async function openPartnerModal(r){
@@ -5732,37 +5734,85 @@ async function openPartnerModal(r){
   modal.classList.add('show');
   document.getElementById('ptClose').addEventListener('click', ()=>{ modal.classList.remove('show'); restoreConfirmModal(); });
 }
-function exportPartners(rows){
-  if(typeof XLSX==='undefined'){ showToast('تعذّر تحميل مكتبة التصدير'); return; }
-  const P = (p,k)=>(p&&p[k])||'';
-  const hdr = ['#','الجهة','الحالة','النواقص','اعتُمدت في','الاسم في المطبوعات',
+function buildPartnersWorkbook(rows){
+  const P=(p,k)=>(p&&p[k])||'';
+  const data=rows.map(r=>({r,d:partnerNorm(r.data),s:partnerStatus(r)}));
+  const maxS=Math.max(0,...data.map(x=>x.d.services.length));
+  const maxA=Math.max(0,...data.map(x=>(x.d.attendees.list||[]).length));
+  const hdr=['#','الجهة','الحالة','النواقص','اعتُمدت في','آخر تحديث','الاسم في المطبوعات',
     'ممثل التواصل - الاسم','ممثل التواصل - المنصب','ممثل التواصل - الجوال','ممثل التواصل - البريد',
-    'التكريم - المنصب','التكريم - اللقب','التكريم - الاسم','التكريم - الجوال','التكريم - البريد',
-    'عدد الحضور','ملاحظات الحضور','جناح مخصص','الجناح - المنصب','الجناح - اللقب','الجناح - الاسم','الجناح - الجوال','الجناح - البريد',
-    'عدد الخدمات','دليل متكامل','استفسارات - بريد','استفسارات - جوال','الموقع',
-    'إعلام - الاسم','إعلام - المنصب','إعلام - الجوال','إعلام - البريد','حسابات التواصل',
-    'علاقات عامة - الاسم','علاقات عامة - المنصب','علاقات عامة - الجوال','علاقات عامة - البريد','الرابط الخاص'];
-  const aoa=[hdr]; const svc=[['الجهة','#','عنوان الخدمة','الوصف','عدد الكلمات','رابط الاستفادة']]; const att=[['الجهة','#','اللقب','الاسم','المنصب','الجوال','البريد الإلكتروني']];
-  rows.forEach((r,i)=>{ const d=partnerNorm(r.data), s=partnerStatus(r);
-    aoa.push([i+1,r.org_name,PARTNER_ST[s.st][0],s.empty?'':s.miss.join('، '),r.submitted_at?new Date(r.submitted_at).toLocaleDateString('ar-SA'):'',d.display_name,
+    'التكريم - مطابق لممثل التواصل','التكريم - المنصب','التكريم - اللقب','التكريم - الاسم','التكريم - الجوال','التكريم - البريد',
+    'عدد الحضور','ملاحظات الحضور','جناح مخصص','الجناح - مطابق لممثل التواصل','الجناح - المنصب','الجناح - اللقب','الجناح - الاسم','الجناح - الجوال','الجناح - البريد',
+    'عدد الخدمات','ملف الدليل المتكامل','استفسارات - بريد','استفسارات - جوال','الموقع الإلكتروني',
+    'إعلام - مطابق لممثل التواصل','إعلام - الاسم','إعلام - المنصب','إعلام - الجوال','إعلام - البريد','حسابات التواصل',
+    'علاقات عامة - مطابق لممثل التواصل','علاقات عامة - الاسم','علاقات عامة - المنصب','علاقات عامة - الجوال','علاقات عامة - البريد'];
+  for(let i=1;i<=maxA;i++) hdr.push(`ممثل الجهة ${i} - اللقب`,`ممثل الجهة ${i} - الاسم`,`ممثل الجهة ${i} - المنصب`,`ممثل الجهة ${i} - الجوال`,`ممثل الجهة ${i} - البريد`);
+  for(let i=1;i<=maxS;i++) hdr.push(`خدمة ${i} - العنوان`,`خدمة ${i} - الوصف`,`خدمة ${i} - الرابط`);
+  hdr.push('الرابط الخاص');
+  const yn=v=>v?'نعم':'لا';
+  const aoa=[hdr];
+  const svc=[['الجهة','#','عنوان الخدمة','الوصف','عدد الكلمات','رابط الاستفادة']];
+  const att=[['الجهة','#','اللقب','الاسم','المنصب','الجوال','البريد الإلكتروني']];
+  data.forEach(({r,d,s},i)=>{
+    const sm=d.same||{};
+    const row=[i+1,r.org_name,PARTNER_ST[s.st][0],s.empty?'':s.miss.join('، '),
+      r.submitted_at?new Date(r.submitted_at).toLocaleDateString('ar-SA'):'',r.updated_at?new Date(r.updated_at).toLocaleString('ar-SA'):'',d.display_name,
       d.contact.name,d.contact.position,d.contact.phone,d.contact.email,
-      d.honoree.position,d.honoree.title,d.honoree.name,d.honoree.phone,d.honoree.email,
-      d.attendees.count,d.attendees.names,d.wants_booth===null?'':(d.wants_booth?'نعم':'لا'),d.booth.position,d.booth.title,d.booth.name,d.booth.phone,d.booth.email,
+      yn(sm.honoree),d.honoree.position,d.honoree.title,d.honoree.name,d.honoree.phone,d.honoree.email,
+      d.attendees.count,d.attendees.names,d.wants_booth===null?'':yn(d.wants_booth),yn(sm.booth),d.booth.position,d.booth.title,d.booth.name,d.booth.phone,d.booth.email,
       d.services.length,d.guide_file?d.guide_file.name:'',d.inquiry.email,d.inquiry.phone,d.inquiry.website,
-      d.media.name,d.media.position,d.media.phone,d.media.email,d.media.social,
-      d.pr.name,d.pr.position,d.pr.phone,d.pr.email,partnerLink(r.token)]);
-    (d.attendees.list||[]).forEach((a,j)=>att.push([r.org_name,j+1,a.title||'',a.name||'',a.position||'',a.phone||'',a.email||'']));
+      yn(sm.media),d.media.name,d.media.position,d.media.phone,d.media.email,d.media.social,
+      yn(sm.pr),d.pr.name,d.pr.position,d.pr.phone,d.pr.email];
+    const al=d.attendees.list||[];
+    for(let k=0;k<maxA;k++){ const a=al[k]||{}; row.push(P(a,'title'),P(a,'name'),P(a,'position'),P(a,'phone'),P(a,'email')); }
+    for(let k=0;k<maxS;k++){ const x=d.services[k]||{}; row.push(P(x,'title'),P(x,'description'),P(x,'url')); }
+    row.push(partnerLink(r.token));
+    aoa.push(row);
+    al.forEach((a,j)=>att.push([r.org_name,j+1,a.title||'',a.name||'',a.position||'',a.phone||'',a.email||'']));
     d.services.forEach((x,j)=>svc.push([r.org_name,j+1,x.title||'',x.description||'',P_WORDS(x.description),x.url||'']));
   });
   const wb=XLSX.utils.book_new();
-  const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=hdr.map((h,i)=>({wch:i===1?38:(i===3||i===16?34:20)})); ws['!views']=[{state:'frozen',ySplit:1,xSplit:2}];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=hdr.map((h,i)=>({wch:i===1?38:(/الوصف|النواقص|ملاحظات/.test(h)?44:(/البريد|الرابط/.test(h)?30:20))}));
+  ws['!views']=[{state:'frozen',ySplit:1,xSplit:2,rightToLeft:true}];
   XLSX.utils.book_append_sheet(wb,ws,'الشركاء');
-  const w2=XLSX.utils.aoa_to_sheet(svc); w2['!cols']=[{wch:38},{wch:5},{wch:30},{wch:70},{wch:10},{wch:40}]; w2['!views']=[{state:'frozen',ySplit:1}];
+  const w2=XLSX.utils.aoa_to_sheet(svc); w2['!cols']=[{wch:38},{wch:5},{wch:30},{wch:70},{wch:10},{wch:40}]; w2['!views']=[{state:'frozen',ySplit:1,rightToLeft:true}];
   XLSX.utils.book_append_sheet(wb,w2,'خدمات الدليل');
-  const w3=XLSX.utils.aoa_to_sheet(att); w3['!cols']=[{wch:38},{wch:5},{wch:12},{wch:28},{wch:26},{wch:16},{wch:30}]; w3['!views']=[{state:'frozen',ySplit:1}];
+  const w3=XLSX.utils.aoa_to_sheet(att); w3['!cols']=[{wch:38},{wch:5},{wch:12},{wch:28},{wch:26},{wch:16},{wch:30}]; w3['!views']=[{state:'frozen',ySplit:1,rightToLeft:true}];
   XLSX.utils.book_append_sheet(wb,w3,'ممثلو الجهة');
-  XLSX.writeFile(wb,`بيانات_شركاء_النجاح_${new Date().toISOString().slice(0,10)}.xlsx`);
+  return wb;
+}
+
+function exportPartners(rows){
+  if(typeof XLSX==='undefined'){ showToast('تعذّر تحميل مكتبة التصدير'); return; }
+  XLSX.writeFile(buildPartnersWorkbook(rows),`بيانات_شركاء_النجاح_${new Date().toISOString().slice(0,10)}.xlsx`);
   showToast(`تم تصدير ${rows.length} شريكًا`);
+}
+
+async function exportPartnersBundle(rows){
+  if(typeof XLSX==='undefined'||typeof JSZip==='undefined'){ showToast('تعذّر تحميل مكتبات التصدير'); return; }
+  showToast('جارٍ تجهيز الحزمة…');
+  const zip=new JSZip(), date=new Date().toISOString().slice(0,10);
+  const out=XLSX.write(buildPartnersWorkbook(rows),{bookType:'xlsx',type:'array'});
+  zip.file(`بيانات_شركاء_النجاح_${date}.xlsx`,out);
+  const man=['الجهة,اسم الملف,الحالة'];
+  let ok=0, fail=0;
+  for(const r of rows){
+    const d=partnerNorm(r.data);
+    if(!d.guide_file||!d.guide_file.path) continue;
+    try{
+      const { data, error } = await sb.storage.from('form-attachments').download(d.guide_file.path);
+      if(error||!data) throw error||new Error('x');
+      const safe=String(r.org_name).replace(/[\\/:*?"<>|]/g,' ').trim().slice(0,60);
+      zip.file(`أدلة_الجهات/${safe}.pdf`,data); ok++;
+      man.push(`"${r.org_name}","${safe}.pdf",تم`);
+    }catch(e){ fail++; man.push(`"${r.org_name}",,تعذّر التحميل`); }
+  }
+  zip.file('أدلة_الجهات/فهرس.csv','﻿'+man.join('\n'));
+  const blob=await zip.generateAsync({type:'blob'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`حزمة_بيانات_الشركاء_${date}.zip`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  showToast(`تم تحميل الحزمة: ${rows.length} شريكًا، ${ok} دليلًا${fail?`، تعذّر ${fail}`:''}`);
 }
 
 async function renderDataCenterTab(){
