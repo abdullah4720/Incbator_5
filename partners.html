@@ -50,9 +50,20 @@ input:disabled,textarea:disabled,select:disabled{background:#F4F4F9;color:var(--
 .lock{background:var(--no-bg);color:var(--no);border-radius:12px;padding:12px 14px;font-weight:700;margin-bottom:14px;font-size:13.5px}
 .chk{list-style:none;margin:0;padding:0;font-size:13px}
 .chk li{padding:3px 0;display:flex;gap:8px}.chk .d{color:var(--ok)}.chk .m{color:var(--no)}
-.bar{width:100%;box-sizing:border-box;position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);backdrop-filter:blur(6px);border-top:1px solid var(--line);padding:12px 16px;display:flex;gap:10px;align-items:center;justify-content:space-between;z-index:5}
-body{padding-bottom:84px}
-.bar>div{min-width:0;flex:1}.bar .btn{flex-shrink:0}.bar .st{font-size:12.5px;color:var(--gray)}
+.bar{width:100%;box-sizing:border-box;position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.97);backdrop-filter:blur(8px);box-shadow:0 -4px 18px rgba(26,24,82,.10);z-index:5;transition:background .3s}
+.bar .fill{height:4px;background:#E6E6EF}.bar .fill i{display:block;height:100%;width:0;background:var(--gold);transition:width .4s,background .3s}
+.bar-in{max-width:760px;margin:0 auto;padding:10px 16px 12px;display:flex;flex-direction:column;gap:8px}
+.bar .dots{display:flex;gap:6px;align-items:center}
+.bar .dots button{flex:1;height:26px;border:0;border-radius:8px;background:#EDEDF4;color:var(--gray);font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer;padding:0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .dots button.done{background:#DDF3E6;color:#1E7D4F}
+.bar .row2{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.bar .info{min-width:0;flex:1}.bar .prog{font-size:13px;font-weight:700;color:var(--navy2)}
+.bar .miss{font-size:12px;color:#8A6D00;margin-top:1px;line-height:1.5}
+.bar .st{font-size:11.5px;color:var(--gray);margin-top:1px}
+.bar .btn{flex-shrink:0}.btn.pri.off{opacity:.55;cursor:pointer}
+.bar.ready{background:#F1FAF5}.bar.ready .fill i{background:var(--ok)}.bar.ready .prog{color:#1E7D4F}
+.bar.ready .btn.pri{background:#1E7D4F;border-color:#1E7D4F;box-shadow:0 4px 12px rgba(30,125,79,.35)}
+@media(max-width:480px){.bar .row2{flex-direction:column;align-items:stretch}.bar .btn{width:100%}.bar .dots button{font-size:10.5px}}
 .file{border:1.5px dashed var(--line);border-radius:12px;padding:14px;text-align:center;font-size:13px;color:var(--gray);cursor:pointer}
 .chip{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#F4F4F9;border-radius:10px;padding:8px 12px;font-size:13px;margin-bottom:8px}
 .err{text-align:center;padding:30px 10px;color:var(--no);line-height:2}
@@ -97,7 +108,7 @@ html{scroll-behavior:smooth}
   <div class="org" id="orgName">…</div>
 </div>
 <div class="wrap" id="app"><div class="card">جارٍ التحميل…</div></div>
-<div class="bar" id="bar" style="display:none"><div><div class="prog" id="prog"></div><div class="st" id="saveState"></div></div><button class="btn pri" id="btnSubmit">اعتماد البيانات وإرسالها</button></div>
+<div class="bar" id="bar" style="display:none"><div class="fill"><i id="barFill"></i></div><div class="bar-in"><div class="dots" id="dots"></div><div class="row2"><div class="info"><div class="prog" id="prog"></div><div class="miss" id="miss"></div><div class="st" id="saveState"></div></div><button class="btn pri" id="btnSubmit">اعتماد البيانات وإرسالها</button></div></div></div>
 <script>
 const SB = window.supabase.createClient("https://zxruviveljkywxbdqjxc.supabase.co","sb_publishable_URvlZnzYTl0CwwVxCikLvA_OeGSzhJh");
 let TOKEN = new URLSearchParams(location.search).get('t') || '';
@@ -132,6 +143,7 @@ function getP(p){ return p.split('.').reduce((a,k)=>a==null?'':a[k],D); }
 function setP(p,v){ const ks=p.split('.'); let c=D; ks.slice(0,-1).forEach(k=>{ c[k]=c[k]||{}; c=c[k]; }); c[ks[ks.length-1]]=v; }
 
 function personOk(p, needTitle){ return p && (p.name||'').trim() && (p.position||'').trim() && phoneOk(p.phone) && emailOk(p.email); }
+const SHORT={1:'الجهة',2:'الحفل',3:'الدليل',4:'الإعلام',5:'العلاقات'};
 const SECS = { 1:'بيانات الجهة والتواصل', 2:'الحفل الختامي', 3:'دليل المشاركين', 4:'التواصل الإعلامي', 5:'ممثل العلاقات العامة' };
 function missingList(d){
   const m = [], add=(s,t)=>m.push({s,t});
@@ -259,7 +271,7 @@ function render(){
     <div class="card"><h2>متطلبات الاعتماد</h2><ul class="chk" id="chk"></ul></div>
     ${TOKEN_FROM_URL?'':'<div style="text-align:center;margin-bottom:70px"><button class="btn sm" id="changeOrg">ليست جهتكم؟ تغيير الجهة</button></div>'}`;
   const co = document.getElementById('changeOrg'); if(co) co.addEventListener('click', changeOrg);
-  document.getElementById('bar').style.display = LOCKED ? 'none' : 'flex';
+  document.getElementById('bar').style.display = LOCKED ? 'none' : 'block';
   bind(); live();
 }
 function live(){
@@ -269,10 +281,19 @@ function live(){
   let done = 0;
   Object.keys(SECS).forEach(k=>{ const ok = !m.some(x=>x.s==k); if(ok) done++; const b=document.getElementById('sb'+k); if(b){ b.textContent = ok?'مكتمل ✓':'قيد الاستكمال'; b.className = 'sec-badge '+(ok?'ok':'pend'); } });
   Object.keys(SECS).forEach(k=>{ const ok=!m.some(x=>x.s==k); const nb=document.getElementById('nb'+k), nv=document.getElementById('nv'+k); if(nb) nb.textContent = ok?'✓':k; if(nv) nv.classList.toggle('done', ok); });
-  const pr = document.getElementById('prog'); if(pr) pr.textContent = `اكتمل ${done} من ${Object.keys(SECS).length} أقسام`;
-  const b = document.getElementById('btnSubmit'); if(b) b.disabled = m.length>0 || SAVING;
+  const total = Object.keys(SECS).length;
+  const pr = document.getElementById('prog');
+  const ready = m.length===0;
+  if(pr) pr.textContent = ready ? '✓ جاهز للاعتماد — راجع بياناتك ثم اعتمدها' : `اكتمل ${done} من ${total} أقسام`;
+  const ff=document.getElementById('barFill'); if(ff) ff.style.width = Math.round(done/total*100)+'%';
+  const bar=document.getElementById('bar'); if(bar) bar.classList.toggle('ready', ready);
+  const dots=document.getElementById('dots');
+  if(dots){ dots.innerHTML = Object.keys(SECS).map(k=>`<button type="button" data-goto="${k}" class="${m.some(x=>x.s==k)?'':'done'}">${m.some(x=>x.s==k)?k:'✓'} ${SHORT[k]}</button>`).join(''); dots.querySelectorAll('button').forEach(x=>x.addEventListener('click',()=>{ const t=document.getElementById('sec'+x.dataset.goto); if(t) t.scrollIntoView({behavior:'smooth',block:'start'}); })); }
+  const ms=document.getElementById('miss');
+  if(ms){ const fk=Object.keys(SECS).filter(k=>m.some(x=>x.s==k)); ms.textContent = fk.length ? 'يتبقى: '+fk.map(k=>SECS[k]).join('، ') : ''; }
+  const b = document.getElementById('btnSubmit'); if(b){ b.classList.toggle('off', !ready); b.disabled = !!SAVING; }
 }
-function setState(t){ const e=document.getElementById('saveState'); if(e) e.textContent=t; }
+function setState(t){ const e=document.getElementById('saveState'); if(e){ const ok=/^تم الحفظ/.test(t), wk=/جارٍ/.test(t); e.textContent=(ok?'✓ ':wk?'⏳ ':'')+t; e.style.color = ok?'#1E7D4F':''; } }
 function schedule(){ setState('تعديلات غير محفوظة…'); clearTimeout(SAVE_T); SAVE_T = setTimeout(()=>save(false), 1200); }
 async function save(submit){
   if(LOCKED) return false;
@@ -368,7 +389,7 @@ function showReview(final){
   });
 }
 document.getElementById('btnSubmit').addEventListener('click', async ()=>{
-  if(missingList(D).length) return;
+  const mm=missingList(D); if(mm.length){ const t=document.getElementById('sec'+mm[0].s); if(t) t.scrollIntoView({behavior:'smooth',block:'start'}); return; }
   await save(false);
   showReview(false);
 });
