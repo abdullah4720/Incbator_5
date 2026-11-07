@@ -272,6 +272,7 @@ function render(){
     ${TOKEN_FROM_URL?'':'<div style="text-align:center;margin-bottom:70px"><button class="btn sm" id="changeOrg">ليست جهتكم؟ تغيير الجهة</button></div>'}`;
   const co = document.getElementById('changeOrg'); if(co) co.addEventListener('click', changeOrg);
   document.getElementById('bar').style.display = LOCKED ? 'none' : 'block';
+  fitBar();
   bind(); live();
 }
 function live(){
@@ -293,6 +294,13 @@ function live(){
   if(ms){ const fk=Object.keys(SECS).filter(k=>m.some(x=>x.s==k)); ms.textContent = fk.length ? 'يتبقى: '+fk.map(k=>SECS[k]).join('، ') : ''; }
   const b = document.getElementById('btnSubmit'); if(b){ b.classList.toggle('off', !ready); b.disabled = !!SAVING; }
 }
+function fitBar(){
+  const bar=document.getElementById('bar'); if(!bar) return;
+  const apply=()=>{ document.body.style.paddingBottom = (bar.style.display==='none'?0:bar.offsetHeight+28)+'px'; };
+  apply();
+  if(!window.__barRO && 'ResizeObserver' in window){ window.__barRO=new ResizeObserver(apply); window.__barRO.observe(bar); }
+}
+window.addEventListener('resize',()=>{ try{fitBar();}catch(e){} });
 function setState(t){ const e=document.getElementById('saveState'); if(e){ const ok=/^تم الحفظ/.test(t), wk=/جارٍ/.test(t); e.textContent=(ok?'✓ ':wk?'⏳ ':'')+t; e.style.color = ok?'#1E7D4F':''; } }
 function schedule(){ setState('تعديلات غير محفوظة…'); clearTimeout(SAVE_T); SAVE_T = setTimeout(()=>save(false), 1200); }
 async function save(submit){
