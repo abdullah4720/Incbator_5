@@ -106,7 +106,8 @@ const esc = s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;
 const words = t=>{ t=(t||'').trim(); return t ? t.split(/\s+/).length : 0; };
 const emailOk = v=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((v||'').trim());
 const phoneOk = v=>String(v||'').replace(/\D/g,'').length>=9;
-const urlNorm = v=>{ v=(v||'').trim(); if(!v) return ''; if(!/^https?:\/\//i.test(v)) v='https://'+v; try{ const u=new URL(v); return u.hostname.includes('.')?u.href:null; }catch(e){ return null; } };
+const NOURL=/^(لا\s*يوجد|لايوجد|لا|لا\s*ينطبق|غير\s*متوفر|لا\s*شيء|-+|—|\/|n\/?a|none|no|null)\.?$/i;
+const urlNorm = v=>{ v=(v||'').trim(); if(!v||NOURL.test(v)) return ''; if(!/^https?:\/\//i.test(v)) v='https://'+v; try{ const u=new URL(v); return u.hostname.includes('.')?u.href:null; }catch(e){ return null; } };
 const MAX_SVC_WORDS = 100, MAX_SVC = 15, MAX_ATT = 30;
 let P = null, D = {}, LOCKED = false, SAVE_T = null, SAVING = false;
 
@@ -139,7 +140,7 @@ function missingList(d){
   else if(d.attendees.list.slice(0,+d.attendees.count).some(a=>!personOk(a))) add(2,'بيانات ممثلي الجهة الحاضرين: الاسم والمنصب والجوال والبريد الإلكتروني لكل ممثل');
   if(d.wants_booth === null) add(2,'الإجابة عن الرغبة في تخصيص جناح للجهة');
   if(d.wants_booth === true && !personOk(d.booth)) add(2,'ممثل الجهة في الجناح: المنصب والاسم والجوال والبريد الإلكتروني');
-  const svcOk = d.services.length && d.services.every(s=>(s.title||'').trim() && (s.description||'').trim() && words(s.description)<=MAX_SVC_WORDS && (!(s.url||'').trim() || urlNorm(s.url)));
+  const svcOk = d.services.length && d.services.every(s=>(s.title||'').trim() && (s.description||'').trim() && words(s.description)<=MAX_SVC_WORDS && (!(s.url||'').trim() || urlNorm(s.url)!==null));
   if(!d.services.length && !d.guide_file) add(3,'خدمة واحدة على الأقل، أو رفع دليل متكامل للجهة');
   else if(d.services.length && !svcOk) add(3,'استكمال بيانات الخدمات (العنوان والوصف، وصحة الرابط)');
   if(!emailOk(d.inquiry.email) && !phoneOk(d.inquiry.phone)) add(3,'وسيلة تواصل للاستفسارات (بريد إلكتروني أو جوال)');
@@ -278,7 +279,7 @@ async function save(submit){
   for(const s of D.services){ if(words(s.description)>MAX_SVC_WORDS){ setState('وصف إحدى الخدمات يتجاوز '+MAX_SVC_WORDS+' كلمة'); if(submit) alert('وصف إحدى الخدمات يتجاوز '+MAX_SVC_WORDS+' كلمة'); return false; } }
   SAVING = true; setState('جارٍ الحفظ…');
   const data = JSON.parse(JSON.stringify(D));
-  data.services.forEach(s=>{ if((s.url||'').trim()){ const n=urlNorm(s.url); if(n) s.url=n; } });
+  data.services.forEach(s=>{ if((s.url||'').trim()){ const n=urlNorm(s.url); if(n===''||n) s.url=n; } });
   const { data: res, error } = await SB.rpc('partner_save', { p_token: TOKEN, p_data: data, p_submit: !!submit });
   SAVING = false;
   if(error){ console.error(error); setState('تعذّر الحفظ: '+(error.message||'')); if(submit) alert('تعذّر الحفظ: '+(error.message||'')); live(); return false; }
