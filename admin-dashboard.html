@@ -437,6 +437,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
 <div class="wrap">
   <div class="view" id="view-dashboard"></div>
   <div class="view" id="view-analytics"></div>
+  <div class="view" id="view-finalists"></div>
   <div class="view" id="view-report"></div>
   <div class="view" id="view-shortlist"></div>
   <div class="view" id="view-duplicates"></div>
@@ -840,6 +841,7 @@ const TABS = [
   {id:"dashboard", l:"لوحة القيادة", adminOnly:false},
   {id:"report", l:"التقرير الشامل", adminOnly:false},
   {id:"analytics", l:"تحليل البيانات", adminOnly:false},
+  {id:"finalists", l:"تحليل المتأهلين", adminOnly:false},
   {id:"shortlist", l:"الترشيح المبدئي", adminOnly:false},
   {id:"duplicates", l:"تكرار الملفات", adminOnly:false},
   {id:"qualifying", l:"المشاريع المستوفية", adminOnly:false},
@@ -863,7 +865,7 @@ function visibleTabs(){
 const TAB_GROUPS = [
   { primary: true, tabs: ['dashboard','datacenter','review','judging'] },
   { id:'verify', label:'التحقق والفرز', tabs: ['shortlist','duplicates','qualifying','candidates','nonqualifying'] },
-  { id:'reports', label:'التقارير', tabs: ['report','analytics'] },
+  { id:'reports', label:'التقارير', tabs: ['report','analytics','finalists'] },
   { id:'admin', label:'الإدارة', tabs: ['builder','eligibility','users','announcements','settings'] },
 ];
 
@@ -5815,6 +5817,254 @@ async function exportPartnersBundle(rows){
   showToast(`تم تحميل الحزمة: ${rows.length} شريكًا، ${ok} دليلًا${fail?`، تعذّر ${fail}`:''}`);
 }
 
+/* ============================================================
+   تحليل المشاريع المتأهلة (المحكَّمة) — من أنهت التحكيم
+   ============================================================ */
+const FIN_KEYS = ['f1_9','f1_9b','f2_1','f2_6','f2_7','f2_9','f2_10','f3_1','f3_2','f5_1','f5_9','f5_11','f6_1','f7_1','f7_2','f8_4','f9_1'];
+const FIN_STAGE_MAP = { idea:'مرحلة الفكرة', poc:'نموذج إثبات مفهوم (PoC)', prototype:'نموذج أولي (Protoyping)', mvp:'منتج أولي قابل للاستخدام (MVP)', market:'منتج/خدمة مطروحة في السوق' };
+const FIN_QASSIM = ['بريدة','عنيزة','الرس','البكيرية','المذنب','البدائع','رياض الخبراء','الأسياح','عيون الجواء','الشماسية','النبهانية','ضرية','الخبراء','دخنة','عقلة الصقور','الفوارة','قصيباء','القصيم'];
+let FIN = { rows:null, total:0, submitted:0, filter:{ track:'', domain:'' } };
+
+const finVal = v=>{ if(v===null||v===undefined) return ''; if(Array.isArray(v)) return v.join('، '); if(typeof v==='object') return ''; return String(v).trim(); };
+const finArr = v=>{ if(Array.isArray(v)) return v.map(x=>String(x).trim()).filter(Boolean); const s=finVal(v); return s?[s]:[]; };
+
+async function loadFinalists(){
+  const evals = await fetchAllRows('judge_evaluations','form_id, round_id, scores, is_submitted');
+  const sub = evals.filter(e=>e.is_submitted);
+  const formIds = [...new Set(sub.map(e=>e.form_id))];
+  const [criteria, regCount, subCount] = await Promise.all([
+    fetchAllRows('judging_criteria','id, round_id, max_score, is_active'),
+    sb.from('eligible_projects').select('*',{count:'exact',head:true}),
+    sb.from('verification_forms').select('*',{count:'exact',head:true}).eq('status','submitted'),
+  ]);
+  const critMax = {}, roundMax = {};
+  criteria.filter(c=>c.is_active).forEach(c=>{ critMax[c.id]=parseFloat(c.max_score)||0; roundMax[c.round_id]=(roundMax[c.round_id]||0)+(parseFloat(c.max_score)||0); });
+  const forms=[], answers=[], members=[];
+  for(const c of chunkArr(formIds, 40)){
+    const [f,a,m] = await Promise.all([
+      sb.from('verification_forms').select('id, project_id, submitted_at').in('id', c),
+      sb.from('form_answers').select('form_id, field_key, value_text, value_json').in('form_id', c).in('field_key', FIN_KEYS),
+      sb.from('team_members').select('form_id, is_leader, role_in_project, specialization').in('form_id', c),
+    ]);
+    if(f.error) throw f.error; if(a.error) throw a.error; if(m.error) throw m.error;
+    forms.push(...(f.data||[])); answers.push(...(a.data||[])); members.push(...(m.data||[]));
+  }
+  const projIds = [...new Set(forms.map(f=>f.project_id))];
+  const projects = [];
+  for(const c of chunkArr(projIds, 80)){
+    const { data, error } = await sb.from('eligible_projects').select('project_id, project_name, track, domain, team_leader_name').in('project_id', c);
+    if(error) throw error; projects.push(...(data||[]));
+  }
+  const pMap={}; projects.forEach(p=>{ pMap[p.project_id]=p; });
+  const aMap={}; answers.forEach(a=>{ (aMap[a.form_id]=aMap[a.form_id]||{})[a.field_key] = (a.value_text!==null && a.value_text!=='') ? a.value_text : a.value_json; });
+  const mMap={}; members.forEach(m=>{ (mMap[m.form_id]=mMap[m.form_id]||[]).push(m); });
+  const evByForm={}; sub.forEach(e=>{ (evByForm[e.form_id]=evByForm[e.form_id]||[]).push(e); });
+
+  const rows = forms.map(f=>{
+    const p = pMap[f.project_id]||{}, a = aMap[f.id]||{}, mem = mMap[f.id]||[];
+    const pcts = (evByForm[f.id]||[]).map(e=>{
+      const mx = roundMax[e.round_id]||0; if(!mx) return null;
+      const tot = Object.entries(e.scores||{}).reduce((s,[k,v])=>s+((parseFloat(v)||0)/5)*(critMax[k]||0),0);
+      return tot/mx*100;
+    }).filter(x=>x!==null);
+    const score = pcts.length ? pcts.reduce((s,x)=>s+x,0)/pcts.length : null;
+    let city = finVal(a.f1_9); if(city==='مدينة أخرى') city = finVal(a.f1_9b) || 'مدينة أخرى';
+    let stage = finVal(a.f5_1); stage = FIN_STAGE_MAP[stage] || stage;
+    return {
+      form_id:f.id, project_id:f.project_id, name:p.project_name||f.project_id, track:p.track||'—', domain:p.domain||'—', leader:p.team_leader_name||'',
+      city:city||'غير محدد', cr:finVal(a.f2_1)||'غير محدد', crStatus:finVal(a.f2_6), crRole:finVal(a.f2_7), crProgress:finVal(a.f2_9), crBarrier:finVal(a.f2_10),
+      camp:finVal(a.f3_1), campDone:finVal(a.f3_2), stage:stage||'غير محدد', modelType:finVal(a.f5_9), testState:finVal(a.f5_11),
+      deck:finVal(a.f6_1), validation:finVal(a.f7_1), valMethods:finArr(a.f7_2), achievements:finArr(a.f8_4), attendance:finVal(a.f9_1),
+      teamSize:mem.length, roles:mem.map(m=>(m.role_in_project||'').trim()).filter(Boolean), specs:mem.map(m=>(m.specialization||'').trim()).filter(Boolean),
+      judges:pcts.length, score,
+    };
+  });
+  FIN.rows = rows; FIN.total = regCount.count||0; FIN.submitted = subCount.count||0;
+}
+
+/* ---------- حساب الجداول التحليلية (تُستخدم للعرض والتصدير معًا) ---------- */
+function finCount(rows, fn, opts={}){
+  const m = new Map();
+  rows.forEach(r=>{ const v = fn(r); (Array.isArray(v)?v:[v]).forEach(x=>{ const k = (x===''||x==null)?(opts.blank||'غير محدد'):x; m.set(k,(m.get(k)||0)+1); }); });
+  let arr = [...m.entries()].sort((a,b)=>b[1]-a[1]);
+  if(opts.top && arr.length>opts.top){ const rest = arr.slice(opts.top).reduce((s,x)=>s+x[1],0); arr = arr.slice(0,opts.top).concat([['أخرى',rest]]); }
+  return arr;
+}
+const finAvg = a=>a.length ? a.reduce((s,x)=>s+x,0)/a.length : null;
+const finPct = (n,t)=>t? Math.round(n/t*1000)/10 : 0;
+
+function computeFinalists(rows){
+  const n = rows.length, S = [];
+  const dist = (id,title,arr,note)=>S.push({id,kind:'dist',title,note:note||'',total:n,rows:arr});
+  const scored = rows.filter(r=>r.score!==null);
+  // 1) المسار والمجال
+  dist('track','توزيع المشاريع حسب المسار', finCount(rows,r=>r.track));
+  dist('domain','توزيع المشاريع حسب المجال', finCount(rows,r=>r.domain));
+  const tracks=[...new Set(rows.map(r=>r.track))], domains=[...new Set(rows.map(r=>r.domain))];
+  S.push({id:'matrix',kind:'matrix',title:'المسار × المجال (عدد المشاريع)',head:['المجال',...tracks,'الإجمالي'],
+    rows: domains.map(d=>[d,...tracks.map(t=>rows.filter(r=>r.domain===d&&r.track===t).length),rows.filter(r=>r.domain===d).length])
+      .sort((a,b)=>b[b.length-1]-a[a.length-1])});
+  // 2) المدن
+  dist('city','توزيع المشاريع حسب المدينة', finCount(rows,r=>r.city,{top:12}),'أعلى 12 مدينة والباقي ضمن «أخرى»');
+  const inQ = rows.filter(r=>FIN_QASSIM.some(c=>r.city.includes(c))).length;
+  S.push({id:'region',kind:'dist',title:'منطقة القصيم مقابل بقية المناطق',total:n,rows:[['داخل منطقة القصيم',inQ],['خارج منطقة القصيم',n-inQ]].filter(x=>x[1]>0),note:'بحسب المدينة الحالية لقائد الفريق'});
+  // 3) السجل التجاري
+  dist('cr','وجود سجل تجاري قائم', finCount(rows,r=>r.cr));
+  const withCR = rows.filter(r=>r.cr==='نعم');
+  if(withCR.length){ S.push({id:'crStatus',kind:'dist',title:'حالة السجل التجاري (للمشاريع التي لديها سجل)',total:withCR.length,rows:finCount(withCR,r=>r.crStatus)});
+    S.push({id:'crRole',kind:'dist',title:'صفة قائد الفريق في المنشأة',total:withCR.length,rows:finCount(withCR,r=>r.crRole)}); }
+  const noCR = rows.filter(r=>r.cr==='لا');
+  if(noCR.length){ S.push({id:'crProg',kind:'dist',title:'حالة إصدار السجل (للمشاريع بلا سجل)',total:noCR.length,rows:finCount(noCR,r=>r.crProgress)});
+    S.push({id:'crBar',kind:'dist',title:'العائق الرئيس أمام إصدار السجل',total:noCR.length,rows:finCount(noCR,r=>r.crBarrier)}); }
+  S.push({id:'crDomain',kind:'matrix',title:'السجل التجاري حسب المجال',head:['المجال','لديه سجل','بلا سجل','غير محدد','نسبة وجود السجل %'],
+    rows: domains.map(d=>{ const g=rows.filter(r=>r.domain===d), y=g.filter(r=>r.cr==='نعم').length, no=g.filter(r=>r.cr==='لا').length; return [d,y,no,g.length-y-no,finPct(y,g.length)]; })});
+  S.push({id:'crTrack',kind:'matrix',title:'السجل التجاري حسب المسار',head:['المسار','لديه سجل','بلا سجل','غير محدد','نسبة وجود السجل %'],
+    rows: tracks.map(t=>{ const g=rows.filter(r=>r.track===t), y=g.filter(r=>r.cr==='نعم').length, no=g.filter(r=>r.cr==='لا').length; return [t,y,no,g.length-y-no,finPct(y,g.length)]; })});
+  // 4) مرحلة المشروع
+  dist('stage','مرحلة تطور المشروع', finCount(rows,r=>r.stage));
+  dist('model','نوع النموذج المتوفر', finCount(rows.filter(r=>r.modelType),r=>r.modelType));
+  dist('test','حالة اختبار النموذج', finCount(rows.filter(r=>r.testState),r=>r.testState));
+  S.push({id:'stageDomain',kind:'matrix',title:'المرحلة حسب المجال',head:['المجال',...Object.values(FIN_STAGE_MAP),'غير ذلك'],
+    rows: domains.map(d=>{ const g=rows.filter(r=>r.domain===d); const cs=Object.values(FIN_STAGE_MAP).map(s=>g.filter(r=>r.stage===s).length); return [d,...cs,g.length-cs.reduce((a,b)=>a+b,0)]; })});
+  // 5) المعسكر والجاهزية
+  dist('camp','المعسكر الذي شارك فيه الفريق', finCount(rows.filter(r=>r.camp),r=>r.camp));
+  dist('deck','حالة العرض الاستثماري', finCount(rows.filter(r=>r.deck),r=>r.deck));
+  dist('validation','حالة التحقق من احتياج السوق', finCount(rows.filter(r=>r.validation),r=>r.validation));
+  dist('achv','الإنجازات السابقة (اختيار متعدد)', finCount(rows,r=>r.achievements,{blank:'لا يوجد'}),'المشروع الواحد قد يحمل أكثر من إنجاز، فلا يلزم أن يساوي المجموع عدد المشاريع');
+  // 6) الفرق
+  const sizes = rows.map(r=>r.teamSize);
+  dist('teamSize','حجم الفريق', finCount(rows,r=>r.teamSize>=6?'6 فأكثر':String(r.teamSize||0)+' '+(r.teamSize===1?'عضو':'أعضاء')).sort((a,b)=>parseInt(a[0])-parseInt(b[0])));
+  dist('roles','الأدوار داخل الفرق (أعلى 10)', finCount(rows,r=>r.roles,{top:10}),'عدد الأعضاء لا المشاريع');
+  // 7) الدرجات
+  const bucket = r=> r.score>=90?'90 فأعلى':r.score>=80?'80 – 89':r.score>=70?'70 – 79':r.score>=60?'60 – 69':'أقل من 60';
+  S.push({id:'scoreDist',kind:'dist',title:'توزيع الدرجات النهائية (نسبة مئوية)',total:scored.length,rows:['90 فأعلى','80 – 89','70 – 79','60 – 69','أقل من 60'].map(b=>[b,scored.filter(r=>bucket(r)===b).length]).filter(x=>x[1]>0)});
+  S.push({id:'scoreDomain',kind:'matrix',title:'متوسط الدرجة حسب المجال',head:['المجال','عدد المشاريع','متوسط الدرجة %','أعلى درجة %','أقل درجة %'],
+    rows: domains.map(d=>{ const g=scored.filter(r=>r.domain===d).map(r=>r.score); return [d,rows.filter(r=>r.domain===d).length,g.length?+finAvg(g).toFixed(1):'—',g.length?+Math.max(...g).toFixed(1):'—',g.length?+Math.min(...g).toFixed(1):'—']; }).sort((a,b)=>(b[2]==='—'?-1:b[2])-(a[2]==='—'?-1:a[2]))});
+  S.push({id:'scoreTrack',kind:'matrix',title:'متوسط الدرجة حسب المسار',head:['المسار','عدد المشاريع','متوسط الدرجة %'],
+    rows: tracks.map(t=>{ const g=scored.filter(r=>r.track===t).map(r=>r.score); return [t,rows.filter(r=>r.track===t).length,g.length?+finAvg(g).toFixed(1):'—']; })});
+  S.push({id:'scoreCR',kind:'matrix',title:'متوسط الدرجة: مع السجل التجاري وبدونه',head:['الفئة','عدد المشاريع','متوسط الدرجة %'],
+    rows: [['لديه سجل تجاري',r=>r.cr==='نعم'],['بلا سجل تجاري',r=>r.cr==='لا']].map(([l,f])=>{ const g=scored.filter(f).map(r=>r.score); return [l,rows.filter(f).length,g.length?+finAvg(g).toFixed(1):'—']; })});
+  S.push({id:'top',kind:'matrix',title:'أعلى 15 مشروعًا درجة',head:['#','رقم المشروع','اسم المشروع','المسار','المجال','المدينة','الدرجة %'],
+    rows: [...scored].sort((a,b)=>b.score-a.score).slice(0,15).map((r,i)=>[i+1,r.project_id,r.name,r.track,r.domain,r.city,+r.score.toFixed(1)])});
+  // KPIs
+  const mems = rows.reduce((s,r)=>s+r.teamSize,0);
+  const kpis = [
+    ['المشاريع المتأهلة', n], ['المسجّلة في القائمة', FIN.total], ['أرسلت الاستمارة', FIN.submitted],
+    ['نسبة المتأهلين من المسجّلة %', finPct(n,FIN.total)],
+    ['لديها سجل تجاري', withCR.length+' ('+finPct(withCR.length,n)+'%)'],
+    ['متوسط الدرجة %', scored.length?+finAvg(scored.map(r=>r.score)).toFixed(1):'—'],
+    ['إجمالي أعضاء الفرق', mems], ['متوسط حجم الفريق', n?+(mems/n).toFixed(1):0],
+    ['عدد المدن', new Set(rows.map(r=>r.city).filter(c=>c!=='غير محدد')).size],
+  ];
+  return { kpis, sections:S, insights: finInsights(rows,S) };
+}
+
+function finInsights(rows,S){
+  const n=rows.length, out=[]; if(!n) return out;
+  const top = id=>{ const s=S.find(x=>x.id===id); return s&&s.rows[0]; };
+  const t=top('track'), d=top('domain'), c=top('city'), st=top('stage');
+  if(t) out.push(`أكثر مسار تمثيلاً: «${t[0]}» (${t[1]} مشروعًا، ${finPct(t[1],n)}%).`);
+  if(d) out.push(`أكثر المجالات: «${d[0]}» (${d[1]} مشروعًا، ${finPct(d[1],n)}%).`);
+  if(c) out.push(`أكثر المدن مشاركة: «${c[0]}» (${c[1]} مشروعًا، ${finPct(c[1],n)}%).`);
+  const y = rows.filter(r=>r.cr==='نعم').length; out.push(`${y} مشروعًا (${finPct(y,n)}%) لديها سجل تجاري قائم، و${rows.filter(r=>r.cr==='لا').length} بلا سجل.`);
+  if(st) out.push(`المرحلة الأكثر شيوعًا: «${st[0]}» (${st[1]} مشروعًا).`);
+  const sd=S.find(x=>x.id==='scoreDomain'); const best = sd && sd.rows.find(r=>r[2]!=='—'); if(best) out.push(`أعلى متوسط درجات بين المجالات: «${best[0]}» (${best[2]}%).`);
+  const a=rows.filter(r=>r.cr==='نعم'&&r.score!==null).map(r=>r.score), b=rows.filter(r=>r.cr==='لا'&&r.score!==null).map(r=>r.score);
+  if(a.length&&b.length) out.push(`متوسط درجة المشاريع ذات السجل ${finAvg(a).toFixed(1)}% مقابل ${finAvg(b).toFixed(1)}% لغيرها.`);
+  return out;
+}
+
+/* ---------- العرض ---------- */
+const FIN_COLORS = ['#2A9D8F','#1A1852','#C9A227','#6B4FA0','#D9534F','#3B82C4','#5E8C61','#E07A5F','#8D99AE','#B5838D','#4D908E','#F4A261','#9E9E9E'];
+function finBars(s){
+  const max = Math.max(1,...s.rows.map(r=>r[1]));
+  return `<div class="fin-bars">${s.rows.map((r,i)=>`<div class="fin-row"><div class="fin-l" title="${escHtml(String(r[0]))}">${escHtml(String(r[0]))}</div><div class="fin-track"><div class="fin-fill" style="width:${Math.max(2,r[1]/max*100)}%;background:${FIN_COLORS[i%FIN_COLORS.length]}"></div></div><div class="fin-v"><b>${r[1]}</b> <span>${finPct(r[1],s.total)}%</span></div></div>`).join('')}</div>`;
+}
+function finMatrix(s){
+  return `<div class="table-wrap" style="max-height:420px;overflow:auto"><table><thead><tr>${s.head.map(h=>`<th>${escHtml(String(h))}</th>`).join('')}</tr></thead><tbody>${s.rows.map(r=>`<tr>${r.map((v,i)=>`<td${typeof v==='number'?' class="mono"':''}>${escHtml(String(v))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+const FIN_GROUPS = [
+  ['المسارات والمجالات',['track','domain','matrix']],
+  ['المدن والمناطق',['city','region']],
+  ['السجلات التجارية',['cr','crStatus','crRole','crProg','crBar','crDomain','crTrack']],
+  ['مرحلة المشروع والجاهزية',['stage','model','test','stageDomain','camp','deck','validation','achv']],
+  ['فرق العمل',['teamSize','roles']],
+  ['الدرجات والتحكيم',['scoreDist','scoreDomain','scoreTrack','scoreCR','top']],
+];
+function finFiltered(){
+  return FIN.rows.filter(r=>(!FIN.filter.track||r.track===FIN.filter.track)&&(!FIN.filter.domain||r.domain===FIN.filter.domain));
+}
+async function renderFinalistsTab(force){
+  const el = document.getElementById('view-finalists');
+  if(FIN.rows===null||force){
+    el.innerHTML = `<div class="empty-hint">جارٍ تحميل بيانات المشاريع المتأهلة…</div>`;
+    try{ await loadFinalists(); }catch(e){ console.error(e); el.innerHTML = `<div class="empty-hint">تعذّر تحميل البيانات: ${escHtml(e.message||String(e))}</div>`; FIN.rows=null; return; }
+  }
+  const all = FIN.rows;
+  if(!all.length){ el.innerHTML = `<div class="card"><div class="empty-hint">لا توجد مشاريع أنهت التحكيم بعد — يظهر التحليل بعد إرسال أول تقييم نهائي.</div></div>`; return; }
+  const rows = finFiltered(), A = computeFinalists(rows);
+  const tracks=[...new Set(all.map(r=>r.track))], domains=[...new Set(all.map(r=>r.domain))];
+  const kpi=(l,v)=>`<div class="fin-kpi"><div class="fin-kv">${escHtml(String(v))}</div><div class="fin-kl">${escHtml(l)}</div></div>`;
+  el.innerHTML = `
+  <style>
+    .fin-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:14px}
+    .fin-kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}.fin-kv{font-size:22px;font-weight:800;color:var(--navy-800)}.fin-kl{font-size:11.5px;color:var(--ink-400);margin-top:2px}
+    .fin-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px}
+    @media(max-width:520px){.fin-grid{grid-template-columns:1fr}}
+    .fin-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px}.fin-card.wide{grid-column:1/-1}
+    .fin-card h4{margin:0 0 3px;font-size:14px;color:var(--navy-800)}.fin-card .nt{font-size:11.5px;color:var(--ink-400);margin-bottom:10px}
+    .fin-h{margin:22px 0 10px;font-size:16px;color:var(--navy-800);border-bottom:2px solid var(--gold-500);padding-bottom:4px;width:fit-content}
+    .fin-row{display:grid;grid-template-columns:minmax(90px,36%) 1fr auto;gap:8px;align-items:center;margin:6px 0;font-size:12.5px}
+    .fin-l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fin-track{background:#F0F0F6;border-radius:6px;height:14px;overflow:hidden}.fin-fill{height:100%;border-radius:6px}
+    .fin-v{white-space:nowrap}.fin-v span{color:var(--ink-400);font-size:11px}
+    .fin-ins{background:#F4FBF8;border:1px solid #CDEBDD;border-radius:12px;padding:12px 16px;margin-bottom:14px}.fin-ins li{margin:4px 0;font-size:13px}
+  </style>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+    <h2 style="margin:0;font-size:18px;flex:1;min-width:200px">تحليل المشاريع المتأهلة <span style="font-size:12px;color:var(--ink-400);font-weight:400">— المشاريع التي أنهت التحكيم</span></h2>
+    <select id="finTrack" style="max-width:170px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#fff"><option value="">كل المسارات</option>${tracks.map(t=>`<option ${FIN.filter.track===t?'selected':''}>${escHtml(t)}</option>`).join('')}</select>
+    <select id="finDomain" style="max-width:220px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#fff"><option value="">كل المجالات</option>${domains.map(t=>`<option ${FIN.filter.domain===t?'selected':''}>${escHtml(t)}</option>`).join('')}</select>
+    <button class="btn btn-ghost btn-sm" id="finRefresh">تحديث</button>
+    <button class="btn btn-primary btn-sm" id="finExport">${icon('download',{size:13})} تصدير التحليل (Excel)</button>
+  </div>
+  ${rows.length?'':'<div class="card"><div class="empty-hint">لا توجد مشاريع تطابق هذا التصفية.</div></div>'}
+  ${rows.length?`
+  <div class="fin-kpis">${A.kpis.map(k=>kpi(k[0],k[1])).join('')}</div>
+  <div class="fin-ins"><b>أبرز الملاحظات</b><ul style="margin:6px 0 0;padding-right:18px">${A.insights.map(t=>`<li>${escHtml(t)}</li>`).join('')}</ul></div>
+  ${FIN_GROUPS.map(([g,ids])=>{ const ss=ids.map(id=>A.sections.find(s=>s.id===id)).filter(s=>s&&s.rows.length); if(!ss.length) return ''; return `<h3 class="fin-h">${g}</h3><div class="fin-grid">${ss.map(s=>`<div class="fin-card ${s.kind==='matrix'?'wide':''}"><h4>${escHtml(s.title)}</h4>${s.note?`<div class="nt">${escHtml(s.note)}</div>`:'<div class="nt"></div>'}${s.kind==='matrix'?finMatrix(s):finBars(s)}</div>`).join('')}</div>`; }).join('')}`:''}`;
+  document.getElementById('finTrack').addEventListener('change',e=>{ FIN.filter.track=e.target.value; renderFinalistsTab(); });
+  document.getElementById('finDomain').addEventListener('change',e=>{ FIN.filter.domain=e.target.value; renderFinalistsTab(); });
+  document.getElementById('finRefresh').addEventListener('click',()=>renderFinalistsTab(true));
+  document.getElementById('finExport').addEventListener('click',()=>exportFinalists());
+}
+
+/* ---------- التصدير ---------- */
+function exportFinalists(){
+  if(typeof XLSX==='undefined'){ showToast('تعذّر تحميل مكتبة التصدير'); return; }
+  const rows = finFiltered(); if(!rows.length){ showToast('لا توجد بيانات للتصدير'); return; }
+  const A = computeFinalists(rows), wb = XLSX.utils.book_new();
+  const filt = [FIN.filter.track&&('المسار: '+FIN.filter.track), FIN.filter.domain&&('المجال: '+FIN.filter.domain)].filter(Boolean).join(' | ') || 'كل المشاريع المتأهلة';
+  const add = (name,aoa,cols)=>{ const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=(cols||[]).map(w=>({wch:w})); ws['!views']=[{rightToLeft:true,state:'frozen',ySplit:1}]; XLSX.utils.book_append_sheet(wb,ws,name.slice(0,31)); };
+  // ملخص
+  const sum=[['المؤشر','القيمة'],['نطاق التحليل',filt],['تاريخ التصدير',new Date().toLocaleString('ar-SA')],...A.kpis.map(k=>[k[0],k[1]]),[],['أبرز الملاحظات',''],...A.insights.map(t=>['',t])];
+  add('ملخص',sum,[34,70]);
+  // كل جدول توزيع/مصفوفة في ورقة للمجموعة
+  FIN_GROUPS.forEach(([g,ids])=>{
+    const aoa=[]; 
+    ids.map(id=>A.sections.find(s=>s.id===id)).filter(s=>s&&s.rows.length).forEach(s=>{
+      aoa.push([s.title]); 
+      if(s.kind==='matrix'){ aoa.push(s.head); s.rows.forEach(r=>aoa.push(r)); }
+      else { aoa.push(['البند','العدد','النسبة %']); s.rows.forEach(r=>aoa.push([r[0],r[1],finPct(r[1],s.total)])); }
+      aoa.push([]);
+    });
+    if(aoa.length){ const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:44},{wch:18},{wch:18},{wch:18},{wch:18},{wch:18},{wch:18},{wch:18}]; ws['!views']=[{rightToLeft:true}]; XLSX.utils.book_append_sheet(wb,ws,g.slice(0,31)); }
+  });
+  // بيانات خام
+  const hdr=['رقم المشروع','اسم المشروع','المسار','المجال','قائد الفريق','المدينة','سجل تجاري','حالة السجل','صفة القائد في المنشأة','حالة إصدار السجل','عائق الإصدار','المعسكر','أكمل المعسكر','مرحلة المشروع','نوع النموذج','حالة الاختبار','العرض الاستثماري','التحقق من السوق','الإنجازات السابقة','حجم الفريق','عدد المحكّمين','الدرجة النهائية %'];
+  add('بيانات المشاريع',[hdr,...rows.map(r=>[r.project_id,r.name,r.track,r.domain,r.leader,r.city,r.cr,r.crStatus,r.crRole,r.crProgress,r.crBarrier,r.camp,r.campDone,r.stage,r.modelType,r.testState,r.deck,r.validation,r.achievements.join('، '),r.teamSize,r.judges,r.score===null?'':+r.score.toFixed(1)])],[14,34,16,26,24,16,10,14,16,22,22,26,12,26,22,20,22,20,26,10,10,12]);
+  XLSX.writeFile(wb,`تحليل_المشاريع_المتأهلة_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast(`تم تصدير التحليل (${rows.length} مشروعًا)`);
+}
+
 async function renderDataCenterTab(){
   const el = document.getElementById('view-datacenter');
   el.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
@@ -8471,6 +8721,7 @@ function renderAll(){
   if(activeTab==='dashboard') renderDashboard();
   if(activeTab==='report') renderComprehensiveReport();
   if(activeTab==='analytics') renderAnalytics();
+  if(activeTab==='finalists') renderFinalistsTab();
   if(activeTab==='shortlist') renderShortlist();
   if(activeTab==='duplicates') renderDuplicates();
   if(activeTab==='qualifying') renderQualificationTab(true);
