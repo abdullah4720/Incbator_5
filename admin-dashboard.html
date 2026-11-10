@@ -5684,8 +5684,10 @@ const copyToClipboard = async t=>{ try{ await navigator.clipboard.writeText(t); 
    ============================================================ */
 const GUEST_ST = { pending:['بانتظار الاعتماد','#B8860B'], approved:['معتمد','#1E7D4F'], rejected:['مرفوض','#B3261E'], cancelled:['ملغى','#6B6B80'] };
 const guestPublicLink = ()=> new URL('guests.html', location.href).href.split('?')[0].split('#')[0];
+const guestInvitedLink = ()=> guestPublicLink() + '?c=invited';
+const GUEST_CAT = { invited:'مدعو', public:'عامة' };
 const guestOwnLink = g => guestPublicLink() + '?t=' + g.token;
-let GUESTS_UI = { filter:'all', q:'' };
+let GUESTS_UI = { filter:'all', cat:'all', q:'' };
 
 async function renderGuestsAdminBox(){
   const box = document.getElementById('guestsAdminBox'); if(!box) return;
@@ -5694,7 +5696,7 @@ async function renderGuestsAdminBox(){
   try{
     const [g, s] = await Promise.all([
       sb.from('ceremony_guests').select('*').order('created_at', {ascending:false}),
-      sb.from('form_settings').select('ceremony_title, ceremony_date_text, ceremony_details, guests_is_open, guests_capacity, guests_deadline_at, guests_auto_approve').eq('id',1).maybeSingle(),
+      sb.from('form_settings').select('ceremony_title, ceremony_date_text, ceremony_details, guests_is_open, guests_capacity, guests_deadline_at, guests_auto_approve, guests_is_open, guests_invited_is_open, guests_invited_capacity, guests_invited_auto').eq('id',1).maybeSingle(),
     ]);
     if(g.error) throw g.error; if(s.error) throw s.error;
     rows = g.data||[]; st = s.data||{};
@@ -5705,28 +5707,32 @@ async function renderGuestsAdminBox(){
   const dlLocal = dl ? new Date(dl.getTime()-dl.getTimezoneOffset()*60000).toISOString().slice(0,16) : '';
   const kpi=(n,l,c)=>`<div style="flex:1;min-width:110px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:${c}">${n}</div><div style="font-size:12px;color:var(--ink-400)">${l}</div></div>`;
   const q = GUESTS_UI.q.trim().toLowerCase();
-  const list = rows.filter(r=>(GUESTS_UI.filter==='all'||r.status===GUESTS_UI.filter)&&(!q||[r.full_name,r.org,r.position,r.phone,r.email].join(' ').toLowerCase().includes(q)));
+  const list = rows.filter(r=>(GUESTS_UI.filter==='all'||r.status===GUESTS_UI.filter)&&(GUESTS_UI.cat==='all'||r.category===GUESTS_UI.cat)&&(!q||[r.full_name,r.org,r.position,r.phone,r.email].join(' ').toLowerCase().includes(q)));
   box.innerHTML = `<div class="card" style="padding:16px">
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
       ${kpi(rows.length,'إجمالي الطلبات','var(--navy-800)')}${kpi(cnt('pending'),'بانتظار الاعتماد','#B8860B')}${kpi(approved,'معتمد','#1E7D4F')}${kpi(cnt('rejected'),'مرفوض','#B3261E')}
-      ${kpi(cap==null?'∞':Math.max(0,cap-approved),'المقاعد المتبقية','#2563EB')}
+      ${kpi(st.guests_invited_capacity==null?'∞':Math.max(0,st.guests_invited_capacity-rows.filter(r=>r.category==='invited'&&r.status==='approved').length),'متبقٍ للمدعوين','#6B3FA0')}${kpi(st.guests_capacity==null?'∞':Math.max(0,st.guests_capacity-rows.filter(r=>r.category==='public'&&r.status==='approved').length),'متبقٍ للعامة','#2563EB')}
     </div>
+    ${[['invited','🎟️ رابط المدعوين (المعروفون)',guestInvitedLink(),st.guests_invited_is_open!==false,st.guests_invited_capacity,st.guests_invited_auto],['public','🌐 رابط العامة',guestPublicLink(),st.guests_is_open!==false,st.guests_capacity,st.guests_auto_approve]].map(([k,t,link,open,capk,auto])=>{
+      const ap = rows.filter(r=>r.category===k&&r.status==='approved').length, tot = rows.filter(r=>r.category===k).length;
+      return `<div style="border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;background:#FCFCFE">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><b style="font-size:13.5px">${t}</b><span style="font-size:12px;color:var(--ink-400)">${tot} طلب • ${ap} مؤكَّد${capk!=null?' من '+capk:''}${capk!=null&&ap>=capk?' — اكتمل العدد':''}</span><span style="font-size:12px;color:${open?'#1E7D4F':'#B3261E'};font-weight:700">${open?'مفتوح':'مغلق'}</span></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <label style="font-size:12px;font-weight:700">السعة:</label><input type="number" min="0" data-gcap="${k}" value="${capk==null?'':capk}" placeholder="بلا حد" style="width:100px;padding:7px 10px;border:1px solid var(--line);border-radius:8px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;cursor:pointer" title="يُؤكَّد حضور كل من يسجّل فورًا ما دامت المقاعد متاحة"><input type="checkbox" data-gauto="${k}" ${auto?'checked':''} style="width:auto"> تأكيد فوري عند التسجيل</label>
+          <button class="btn btn-primary btn-sm" data-gsave="${k}">حفظ</button>
+          <button class="btn ${open?'btn-ghost':'btn-primary'} btn-sm" data-gtoggle="${k}">${open?'إغلاق التسجيل':'إعادة الفتح'}</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span dir="ltr" class="mono" style="font-size:12px;color:var(--ink-600);flex:1;min-width:200px;overflow-wrap:anywhere">${escHtml(link)}</span><button class="btn btn-primary btn-sm" data-gcopy="${link}">نسخ الرابط</button></div>
+      </div>`; }).join('')}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-      <label style="font-size:12.5px;font-weight:700">السعة القصوى:</label>
-      <input type="number" min="0" id="gstCap" value="${cap==null?'':cap}" placeholder="بلا حد" style="width:110px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
-      <input type="datetime-local" id="gstDeadline" value="${dlLocal}" style="width:auto;padding:8px 10px;border:1px solid var(--line);border-radius:8px" title="آخر موعد للتسجيل (اختياري)">
-      <button class="btn btn-primary btn-sm" id="gstSave">حفظ</button>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;cursor:pointer" title="عند التفعيل يُؤكَّد حضور كل من يسجّل فورًا ما دامت المقاعد متاحة"><input type="checkbox" id="gstAuto" ${st.guests_auto_approve?'checked':''} style="width:auto"> تأكيد فوري عند التسجيل</label>
-      <button class="btn ${isOpen?'btn-ghost':'btn-primary'} btn-sm" id="gstToggle">${isOpen?'إغلاق التسجيل الآن':'إعادة فتح التسجيل'}</button>
-      <span style="font-size:12px;color:var(--ink-400)">${isOpen?(dl?'مفتوح — يُغلَق تلقائيًا '+dl.toLocaleString('ar-SA'):'مفتوح حتى تغلقه يدويًا'):'مغلق'}${cap!=null&&approved>=cap?' • اكتمل العدد':''}</span>
-    </div>
-    <div style="font-size:11.5px;color:var(--ink-400);margin:-4px 0 12px">عنوان الحفل وتاريخه وتفاصيله (المكان والوقت) من صندوق «تأكيد حضور الحفل الختامي» أعلاه، وتظهر للمدعوين بعد الاعتماد.</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;margin-bottom:12px;background:#F7F7FB;border:1px solid var(--line);border-radius:10px">
-      <span style="font-size:12.5px;font-weight:700">رابط التسجيل العام:</span>
-      <span dir="ltr" class="mono" style="font-size:12px;color:var(--ink-600);flex:1;min-width:200px;overflow-wrap:anywhere">${escHtml(guestPublicLink())}</span>
-      <button class="btn btn-primary btn-sm" id="gstCopy">نسخ</button>
+      <label style="font-size:12.5px;font-weight:700">آخر موعد للتسجيل (للرابطين):</label>
+      <input type="datetime-local" id="gstDeadline" value="${dlLocal}" style="width:auto;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+      <button class="btn btn-ghost btn-sm" id="gstDlSave">حفظ الموعد</button>
+      <span style="font-size:11.5px;color:var(--ink-400)">${dl?'يُغلَق التسجيل تلقائيًا '+dl.toLocaleString('ar-SA'):'بلا موعد'} • عنوان الحفل وتفاصيله من صندوق الحفل أعلاه</span>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <select id="gstCat" style="width:auto;min-width:110px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#fff"><option value="all">كل الفئات</option><option value="invited" ${GUESTS_UI.cat==='invited'?'selected':''}>المدعوون</option><option value="public" ${GUESTS_UI.cat==='public'?'selected':''}>العامة</option></select>
       <select id="gstFilter" style="width:auto;min-width:150px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#fff">
         <option value="all">كل الحالات</option>${Object.entries(GUEST_ST).map(([k,v])=>`<option value="${k}" ${GUESTS_UI.filter===k?'selected':''}>${v[0]}</option>`).join('')}</select>
       <input type="search" id="gstSearch" value="${escHtml(GUESTS_UI.q)}" placeholder="بحث بالاسم أو الجهة أو الجوال…" style="width:auto;flex:1;min-width:180px;padding:8px 12px;border:1px solid var(--line);border-radius:8px">
@@ -5736,7 +5742,7 @@ async function renderGuestsAdminBox(){
     </div>
     ${list.length?`<div class="table-wrap" style="max-height:480px;overflow:auto"><table><thead><tr><th>الاسم</th><th>الجهة / الصفة</th><th>الجوال</th><th>البريد</th><th>الحالة</th><th>تاريخ الطلب</th><th></th></tr></thead><tbody>
     ${list.map(r=>`<tr>
-      <td><b>${escHtml(r.full_name)}</b>${r.source==='admin'?' <span style="font-size:10.5px;color:var(--ink-400)">(مضاف يدويًا)</span>':''}</td>
+      <td><b>${escHtml(r.full_name)}</b> <span style="font-size:10.5px;color:${r.category==='invited'?'#6B3FA0':'var(--ink-400)'}">[${GUEST_CAT[r.category]||'عامة'}]</span>${r.source==='admin'?' <span style="font-size:10.5px;color:var(--ink-400)">(مضاف يدويًا)</span>':''}</td>
       <td style="font-size:12.5px">${escHtml(r.org||'—')}${r.position?`<div style="color:var(--ink-400);font-size:11.5px">${escHtml(r.position)}</div>`:''}</td>
       <td class="mono" dir="ltr" style="text-align:right">${escHtml(r.phone)}</td>
       <td style="font-size:12px" dir="ltr">${escHtml(r.email||'')}</td>
@@ -5751,23 +5757,35 @@ async function renderGuestsAdminBox(){
       </td></tr>`).join('')}</tbody></table></div>`:`<div class="empty-hint">${rows.length?'لا نتائج مطابقة':'لا توجد طلبات بعد — انسخ رابط التسجيل وأرسله للمدعوين'}</div>`}
   </div>`;
   const by = id=>document.getElementById(id);
-  by('gstCopy').addEventListener('click', ()=>copyToClipboard(guestPublicLink()).then(()=>showToast('تم نسخ رابط التسجيل')));
+  by('gstCat').addEventListener('change', e=>{ GUESTS_UI.cat=e.target.value; renderGuestsAdminBox(); });
+  box.querySelectorAll('[data-gcopy]').forEach(b=>b.addEventListener('click', ()=>copyToClipboard(b.dataset.gcopy).then(()=>showToast('تم نسخ الرابط'))));
   by('gstFilter').addEventListener('change', e=>{ GUESTS_UI.filter=e.target.value; renderGuestsAdminBox(); });
   let tmr; by('gstSearch').addEventListener('input', e=>{ GUESTS_UI.q=e.target.value; clearTimeout(tmr); tmr=setTimeout(async()=>{ await renderGuestsAdminBox(); const i=by('gstSearch'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } },350); });
-  by('gstSave').addEventListener('click', async ()=>{
-    const v=by('gstCap').value.trim(); const c = v===''?null:Math.max(0,parseInt(v)||0), d=by('gstDeadline').value;
-    const { error } = await sb.from('form_settings').update({ guests_capacity:c, guests_deadline_at: d?new Date(d).toISOString():null, guests_auto_approve: by('gstAuto').checked }).eq('id',1);
-    if(error) return showToast('تعذّر الحفظ: '+error.message); showToast('تم حفظ إعدادات التسجيل'); renderGuestsAdminBox();
-  });
-  by('gstToggle').addEventListener('click', async ()=>{ const { error } = await sb.from('form_settings').update({ guests_is_open: !isOpen }).eq('id',1); if(error) return showToast('تعذّر التحديث: '+error.message); renderGuestsAdminBox(); });
+  const colMap = { invited:{cap:'guests_invited_capacity',auto:'guests_invited_auto',open:'guests_invited_is_open'}, public:{cap:'guests_capacity',auto:'guests_auto_approve',open:'guests_is_open'} };
+  box.querySelectorAll('[data-gsave]').forEach(b=>b.addEventListener('click', async ()=>{
+    const k=b.dataset.gsave, c=colMap[k], v=box.querySelector(`[data-gcap="${k}"]`).value.trim();
+    const { error } = await sb.from('form_settings').update({ [c.cap]: v===''?null:Math.max(0,parseInt(v)||0), [c.auto]: box.querySelector(`[data-gauto="${k}"]`).checked }).eq('id',1);
+    if(error) return showToast('تعذّر الحفظ: '+error.message); showToast('تم الحفظ'); renderGuestsAdminBox();
+  }));
+  box.querySelectorAll('[data-gtoggle]').forEach(b=>b.addEventListener('click', async ()=>{
+    const k=b.dataset.gtoggle, c=colMap[k], cur = k==='invited' ? st.guests_invited_is_open!==false : st.guests_is_open!==false;
+    const { error } = await sb.from('form_settings').update({ [c.open]: !cur }).eq('id',1); if(error) return showToast('تعذّر التحديث: '+error.message); renderGuestsAdminBox();
+  }));
+  by('gstDlSave').addEventListener('click', async ()=>{ const d=by('gstDeadline').value; const { error } = await sb.from('form_settings').update({ guests_deadline_at: d?new Date(d).toISOString():null }).eq('id',1); if(error) return showToast('تعذّر الحفظ: '+error.message); showToast('تم حفظ الموعد'); renderGuestsAdminBox(); });
   const setSt = async (id,status)=>{ const { data, error } = await sb.rpc('guest_set_status',{p_id:id,p_status:status}); if(error) { showToast('تعذّر: '+error.message); return false; } if(data&&!data.ok){ showToast(data.reason==='full'?'اكتمل العدد — لا يمكن اعتماد المزيد (ارفع السعة أولًا)':'تعذّر التحديث'); return false; } return true; };
   box.querySelectorAll('[data-gst]').forEach(b=>b.addEventListener('click', async ()=>{ if(await setSt(parseInt(b.dataset.id),b.dataset.gst)) renderGuestsAdminBox(); }));
   by('gstApproveAll').addEventListener('click', async ()=>{
-    const pend = rows.filter(r=>r.status==='pending').sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
-    if(!pend.length) return showToast('لا توجد طلبات معلّقة');
-    const room = cap==null?pend.length:Math.max(0,cap-approved), take = pend.slice(0,room);
+    const capOf = k=> k==='invited' ? st.guests_invited_capacity : st.guests_capacity;
+    const take=[]; let total=0;
+    ['invited','public'].forEach(k=>{
+      if(GUESTS_UI.cat!=='all'&&GUESTS_UI.cat!==k) return;
+      const pend = rows.filter(r=>r.category===k&&r.status==='pending').sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)); total+=pend.length;
+      const c=capOf(k), ap=rows.filter(r=>r.category===k&&r.status==='approved').length, room = c==null?pend.length:Math.max(0,c-ap);
+      take.push(...pend.slice(0,room));
+    });
+    if(!total) return showToast('لا توجد طلبات معلّقة');
     if(!take.length) return showToast('اكتمل العدد — ارفع السعة أولًا');
-    if(!confirm(`اعتماد ${take.length} من ${pend.length} طلبًا معلّقًا (بحسب ترتيب التسجيل)؟`)) return;
+    if(!confirm(`اعتماد ${take.length} من ${total} طلبًا معلّقًا (بحسب ترتيب التسجيل وضمن السعة)؟`)) return;
     for(const r of take){ if(!(await setSt(r.id,'approved'))) break; }
     renderGuestsAdminBox();
   });
@@ -5784,16 +5802,17 @@ async function renderGuestsAdminBox(){
     const name=(prompt('الاسم الكامل للمدعو:')||'').trim(); if(!name) return;
     const phone=(prompt('رقم الجوال:')||'').trim(); if(phone.replace(/\D/g,'').length<9) return showToast('رقم الجوال غير صحيح');
     const org=(prompt('الجهة (اختياري):')||'').trim(), position=(prompt('الصفة (اختياري):')||'').trim(), email=(prompt('البريد الإلكتروني (اختياري):')||'').trim();
-    const { data, error } = await sb.from('ceremony_guests').insert({ full_name:name, phone, org:org||null, position:position||null, email:email||null, source:'admin' }).select('id').single();
+    const cat = confirm('هل هو من «المدعوين» (المعروفين)؟\nموافق = مدعو   •   إلغاء = عامة') ? 'invited' : 'public';
+    const { data, error } = await sb.from('ceremony_guests').insert({ full_name:name, phone, org:org||null, position:position||null, email:email||null, category:cat, source:'admin' }).select('id').single();
     if(error) return showToast(error.message.includes('duplicate')?'هذا الجوال مسجَّل مسبقًا':'تعذّر الإضافة: '+error.message);
     await setSt(data.id,'approved'); renderGuestsAdminBox();
   });
   by('gstExport').addEventListener('click', ()=>{
     if(typeof XLSX==='undefined'){ showToast('تعذّر تحميل مكتبة التصدير'); return; }
     if(!rows.length){ showToast('لا توجد بيانات'); return; }
-    const aoa=[['#','الاسم الكامل','الجهة','الصفة','الجوال','البريد الإلكتروني','الحالة','المصدر','تاريخ الطلب','تاريخ القرار','رابط الطلب'],
-      ...rows.map((r,i)=>[i+1,r.full_name,r.org||'',r.position||'',r.phone,r.email||'',GUEST_ST[r.status][0],r.source==='admin'?'إضافة يدوية':'تسجيل عام',new Date(r.created_at).toLocaleString('ar-SA'),r.decided_at?new Date(r.decided_at).toLocaleString('ar-SA'):'',guestOwnLink(r)])];
-    const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[5,28,28,24,16,30,16,14,22,22,60].map(w=>({wch:w})); ws['!views']=[{rightToLeft:true,state:'frozen',ySplit:1}];
+    const aoa=[['#','الاسم الكامل','الجهة','الصفة','الجوال','البريد الإلكتروني','الحالة','الفئة','المصدر','تاريخ الطلب','تاريخ القرار','رابط الطلب'],
+      ...rows.map((r,i)=>[i+1,r.full_name,r.org||'',r.position||'',r.phone,r.email||'',GUEST_ST[r.status][0],GUEST_CAT[r.category]||'عامة',r.source==='admin'?'إضافة يدوية':'تسجيل عام',new Date(r.created_at).toLocaleString('ar-SA'),r.decided_at?new Date(r.decided_at).toLocaleString('ar-SA'):'',guestOwnLink(r)])];
+    const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[5,28,28,24,16,30,16,10,14,22,22,60].map(w=>({wch:w})); ws['!views']=[{rightToLeft:true,state:'frozen',ySplit:1}];
     rows.forEach((r,i)=>{ const c=ws['E'+(i+2)]; if(c){ c.t='s'; c.v=String(r.phone||''); } });
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'المدعوون');
     XLSX.writeFile(wb,`مدعوو_الحفل_الختامي_${new Date().toISOString().slice(0,10)}.xlsx`); showToast(`تم تصدير ${rows.length} طلبًا`);

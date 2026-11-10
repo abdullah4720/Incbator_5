@@ -70,13 +70,14 @@ try{ if(!TOKEN) TOKEN = localStorage.getItem(LS_KEY) || ''; }catch(e){}
 const esc = s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const card = document.getElementById('card');
 let INFO = null;
+const CAT = new URLSearchParams(location.search).get('c')==='invited' ? 'invited' : 'public';
 const fmtD = d=>{ const x=new Date(d); return x.toLocaleDateString('ar-SA')+' — '+x.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}); };
 function setHero(info){ if(!info) return; if(info.title) document.getElementById('title').textContent = info.title; document.getElementById('date').textContent = info.date_text || ''; }
 const own = ()=>location.href.split('?')[0].split('#')[0] + '?t=' + TOKEN;
 function saveToken(t){ TOKEN=t; try{ localStorage.setItem(LS_KEY,t); }catch(e){} }
 
 async function init(){
-  try{ const { data } = await SB.rpc('guest_info'); INFO = data; setHero(INFO); }catch(e){}
+  try{ const { data } = await SB.rpc('guest_info',{p_cat:CAT}); INFO = data; setHero(INFO); }catch(e){}
   if(!INFO){ card.innerHTML = '<div class="err">تعذّر الاتصال. أعد المحاولة لاحقًا.<br>(إن استمر الخطأ فتواصل مع فريق البرنامج)</div>'; return; }
   if(TOKEN){ const ok = await showStatus(); if(ok) return; TOKEN=''; try{ localStorage.removeItem(LS_KEY); }catch(e){} }
   renderForm();
@@ -91,9 +92,9 @@ function renderForm(msg){
     document.getElementById('gLk').addEventListener('click', renderLookup); return;
   }
   card.innerHTML = `
-    <div class="name" style="margin-bottom:4px">طلب حضور الحفل الختامي</div>
+    <div class="name" style="margin-bottom:4px">${CAT==='invited'?'تأكيد حضور الحفل الختامي':'طلب حضور الحفل الختامي'}</div>
     ${INFO.details?`<div class="details">${esc(INFO.details)}</div>`:''}
-    <div class="proj" style="color:var(--gray);line-height:1.9">${INFO.auto_approve?'الرجاء التسجيل في حال رغبتكم بالحضور، ويتأكد حضوركم فور إرسال البيانات.':'الرجاء التسجيل في حال رغبتكم بالحضور، وسيتم تأكيد حضوركم لاحقًا.'}</div>
+    <div class="proj" style="color:var(--gray);line-height:1.9">${CAT==='invited'?(INFO.auto_approve?'يسعدنا حضوركم. الرجاء تعبئة البيانات التالية، ويتأكد حضوركم فور إرسالها.':'يسعدنا حضوركم. الرجاء تعبئة البيانات التالية، وسيتم تأكيد حضوركم لاحقًا.'):(INFO.auto_approve?'الرجاء التسجيل في حال رغبتكم بالحضور، ويتأكد حضوركم فور إرسال البيانات.':'الرجاء التسجيل في حال رغبتكم بالحضور، وسيتم تأكيد حضوركم لاحقًا.')}</div>
     <div class="lbl">الاسم الكامل <i>*</i></div><input class="f rt" id="gName" autocomplete="name">
     <div class="lbl">الجهة</div><input class="f rt" id="gOrg" autocomplete="organization">
     <div class="lbl">المسمى الوظيفي / الصفة</div><input class="f rt" id="gPos">
@@ -111,7 +112,7 @@ function renderForm(msg){
     if(v('gPhone').replace(/\D/g,'').length<9) return renderFormKeep('يُرجى إدخال رقم جوال صحيح.');
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v('gEmail'))) return renderFormKeep('يُرجى إدخال بريد إلكتروني صحيح.');
     go.disabled=true; go.textContent='جارٍ الإرسال…';
-    const { data, error } = await SB.rpc('guest_register',{p_name:v('gName'),p_org:v('gOrg'),p_position:v('gPos'),p_phone:v('gPhone'),p_email:v('gEmail')});
+    const { data, error } = await SB.rpc('guest_register',{p_name:v('gName'),p_org:v('gOrg'),p_position:v('gPos'),p_phone:v('gPhone'),p_email:v('gEmail'),p_cat:CAT});
     if(error||!data){ go.disabled=false; go.textContent='إرسال الطلب'; return renderFormKeep('تعذّر الإرسال: '+((error&&error.message)||'حاول مرة أخرى')); }
     if(!data.ok){ const m={closed:'انتهى التسجيل.',full:'اكتمل العدد.',name:'الاسم غير صحيح.',phone:'رقم الجوال غير صحيح.',email:'البريد غير صحيح.'}; go.disabled=false; go.textContent='إرسال الطلب'; if(data.reason==='closed'||data.reason==='full'){ INFO.is_open=data.reason!=='closed'; INFO.is_full=data.reason==='full'; return renderForm(); } return renderFormKeep(m[data.reason]||'تعذّر الإرسال.'); }
     saveToken(data.token); await showStatus();
