@@ -94,7 +94,7 @@ function renderForm(msg){
   card.innerHTML = `
     <div class="name" style="margin-bottom:4px">${CAT==='invited'?'تأكيد حضور الحفل الختامي':'طلب حضور الحفل الختامي'}</div>
     ${INFO.details?`<div class="details">${esc(INFO.details)}</div>`:''}
-    <div class="proj" style="color:var(--gray);line-height:1.9">${CAT==='invited'?(INFO.auto_approve?'يسعدنا حضوركم. الرجاء تعبئة البيانات التالية، ويتأكد حضوركم فور إرسالها.':'يسعدنا حضوركم. الرجاء تعبئة البيانات التالية، وسيتم تأكيد حضوركم لاحقًا.'):(INFO.auto_approve?'الرجاء التسجيل في حال رغبتكم بالحضور، ويتأكد حضوركم فور إرسال البيانات.':'الرجاء التسجيل في حال رغبتكم بالحضور، وسيتم تأكيد حضوركم لاحقًا.')}</div>
+    <div class="proj" style="color:var(--gray);line-height:1.9">${CAT==='invited'?'يسعدنا حضوركم للحفل الختامي لحاضنة ابتكار في نسختها الخامسة، الرجاء تعبئة البيانات التالية.':(INFO.auto_approve?'الرجاء التسجيل في حال رغبتكم بالحضور، ويتأكد حضوركم فور إرسال البيانات.':'الرجاء التسجيل في حال رغبتكم بالحضور، وسيتم تأكيد حضوركم لاحقًا.')}</div>
     <div class="lbl">الاسم الكامل <i>*</i></div><input class="f rt" id="gName" autocomplete="name">
     <div class="lbl">الجهة</div><input class="f rt" id="gOrg" autocomplete="organization">
     <div class="lbl">المسمى الوظيفي / الصفة</div><input class="f rt" id="gPos">
