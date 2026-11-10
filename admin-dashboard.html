@@ -3444,7 +3444,7 @@ async function renderJudgingJudges(){
 
   content.innerHTML = `
     ${roundSelectorHTML()}
-    <div style="text-align:left;margin-bottom:14px"><button class="btn btn-primary btn-sm" id="addJudgeBtn">+ إضافة محكّم</button></div>
+    <div style="text-align:left;margin-bottom:14px;display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-ghost btn-sm" id="exportJudgesBtn">${icon('download',{size:13})} تصدير المحكّمين (Excel)</button><button class="btn btn-primary btn-sm" id="addJudgeBtn">+ إضافة محكّم</button></div>
     ${JUDGES_CACHE.length===0 ? `<div class="empty-hint">لا يوجد محكّمون بعد</div>` : `
     <div class="card"><div class="table-wrap"><table>
       <thead><tr><th>المحكّم</th><th>المسمى الوظيفي/التخصص</th><th>فرق معيَّنة</th><th>درجات مسجَّلة</th><th>كلمة المرور</th><th>الحالة</th><th></th></tr></thead>
@@ -3468,6 +3468,18 @@ async function renderJudgingJudges(){
   `;
   bindRoundSelector(renderJudgingJudges);
   document.getElementById('addJudgeBtn').addEventListener('click', ()=>openJudgeModal(null));
+  document.getElementById('exportJudgesBtn').addEventListener('click', ()=>{
+    if(typeof XLSX==='undefined'){ showToast('تعذّر تحميل مكتبة التصدير'); return; }
+    if(!JUDGES_CACHE.length){ showToast('لا يوجد محكّمون للتصدير'); return; }
+    const hdr=['#','الاسم الكامل','البريد الإلكتروني','الجوال','المسمى الوظيفي / التخصص','الحالة','كلمة المرور','فرق معيَّنة (الجولة الحالية)','درجات مسجَّلة (الجولة الحالية)','تاريخ الإضافة'];
+    const aoa=[hdr,...JUDGES_CACHE.map((j,i)=>[i+1,j.full_name,j.email,j.phone,j.job_title||'',j.is_active?'نشط':'موقوف',j.password_hash?'أنشأها':'لم يُنشئها بعد',assignCountByJudge[j.id]||0,evalCountByJudge[j.id]||0,j.created_at?new Date(j.created_at).toLocaleDateString('ar-SA'):'']) ];
+    const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[5,30,32,16,30,10,16,14,14,14].map(w=>({wch:w})); ws['!views']=[{rightToLeft:true,state:'frozen',ySplit:1}];
+    /* الجوال نصًا حتى لا يتحوّل إلى صيغة علمية في Excel */
+    JUDGES_CACHE.forEach((j,i)=>{ const c=ws['D'+(i+2)]; if(c){ c.t='s'; c.v=String(j.phone||''); } });
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'المحكّمون');
+    XLSX.writeFile(wb,`المحكمون_${new Date().toISOString().slice(0,10)}.xlsx`);
+    showToast(`تم تصدير ${JUDGES_CACHE.length} محكّمًا`);
+  });
   content.querySelectorAll('[data-deletejudge]').forEach(b=>{
     b.addEventListener('click', ()=>confirmDeleteJudge(JUDGES_CACHE.find(j=>j.id===b.dataset.deletejudge), assignCountByJudge[b.dataset.deletejudge]||0, evalCountByJudge[b.dataset.deletejudge]||0));
   });
