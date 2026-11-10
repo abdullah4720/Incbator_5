@@ -43,7 +43,7 @@ input.f.rt{direction:rtl}.cap{margin-top:12px;font-size:12.5px;color:var(--gray)
 .pick{display:block;width:100%;text-align:right;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-family:inherit;font-size:14px;cursor:pointer;margin-bottom:8px}
 .pick:hover{border-color:var(--navy2)}
 .lnk{background:none;border:0;color:var(--navy2);font-family:inherit;font-size:12.5px;cursor:pointer;text-decoration:underline;margin-top:14px;padding:0}
-.topbar{background:#fff;border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;direction:rtl}
+.topbar{width:100%;background:#fff;border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;direction:rtl}
 .topbar .inc{height:46px;display:flex;align-items:center}.topbar .inc img{height:100%;width:auto;display:block}
 .topbar .qu{height:52px;display:flex;align-items:center}.topbar .qu img{height:100%;width:auto;display:block}
 .topbar .qu .qu-fallback{font-family:'Cairo',sans-serif;font-weight:800;color:var(--navy2);font-size:15px;line-height:1.3;text-align:left}
@@ -93,7 +93,7 @@ function renderForm(msg){
   card.innerHTML = `
     <div class="name" style="margin-bottom:4px">طلب حضور الحفل الختامي</div>
     ${INFO.details?`<div class="details">${esc(INFO.details)}</div>`:''}
-    <div class="proj" style="color:var(--gray);line-height:1.9">يُرجى تعبئة البيانات التالية. يخضع التسجيل للمراجعة والاعتماد، وسيظهر لكم قرار الاعتماد في هذه الصفحة.</div>
+    <div class="proj" style="color:var(--gray);line-height:1.9">الرجاء التسجيل في حال رغبتكم بالحضور، وسيتم تأكيد حضوركم لاحقًا.</div>
     <div class="lbl">الاسم الكامل <i>*</i></div><input class="f rt" id="gName" autocomplete="name">
     <div class="lbl">الجهة</div><input class="f rt" id="gOrg" autocomplete="organization">
     <div class="lbl">المسمى الوظيفي / الصفة</div><input class="f rt" id="gPos">
@@ -141,7 +141,7 @@ async function showStatus(justSent){
   INFO = data.info||INFO; setHero(INFO);
   const s = data.status;
   const T = {
-    pending:  ['⏳','طلبك قيد المراجعة','تم استلام طلبكم، وسيظهر قرار الاعتماد في هذه الصفحة. احتفظوا بالرابط أدناه للعودة إليها.','status'],
+    pending:  ['⏳','طلبك قيد المراجعة','تم استلام تسجيلكم، وسيتم تأكيد حضوركم لاحقًا. احتفظوا بالرابط أدناه للعودة إلى هذه الصفحة ومعرفة حالة التسجيل.','status'],
     approved: ['✅','تم اعتماد حضوركم','يسرّنا حضوركم الحفل الختامي. نتطلع للقائكم.','status ok'],
     rejected: ['ℹ️','تعذّر اعتماد الطلب','نشكر اهتمامكم. لم نتمكن من اعتماد طلب الحضور في هذه المرة. للاستفسار تواصلوا مع فريق البرنامج.','status no'],
     cancelled:['✕','تم إلغاء الطلب','تم إلغاء طلب حضوركم بناءً على رغبتكم. للاستفسار تواصلوا مع فريق البرنامج.','status'],
