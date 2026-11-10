@@ -5694,7 +5694,7 @@ async function renderGuestsAdminBox(){
   try{
     const [g, s] = await Promise.all([
       sb.from('ceremony_guests').select('*').order('created_at', {ascending:false}),
-      sb.from('form_settings').select('ceremony_title, ceremony_date_text, ceremony_details, guests_is_open, guests_capacity, guests_deadline_at').eq('id',1).maybeSingle(),
+      sb.from('form_settings').select('ceremony_title, ceremony_date_text, ceremony_details, guests_is_open, guests_capacity, guests_deadline_at, guests_auto_approve').eq('id',1).maybeSingle(),
     ]);
     if(g.error) throw g.error; if(s.error) throw s.error;
     rows = g.data||[]; st = s.data||{};
@@ -5716,6 +5716,7 @@ async function renderGuestsAdminBox(){
       <input type="number" min="0" id="gstCap" value="${cap==null?'':cap}" placeholder="بلا حد" style="width:110px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
       <input type="datetime-local" id="gstDeadline" value="${dlLocal}" style="width:auto;padding:8px 10px;border:1px solid var(--line);border-radius:8px" title="آخر موعد للتسجيل (اختياري)">
       <button class="btn btn-primary btn-sm" id="gstSave">حفظ</button>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;cursor:pointer" title="عند التفعيل يُؤكَّد حضور كل من يسجّل فورًا ما دامت المقاعد متاحة"><input type="checkbox" id="gstAuto" ${st.guests_auto_approve?'checked':''} style="width:auto"> تأكيد فوري عند التسجيل</label>
       <button class="btn ${isOpen?'btn-ghost':'btn-primary'} btn-sm" id="gstToggle">${isOpen?'إغلاق التسجيل الآن':'إعادة فتح التسجيل'}</button>
       <span style="font-size:12px;color:var(--ink-400)">${isOpen?(dl?'مفتوح — يُغلَق تلقائيًا '+dl.toLocaleString('ar-SA'):'مفتوح حتى تغلقه يدويًا'):'مغلق'}${cap!=null&&approved>=cap?' • اكتمل العدد':''}</span>
     </div>
@@ -5755,7 +5756,7 @@ async function renderGuestsAdminBox(){
   let tmr; by('gstSearch').addEventListener('input', e=>{ GUESTS_UI.q=e.target.value; clearTimeout(tmr); tmr=setTimeout(async()=>{ await renderGuestsAdminBox(); const i=by('gstSearch'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } },350); });
   by('gstSave').addEventListener('click', async ()=>{
     const v=by('gstCap').value.trim(); const c = v===''?null:Math.max(0,parseInt(v)||0), d=by('gstDeadline').value;
-    const { error } = await sb.from('form_settings').update({ guests_capacity:c, guests_deadline_at: d?new Date(d).toISOString():null }).eq('id',1);
+    const { error } = await sb.from('form_settings').update({ guests_capacity:c, guests_deadline_at: d?new Date(d).toISOString():null, guests_auto_approve: by('gstAuto').checked }).eq('id',1);
     if(error) return showToast('تعذّر الحفظ: '+error.message); showToast('تم حفظ إعدادات التسجيل'); renderGuestsAdminBox();
   });
   by('gstToggle').addEventListener('click', async ()=>{ const { error } = await sb.from('form_settings').update({ guests_is_open: !isOpen }).eq('id',1); if(error) return showToast('تعذّر التحديث: '+error.message); renderGuestsAdminBox(); });

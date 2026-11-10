@@ -93,7 +93,7 @@ function renderForm(msg){
   card.innerHTML = `
     <div class="name" style="margin-bottom:4px">طلب حضور الحفل الختامي</div>
     ${INFO.details?`<div class="details">${esc(INFO.details)}</div>`:''}
-    <div class="proj" style="color:var(--gray);line-height:1.9">الرجاء التسجيل في حال رغبتكم بالحضور، وسيتم تأكيد حضوركم لاحقًا.</div>
+    <div class="proj" style="color:var(--gray);line-height:1.9">${INFO.auto_approve?'الرجاء التسجيل في حال رغبتكم بالحضور، ويتأكد حضوركم فور إرسال البيانات.':'الرجاء التسجيل في حال رغبتكم بالحضور، وسيتم تأكيد حضوركم لاحقًا.'}</div>
     <div class="lbl">الاسم الكامل <i>*</i></div><input class="f rt" id="gName" autocomplete="name">
     <div class="lbl">الجهة</div><input class="f rt" id="gOrg" autocomplete="organization">
     <div class="lbl">المسمى الوظيفي / الصفة</div><input class="f rt" id="gPos">
@@ -114,7 +114,7 @@ function renderForm(msg){
     const { data, error } = await SB.rpc('guest_register',{p_name:v('gName'),p_org:v('gOrg'),p_position:v('gPos'),p_phone:v('gPhone'),p_email:v('gEmail')});
     if(error||!data){ go.disabled=false; go.textContent='إرسال الطلب'; return renderFormKeep('تعذّر الإرسال: '+((error&&error.message)||'حاول مرة أخرى')); }
     if(!data.ok){ const m={closed:'انتهى التسجيل.',full:'اكتمل العدد.',name:'الاسم غير صحيح.',phone:'رقم الجوال غير صحيح.',email:'البريد غير صحيح.'}; go.disabled=false; go.textContent='إرسال الطلب'; if(data.reason==='closed'||data.reason==='full'){ INFO.is_open=data.reason!=='closed'; INFO.is_full=data.reason==='full'; return renderForm(); } return renderFormKeep(m[data.reason]||'تعذّر الإرسال.'); }
-    saveToken(data.token); await showStatus(data.existing);
+    saveToken(data.token); await showStatus();
   });
 }
 function renderFormKeep(msg){ const keep=['gName','gOrg','gPos','gPhone','gEmail'].map(i=>document.getElementById(i)&&document.getElementById(i).value); renderForm(msg); ['gName','gOrg','gPos','gPhone','gEmail'].forEach((i,k)=>{ const e=document.getElementById(i); if(e&&keep[k]) e.value=keep[k]; }); }
@@ -142,7 +142,7 @@ async function showStatus(justSent){
   const s = data.status;
   const T = {
     pending:  ['⏳','طلبك قيد المراجعة','تم استلام تسجيلكم، وسيتم تأكيد حضوركم لاحقًا. احتفظوا بالرابط أدناه للعودة إلى هذه الصفحة ومعرفة حالة التسجيل.','status'],
-    approved: ['✅','تم اعتماد حضوركم','يسرّنا حضوركم الحفل الختامي. نتطلع للقائكم.','status ok'],
+    approved: ['✅','تم تأكيد حضوركم','يسرّنا حضوركم الحفل الختامي. نتطلع للقائكم.','status ok'],
     rejected: ['ℹ️','تعذّر اعتماد الطلب','نشكر اهتمامكم. لم نتمكن من اعتماد طلب الحضور في هذه المرة. للاستفسار تواصلوا مع فريق البرنامج.','status no'],
     cancelled:['✕','تم إلغاء الطلب','تم إلغاء طلب حضوركم بناءً على رغبتكم. للاستفسار تواصلوا مع فريق البرنامج.','status'],
   }[s] || ['','',''];
