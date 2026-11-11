@@ -69,6 +69,7 @@ pre{white-space:pre-wrap;background:#fafbff;border:1px dashed var(--line);border
   <div id="prev"></div>
   <div class="bar">
     <button id="eml">تنزيل مسودات Outlook (.eml)</button>
+    <button id="xlsx" class="g">تنزيل ملف Excel لدمج Word</button>
     <button id="csv" class="g">تنزيل ملف للدمج (CSV)</button>
     <button id="copyAll" class="g">نسخ كل الرسائل</button>
   </div>
@@ -140,6 +141,14 @@ $('eml').addEventListener('click',async()=>{
   const blob=await zip.generateAsync({type:'blob'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='invitations-outlook-drafts.zip'; document.body.appendChild(a); a.click(); a.remove();
   toast('تم التنزيل — فك الضغط وافتح كل ملف في Outlook ثم اضغط إرسال');
+});
+$('xlsx').addEventListener('click',()=>{
+  if(!PEOPLE.length){ toast('أضف الأسماء أولًا'); return; }
+  if(typeof XLSX==='undefined' || !XLSX.utils){ toast('تعذّر تحميل مكتبة Excel — تحقق من الاتصال'); return; }
+  const link=$('link').value.trim();
+  const aoa=[['الاسم','البريد','الرابط','الموضوع']].concat(PEOPLE.map(p=>[($('title').value+p.name).trim(), p.email, link, $('subj').value]));
+  const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:34},{wch:32},{wch:50},{wch:60}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'المدعوون'); XLSX.writeFile(wb,'invitees-for-word-merge.xlsx');
 });
 $('csv').addEventListener('click',()=>{
   if(!PEOPLE.length) return;
