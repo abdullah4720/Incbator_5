@@ -5213,27 +5213,43 @@ async function openTeaserDetailModal(r){
   });
 }
 
-function exportTeaserTracker(rows){
+const TEASER_LINK_DAYS = 14;
+async function teaserLogoLinks(rows){
+  const list = rows.filter(r=> r.profile && r.profile.logo_path);
+  const out = {};
+  if(!list.length) return out;
+  try{
+    const { data, error } = await sb.storage.from('form-attachments').createSignedUrls(list.map(r=>r.profile.logo_path), TEASER_LINK_DAYS*86400);
+    if(error) throw error;
+    (data||[]).forEach((d,i)=>{ if(d && d.signedUrl) out[list[i].project_id] = d.signedUrl; });
+  }catch(e){ console.error('[الشعارات] تعذّر توليد الروابط', e); }
+  return out;
+}
+async function exportTeaserTracker(rows){
   if(typeof XLSX === 'undefined'){ showToast('تعذّر تحميل مكتبة التصدير'); return; }
-  const { wb, count } = buildTeaserWorkbook(rows);
+  const { wb, count } = buildTeaserWorkbook(rows, await teaserLogoLinks(rows));
   XLSX.writeFile(wb, `متابعة_استكمال_بيانات_دليل_المشاريع_${new Date().toISOString().slice(0,10)}.xlsx`);
   showToast(`تم تصدير ${count} مشروعًا`);
 }
-function buildTeaserWorkbook(rows){
+function buildTeaserWorkbook(rows, links, files){
+  links = links || {}; files = files || null;
   const stLabel = { complete:'مكتمل', partial:'قيد الاستكمال', none:'لم يبدأ' };
   const rank = { none:0, partial:1, complete:2 };
   const sorted = rows.slice().sort((a,b)=> a.domain.localeCompare(b.domain,'ar') || rank[a.status]-rank[b.status] || a.project_id.localeCompare(b.project_id,'ar',{numeric:true}));
-  const aoa = [['المجال','رقم المشروع','اسم المشروع','الحالة','النواقص','كلمات النبذة','شعار','بريد التواصل','موافقة النشر','عدد الأعضاء','اسم قائد الفريق','بريد قائد الفريق (للتذكير)','جوال قائد الفريق','نبذة المشروع','رابط المشروع','جوال التواصل']];
+  const aoa = [['المجال','رقم المشروع','اسم المشروع','الحالة','النواقص','كلمات النبذة','شعار',`رابط الشعار (صالح ${TEASER_LINK_DAYS} يومًا)`].concat(files?['ملف الشعار في ZIP']:[]).concat(['بريد التواصل','موافقة النشر','عدد الأعضاء','اسم قائد الفريق','بريد قائد الفريق (للتذكير)','جوال قائد الفريق','نبذة المشروع','رابط المشروع','جوال التواصل'])];
   const maxM = Math.max(1, ...sorted.map(r=>r.members.length));
   for(let i=1;i<=maxM;i++) aoa[0].push(`عضو ${i} - الاسم`, `عضو ${i} - الدور`, `عضو ${i} - الجوال`, `عضو ${i} - البريد`);
   sorted.forEach(r=>aoa.push([
     r.domain, r.project_id, r.project_name, stLabel[r.status], r.missing.join('، '), r.words,
-    r.profile && r.profile.logo_path ? 'نعم' : 'لا', r.profile ? (r.profile.contact_email||'') : '',
+    r.profile && r.profile.logo_path ? 'نعم' : 'لا',
+    links[r.project_id] ? { t:'s', v:'فتح الشعار', l:{ Target: links[r.project_id], Tooltip:'رابط مؤقت' } } : '',
+    ...(files ? [files[r.project_id]||''] : []),
+    r.profile ? (r.profile.contact_email||'') : '',
     r.profile && r.profile.consent_publish ? 'نعم' : 'لا', r.members.length, r.leader_name, r.leader_email, r.leader_phone,
     r.profile ? (r.profile.summary||'') : '', r.profile ? (r.profile.project_url||'') : '', r.profile ? (r.profile.contact_phone||'') : '',
   ].concat(Array.from({length:maxM}).flatMap((_,i)=>{ const m = r.members[i]; return m ? [m.full_name||'', m.is_leader?'قائد الفريق':(m.role_in_project||''), m.phone||'', m.email||''] : ['','','','']; }))));
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{wch:22},{wch:20},{wch:30},{wch:14},{wch:34},{wch:10},{wch:8},{wch:28},{wch:12},{wch:10},{wch:22},{wch:30},{wch:16},{wch:60},{wch:30},{wch:16}].concat(Array.from({length:maxM}).flatMap(()=>[{wch:24},{wch:20},{wch:15},{wch:28}]));
+  ws['!cols'] = [{wch:22},{wch:20},{wch:30},{wch:14},{wch:34},{wch:10},{wch:8},{wch:20}].concat(files?[{wch:26}]:[]).concat([{wch:28},{wch:12},{wch:10},{wch:22},{wch:30},{wch:16},{wch:60},{wch:30},{wch:16}]).concat(Array.from({length:maxM}).flatMap(()=>[{wch:24},{wch:20},{wch:15},{wch:28}]));
   ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:0,c:aoa[0].length-1} }) };
   ws['!views'] = [{ state:'frozen', ySplit:1 }];
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'متابعة الدليل');
@@ -5350,7 +5366,7 @@ async function exportTeaserLogos(rows){
     }
     if(batchCancelled){ showToast('تم إلغاء التصدير'); return; }
     zip.file('manifest.csv', '\uFEFF' + manifest.map(row=>row.map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`).join(',')).join('\n'));
-    if(typeof XLSX !== 'undefined'){ try{ zip.file('project-data.xlsx', XLSX.write(buildTeaserWorkbook(rows).wb, { type:'array', bookType:'xlsx' })); }catch(e){ console.error(e); } }
+    if(typeof XLSX !== 'undefined'){ try{ const fmap={}; manifest.slice(1).forEach(m=>{ fmap[m[0]]=m[3]; }); zip.file('project-data.xlsx', XLSX.write(buildTeaserWorkbook(rows, await teaserLogoLinks(rows), fmap).wb, { type:'array', bookType:'xlsx' })); }catch(e){ console.error(e); } }
     const out = await zip.generateAsync({ type:'blob', compression:'DEFLATE' });
     const url = URL.createObjectURL(out);
     const a = document.createElement('a'); a.href = url; a.download = `project-logos-${new Date().toISOString().slice(0,10)}.zip`;
