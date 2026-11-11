@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>إرسال دعوات الحفل الختامي</title>
+<style>
+:root{--navy:#0B0B3D;--gold:#C9A24B;--line:#dfe2ee;--bg:#f5f6fb;--ink:#1a1a2e;--mut:#6b7090}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Arabic','Cairo',Tahoma,sans-serif;line-height:1.8}
+header{background:var(--navy);color:#fff;padding:18px 20px;border-bottom:4px solid var(--gold)}
+header h1{margin:0;font-size:20px}header p{margin:2px 0 0;font-size:13px;color:#cfd2ee}
+main{max-width:980px;margin:0 auto;padding:18px 16px 60px;display:grid;gap:16px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px}
+h2{margin:0 0 10px;font-size:16px;color:var(--navy)}
+label{display:block;font-size:13px;font-weight:700;margin:10px 0 4px}
+input,textarea,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:14px;background:#fff}
+textarea{min-height:120px;resize:vertical}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:700px){.row{grid-template-columns:1fr}}
+.hint{font-size:12px;color:var(--mut);margin-top:4px}
+button,.btn{font:inherit;font-size:13px;font-weight:700;padding:9px 14px;border-radius:10px;border:1px solid var(--navy);background:var(--navy);color:#fff;cursor:pointer;text-decoration:none;display:inline-block}
+button.g,.btn.g{background:#fff;color:var(--navy)}
+button:disabled{opacity:.5;cursor:default}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;vertical-align:middle}
+th{background:#f0f1f9;color:var(--navy)}
+td.act{white-space:nowrap}td.act>*{margin-inline-start:4px}
+.ok{color:#1b7f4b;font-weight:700}.no{color:#b42318;font-weight:700}
+pre{white-space:pre-wrap;background:#fafbff;border:1px dashed var(--line);border-radius:10px;padding:12px;font:inherit;font-size:13.5px;margin:0}
+</style>
+</head>
+<body>
+<header><h1>إرسال دعوات الحفل الختامي</h1><p>رسالة رسمية باسم كل مدعو — تُجهَّز هنا وتُرسل من بريدك</p></header>
+<main>
+<section class="card">
+  <h2>١) قائمة المدعوين</h2>
+  <label>الصق القائمة، سطر لكل شخص: الاسم ثم البريد (اختياري) بفاصلة أو بنسخها مباشرة من Excel</label>
+  <textarea id="list" placeholder="محمد بن عبدالله العتيبي, mohammed@example.com&#10;أحمد السالم, ahmed@example.com"></textarea>
+  <div class="bar"><span class="hint">أو ارفع ملف Excel / CSV (العمود الأول الاسم، الثاني البريد):</span><input type="file" id="file" accept=".xlsx,.xls,.csv" style="width:auto"></div>
+</section>
+
+<section class="card">
+  <h2>٢) الرسالة</h2>
+  <div class="row">
+    <div><label>رابط التسجيل (رابط المدعوين من لوحة الإدارة)</label><input id="link" dir="ltr" placeholder="https://.../guests.html?c=invited"></div>
+    <div><label>اللقب قبل الاسم</label>
+      <select id="title"><option value="سعادة / ">سعادة /</option><option value="الأستاذ / ">الأستاذ /</option><option value="الدكتور / ">الدكتور /</option><option value="المهندس / ">المهندس /</option><option value="">بدون لقب</option></select></div>
+  </div>
+  <label>الموضوع</label><input id="subj" value="دعوة لحضور الحفل الختامي لحاضنة ابتكار — النسخة الخامسة">
+  <label>نص الرسالة (استخدم {الاسم} و{الرابط})</label>
+  <textarea id="body" style="min-height:260px">{الاسم} المحترم،
+
+السلام عليكم ورحمة الله وبركاته،
+
+يسعدنا ويشرفنا حضوركم للحفل الختامي لحاضنة ابتكار في نسختها الخامسة، وذلك يوم الخميس 19 نوفمبر 2026م، في قاعة كبار الشخصيات بمركز الرياض الدولي للمؤتمرات والمعارض بالرياض.
+
+نأمل التكرّم بتعبئة بيانات الحضور عبر الرابط التالي، ويُؤكَّد حضوركم مباشرةً عند التسجيل، علمًا بأن العدد محدود:
+{الرابط}
+
+مع خالص التقدير،
+مركز الابتكار والملكية الفكرية
+جامعة القصيم</textarea>
+</section>
+
+<section class="card">
+  <h2>٣) المعاينة والإرسال <span id="cnt" class="hint"></span></h2>
+  <div id="prev"></div>
+  <div class="bar">
+    <button id="csv" class="g">تنزيل ملف للدمج (CSV)</button>
+    <button id="copyAll" class="g">نسخ كل الرسائل</button>
+  </div>
+  <p class="hint">أزرار Gmail وOutlook تفتح مسودة جاهزة باسم الشخص ليتم إرسالها من بريدك. وللقوائم الكبيرة نزّل ملف الدمج واستخدمه مع إضافة دمج المراسلات (مثل YAMM على Gmail).</p>
+  <div id="tbl"></div>
+</section>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const $ = id=>document.getElementById(id);
+let PEOPLE = [];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function parseText(t){
+  return t.split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
+    const parts = l.split(/\t|,|،|;/).map(x=>x.trim()).filter(Boolean);
+    let name = '', email = '';
+    parts.forEach(p=>{ if(EMAIL_RE.test(p)) email = p; else if(!name) name = p; });
+    return { name, email };
+  }).filter(p=>p.name);
+}
+function compose(p){
+  const nm = ($('title').value + p.name).trim();
+  const link = $('link').value.trim() || '{الرابط}';
+  const body = $('body').value.replace(/\{الاسم\}/g, nm).replace(/\{الرابط\}/g, link);
+  const subj = $('subj').value.replace(/\{الاسم\}/g, nm);
+  return { subj, body };
+}
+function render(){
+  PEOPLE = parseText($('list').value);
+  $('cnt').textContent = PEOPLE.length ? `— ${PEOPLE.length} مدعوًا` : '';
+  if(!PEOPLE.length){ $('prev').innerHTML = '<p class="hint">أضف الأسماء لتظهر المعاينة.</p>'; $('tbl').innerHTML=''; return; }
+  const c = compose(PEOPLE[0]);
+  $('prev').innerHTML = `<div class="hint">معاينة أول رسالة:</div><pre>الموضوع: ${esc(c.subj)}\n\n${esc(c.body)}</pre>`;
+  $('tbl').innerHTML = `<table><thead><tr><th>#</th><th>الاسم</th><th>البريد</th><th></th></tr></thead><tbody>${PEOPLE.map((p,i)=>{
+    return `<tr><td>${i+1}</td><td>${esc(p.name)}</td><td dir="ltr" style="text-align:right">${p.email?esc(p.email):'<span class="no">بدون بريد</span>'}</td>
+    <td class="act"><a class="btn" data-g="${i}" target="_blank" rel="noopener">Gmail</a><a class="btn g" data-o="${i}" target="_blank" rel="noopener">Outlook</a><button class="g" data-c="${i}">نسخ</button></td></tr>`;}).join('')}</tbody></table>`;
+  $('tbl').querySelectorAll('[data-g]').forEach(a=>{ const i=+a.dataset.g,c=compose(PEOPLE[i]); a.href=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(PEOPLE[i].email)}&su=${encodeURIComponent(c.subj)}&body=${encodeURIComponent(c.body)}`; });
+  $('tbl').querySelectorAll('[data-o]').forEach(a=>{ const i=+a.dataset.o,c=compose(PEOPLE[i]); a.href=`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(PEOPLE[i].email)}&subject=${encodeURIComponent(c.subj)}&body=${encodeURIComponent(c.body)}`; });
+  $('tbl').querySelectorAll('[data-c]').forEach(b=>b.addEventListener('click',()=>{ const c=compose(PEOPLE[+b.dataset.c]); copy(c.subj+'\n\n'+c.body); b.textContent='تم ✓'; setTimeout(()=>b.textContent='نسخ',1200); }));
+}
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function copy(t){ if(navigator.clipboard) navigator.clipboard.writeText(t).catch(()=>fb(t)); else fb(t); }
+function fb(t){ const a=document.createElement('textarea'); a.value=t; document.body.appendChild(a); a.select(); try{document.execCommand('copy');}catch(e){} a.remove(); }
+['list','link','title','subj','body'].forEach(id=>$(id).addEventListener('input',render));
+$('copyAll').addEventListener('click',()=>{ copy(PEOPLE.map(p=>{const c=compose(p); return `إلى: ${p.name}${p.email?' <'+p.email+'>':''}\nالموضوع: ${c.subj}\n\n${c.body}`;}).join('\n\n————————\n\n')); });
+$('csv').addEventListener('click',()=>{
+  if(!PEOPLE.length) return;
+  const q=v=>`"${String(v).replace(/"/g,'""')}"`;
+  const rows=[['الاسم','البريد','الموضوع','الرسالة']].concat(PEOPLE.map(p=>{const c=compose(p); return [p.name,p.email,c.subj,c.body];}));
+  const blob=new Blob(['﻿'+rows.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='invitations-mailmerge.csv'; document.body.appendChild(a); a.click(); a.remove();
+});
+$('file').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+    const aoa=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''});
+    $('list').value=aoa.filter(r=>r.some(x=>String(x).trim())).map(r=>r.map(x=>String(x).trim()).filter(Boolean).join(', ')).join('\n');
+    render();
+  }catch(err){ alert('تعذّرت قراءة الملف'); }
+});
+render();
+</script>
+</body>
+</html>
