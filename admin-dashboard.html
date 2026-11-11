@@ -5111,6 +5111,7 @@ async function renderTeaserAdminBox(classified){
         <button class="btn btn-primary btn-sm" id="teaserPdfBtn">${icon('download',{size:13})} دليل المشاريع (PDF واحد)</button>
         <button class="btn btn-ghost btn-sm" id="teaserPptxBtn">${icon('download',{size:13})} دليل المشاريع (PowerPoint)</button>
         <button class="btn btn-ghost btn-sm" id="teaserZipBtn">${icon('download',{size:13})} PDF لكل مشروع (ZIP)</button>
+        <button class="btn btn-ghost btn-sm" id="teaserLogosBtn" title="الشعارات الأصلية بأعلى جودة، كل مشروع بملفه">${icon('download',{size:13})} الشعارات (ZIP — ${rows.filter(r=>r.profile&&r.profile.logo_path).length})</button>
       </div>
     </div>
 
@@ -5149,6 +5150,7 @@ async function renderTeaserAdminBox(classified){
   document.getElementById('teaserPdfBtn').addEventListener('click', ()=>runExportTeaserPdf(pick(), 'single'));
   document.getElementById('teaserPptxBtn').addEventListener('click', ()=>runExportTeaserPptx(pick()));
   document.getElementById('teaserZipBtn').addEventListener('click', ()=>runExportTeaserPdf(pick(), 'zip'));
+  document.getElementById('teaserLogosBtn').addEventListener('click', ()=>exportTeaserLogos(rows));
 }
 
 
@@ -5317,6 +5319,40 @@ async function teaserRenderToJpeg(el, host){
   const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
   host.removeChild(el);
   return canvas.toDataURL('image/jpeg', 0.92);
+}
+/* تنزيل شعارات مشاريع الدليل (الملفات الأصلية) في ZIP — الاسم: رقم المشروع_اسم المشروع.امتداد */
+async function exportTeaserLogos(rows){
+  if(typeof JSZip === 'undefined'){ showToast('تعذّر تحميل مكتبة الضغط (JSZip) — أعد تحميل الصفحة'); return; }
+  const list = rows.filter(r=> r.profile && r.profile.logo_path);
+  if(!list.length){ showToast('لم يرفع أي فريق شعارًا بعد'); return; }
+  showBatchProgressModal(list.length, 'جارٍ تجميع الشعارات…');
+  let done=0, failed=0;
+  try{
+    const zip = new JSZip();
+    const manifest = [['رقم المشروع','اسم المشروع','المجال','الملف داخل الأرشيف']];
+    for(const r of list){
+      if(batchCancelled) break;
+      try{
+        const { data: blob, error } = await sb.storage.from('form-attachments').download(r.profile.logo_path);
+        if(error) throw error;
+        const src = r.profile.logo_name || r.profile.logo_path;
+        const m = /\.([A-Za-z0-9]{2,5})$/.exec(src); const ext = m ? m[1].toLowerCase() : (blob.type.split('/')[1]||'png').replace('svg+xml','svg');
+        const safe = String(r.project_name||'').replace(/[\\/:*?"<>|]+/g,' ').trim().slice(0,60);
+        const file = `${r.project_id}${safe?'_'+safe:''}.${ext}`;
+        zip.file(file, blob);
+        manifest.push([r.project_id, r.project_name, r.domain, file]);
+      }catch(e){ failed++; console.error('[الشعارات] تعذّر تنزيل', r.project_id, e); }
+      done++; updateBatchProgress(done, list.length, failed);
+    }
+    if(batchCancelled){ showToast('تم إلغاء التصدير'); return; }
+    zip.file('manifest.csv', '\uFEFF' + manifest.map(row=>row.map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`).join(',')).join('\n'));
+    const out = await zip.generateAsync({ type:'blob', compression:'DEFLATE' });
+    const url = URL.createObjectURL(out);
+    const a = document.createElement('a'); a.href = url; a.download = `project-logos-${new Date().toISOString().slice(0,10)}.zip`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    showToast(`تم تنزيل ${list.length-failed} شعارًا${failed?` — فشل ${failed}`:''}`);
+  }catch(e){ console.error(e); showToast('تعذّر التنزيل: '+(e.message||'خطأ')); }
+  finally{ closeBatchProgressModal(); }
 }
 async function teaserLogoFor(r){
   if(!r.profile || !r.profile.logo_path) return null;
