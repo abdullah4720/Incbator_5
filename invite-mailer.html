@@ -71,7 +71,7 @@ pre{white-space:pre-wrap;background:#fafbff;border:1px dashed var(--line);border
     <button id="csv" class="g">تنزيل ملف للدمج (CSV)</button>
     <button id="copyAll" class="g">نسخ كل الرسائل</button>
   </div>
-  <p class="hint">أزرار Gmail وOutlook تفتح مسودة جاهزة باسم الشخص ليتم إرسالها من بريدك. وللقوائم الكبيرة نزّل ملف الدمج واستخدمه مع إضافة دمج المراسلات (مثل YAMM على Gmail).</p>
+  <p class="hint">زر Gmail يفتح مسودة جاهزة باسم الشخص. وفي Outlook استخدم «Outlook (التطبيق)» إن كان البرنامج مثبّتاً على جهازك، أو «Outlook (ويب)» وسيُنسخ النص تلقائياً لتلصقه إن لم يظهر. وللقوائم الكبيرة نزّل ملف الدمج واستخدمه مع إضافة دمج المراسلات (مثل YAMM على Gmail).</p>
   <div id="tbl"></div>
 </section>
 </main>
@@ -103,11 +103,15 @@ function render(){
   $('prev').innerHTML = `<div class="hint">معاينة أول رسالة:</div><pre>الموضوع: ${esc(c.subj)}\n\n${esc(c.body)}</pre>`;
   $('tbl').innerHTML = `<table><thead><tr><th>#</th><th>الاسم</th><th>البريد</th><th></th></tr></thead><tbody>${PEOPLE.map((p,i)=>{
     return `<tr><td>${i+1}</td><td>${esc(p.name)}</td><td dir="ltr" style="text-align:right">${p.email?esc(p.email):'<span class="no">بدون بريد</span>'}</td>
-    <td class="act"><a class="btn" data-g="${i}" target="_blank" rel="noopener">Gmail</a><a class="btn g" data-o="${i}" target="_blank" rel="noopener">Outlook</a><button class="g" data-c="${i}">نسخ</button></td></tr>`;}).join('')}</tbody></table>`;
+    <td class="act"><a class="btn" data-g="${i}" target="_blank" rel="noopener">Gmail</a><a class="btn g" data-m="${i}">Outlook (التطبيق)</a><a class="btn g" data-o="${i}" target="_blank" rel="noopener">Outlook (ويب)</a><button class="g" data-c="${i}">نسخ</button></td></tr>`;}).join('')}</tbody></table>`;
   $('tbl').querySelectorAll('[data-g]').forEach(a=>{ const i=+a.dataset.g,c=compose(PEOPLE[i]); a.href=`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(PEOPLE[i].email)}&su=${encodeURIComponent(c.subj)}&body=${encodeURIComponent(c.body)}`; });
-  $('tbl').querySelectorAll('[data-o]').forEach(a=>{ const i=+a.dataset.o,c=compose(PEOPLE[i]); a.href=`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(PEOPLE[i].email)}&subject=${encodeURIComponent(c.subj)}&body=${encodeURIComponent(c.body)}`; });
+  // تطبيق Outlook (mailto): فواصل الأسطر بصيغة CRLF حتى لا تُدمج الأسطر
+  $('tbl').querySelectorAll('[data-m]').forEach(a=>{ const i=+a.dataset.m,c=compose(PEOPLE[i]); a.href=`mailto:${PEOPLE[i].email}?subject=${encodeURIComponent(c.subj)}&body=${encodeURIComponent(c.body.replace(/\r?\n/g,'\r\n'))}`; });
+  // Outlook ويب: يتجاهل أحيانًا النص في الرابط، فتُنسخ الرسالة تلقائيًا لتلصقها (Ctrl+V)
+  $('tbl').querySelectorAll('[data-o]').forEach(a=>{ const i=+a.dataset.o,c=compose(PEOPLE[i]); a.href=`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(PEOPLE[i].email)}&subject=${encodeURIComponent(c.subj)}&body=${encodeURIComponent(c.body)}`; a.addEventListener('click',()=>{ copy(c.body); toast('تم نسخ نص الرسالة — إن لم يظهر في المسودة الصقه بـ Ctrl+V'); }); });
   $('tbl').querySelectorAll('[data-c]').forEach(b=>b.addEventListener('click',()=>{ const c=compose(PEOPLE[+b.dataset.c]); copy(c.subj+'\n\n'+c.body); b.textContent='تم ✓'; setTimeout(()=>b.textContent='نسخ',1200); }));
 }
+function toast(t){ let d=$('toast'); if(!d){ d=document.createElement('div'); d.id='toast'; d.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#0B0B3D;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:9'; document.body.appendChild(d); } d.textContent=t; d.style.display='block'; clearTimeout(d._t); d._t=setTimeout(()=>d.style.display='none',3500); }
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function copy(t){ if(navigator.clipboard) navigator.clipboard.writeText(t).catch(()=>fb(t)); else fb(t); }
 function fb(t){ const a=document.createElement('textarea'); a.value=t; document.body.appendChild(a); a.select(); try{document.execCommand('copy');}catch(e){} a.remove(); }
