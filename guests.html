@@ -57,7 +57,7 @@ input.f.rt{direction:rtl}.cap{margin-top:12px;font-size:12.5px;color:var(--gray)
 </div>
 <div class="hero">
   <div class="k">حاضنة ابتكار — النسخة الخامسة</div>
-  <h1 id="title">تسجيل حضور الحفل الختامي</h1>
+  <h1 id="title">الحفل الختامي</h1>
   <div class="d" id="date"></div>
 </div>
 <div class="card" id="card"><div class="hi">جارٍ التحميل…</div></div>
@@ -72,7 +72,7 @@ const card = document.getElementById('card');
 let INFO = null;
 const CAT = new URLSearchParams(location.search).get('c')==='invited' ? 'invited' : 'public';
 const fmtD = d=>{ const x=new Date(d); return x.toLocaleDateString('ar-SA')+' — '+x.toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}); };
-function setHero(info){ if(!info) return; if(info.title) document.getElementById('title').textContent = info.title; document.getElementById('date').textContent = info.date_text || ''; }
+function setHero(info){ if(!info) return; document.getElementById('date').textContent = info.date_text || ''; }
 const own = ()=>location.href.split('?')[0].split('#')[0] + '?t=' + TOKEN;
 function saveToken(t){ TOKEN=t; try{ localStorage.setItem(LS_KEY,t); }catch(e){} }
 
@@ -94,7 +94,7 @@ function renderForm(msg){
   card.innerHTML = `
     <div class="name" style="margin-bottom:4px">تسجيل الحضور</div>
     ${INFO.details?`<div class="details">${esc(INFO.details)}</div>`:''}
-    <div class="proj" style="color:var(--gray);line-height:1.9">يسعدنا حضوركم للحفل الختامي لحاضنة ابتكار في نسختها الخامسة، الرجاء تعبئة البيانات التالية.${INFO.auto_approve?' ويتأكد حضوركم فور إرسال البيانات'+(INFO.limited?'، علمًا بأن العدد محدود.':'.'):' وسيتم تأكيد حضوركم لاحقًا.'}</div>
+    <div class="proj" style="color:var(--gray);line-height:1.9">يسعدنا حضوركم، الرجاء تعبئة البيانات التالية.${INFO.auto_approve?' ويتأكد حضوركم فور إرسال البيانات'+(INFO.limited?'، علمًا بأن العدد محدود.':'.'):' وسيتم تأكيد حضوركم لاحقًا.'}</div>
     <div class="lbl">الاسم الكامل <i>*</i></div><input class="f rt" id="gName" autocomplete="name">
     <div class="lbl">الجهة</div><input class="f rt" id="gOrg" autocomplete="organization">
     <div class="lbl">المسمى الوظيفي / الصفة</div><input class="f rt" id="gPos">
