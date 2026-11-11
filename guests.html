@@ -14,7 +14,7 @@ body{margin:0;font-family:'IBM Plex Sans Arabic',sans-serif;background:#F4F4F9;c
 .hero{width:100%;background:linear-gradient(160deg,#12103C,#1A1852 60%,#2a1d5e);color:#fff;text-align:center;padding:34px 20px 70px;position:relative}
 .hero:before{content:"";position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,#C9A24B,#2C8C8B,#6B3FA0)}
 .hero .k{color:#E6C570;font-size:13px;font-family:'Cairo',sans-serif}
-.hero h1{font-family:'Cairo',sans-serif;font-size:26px;margin:8px 0 6px;line-height:1.5}
+.hero h1{text-wrap:balance;font-family:'Cairo',sans-serif;font-size:26px;margin:8px 0 6px;line-height:1.5}
 .hero .d{display:inline-block;margin-top:6px;background:rgba(255,255,255,.12);border:1px solid rgba(230,197,112,.5);padding:6px 16px;border-radius:999px;font-size:14px;color:#E6C570;font-weight:600}
 .card{width:calc(100% - 32px);max-width:560px;background:#fff;border:1px solid var(--line);border-radius:18px;margin:-44px 16px 24px;padding:26px 22px;position:relative;z-index:2;box-shadow:0 8px 28px rgba(18,16,60,.08)}
 .hi{font-size:13px;color:var(--gray)}
@@ -92,16 +92,16 @@ function renderForm(msg){
     document.getElementById('gLk').addEventListener('click', renderLookup); return;
   }
   card.innerHTML = `
-    <div class="name" style="margin-bottom:4px">${CAT==='invited'?'تأكيد حضور الحفل الختامي':'طلب حضور الحفل الختامي'}</div>
+    <div class="name" style="margin-bottom:4px">تسجيل الحضور</div>
     ${INFO.details?`<div class="details">${esc(INFO.details)}</div>`:''}
-    <div class="proj" style="color:var(--gray);line-height:1.9">${CAT==='invited'?'يسعدنا حضوركم للحفل الختامي لحاضنة ابتكار في نسختها الخامسة، الرجاء تعبئة البيانات التالية.':(INFO.auto_approve?'الرجاء التسجيل في حال رغبتكم بالحضور، ويتأكد حضوركم فور إرسال البيانات.':'الرجاء التسجيل في حال رغبتكم بالحضور، وسيتم تأكيد حضوركم لاحقًا.')}</div>
+    <div class="proj" style="color:var(--gray);line-height:1.9">يسعدنا حضوركم للحفل الختامي لحاضنة ابتكار في نسختها الخامسة، الرجاء تعبئة البيانات التالية.${INFO.auto_approve?' ويتأكد حضوركم فور إرسال البيانات'+(INFO.limited?'، علمًا بأن العدد محدود.':'.'):' وسيتم تأكيد حضوركم لاحقًا.'}</div>
     <div class="lbl">الاسم الكامل <i>*</i></div><input class="f rt" id="gName" autocomplete="name">
     <div class="lbl">الجهة</div><input class="f rt" id="gOrg" autocomplete="organization">
     <div class="lbl">المسمى الوظيفي / الصفة</div><input class="f rt" id="gPos">
     <div class="lbl">رقم الجوال <i>*</i></div><input class="f" id="gPhone" type="tel" inputmode="tel" placeholder="05xxxxxxxx" autocomplete="tel">
     <div class="lbl">البريد الإلكتروني <i>*</i></div><input class="f" id="gEmail" type="email" inputmode="email" placeholder="name@example.com" autocomplete="email">
     ${msg?`<div class="status no" style="margin:0 0 12px">${msg}</div>`:''}
-    <button class="go" id="gGo">إرسال الطلب</button>
+    <button class="go" id="gGo">${INFO.auto_approve?'تأكيد الحضور':'إرسال الطلب'}</button>
     ${INFO.deadline?`<div class="warn">⏰ آخر موعد للتسجيل: ${fmtD(INFO.deadline)}</div>`:''}
     <button class="lnk" id="gLk">لدي طلب سابق</button>`;
   document.getElementById('gLk').addEventListener('click', renderLookup);
@@ -113,8 +113,8 @@ function renderForm(msg){
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v('gEmail'))) return renderFormKeep('يُرجى إدخال بريد إلكتروني صحيح.');
     go.disabled=true; go.textContent='جارٍ الإرسال…';
     const { data, error } = await SB.rpc('guest_register',{p_name:v('gName'),p_org:v('gOrg'),p_position:v('gPos'),p_phone:v('gPhone'),p_email:v('gEmail'),p_cat:CAT});
-    if(error||!data){ go.disabled=false; go.textContent='إرسال الطلب'; return renderFormKeep('تعذّر الإرسال: '+((error&&error.message)||'حاول مرة أخرى')); }
-    if(!data.ok){ const m={closed:'انتهى التسجيل.',full:'اكتمل العدد.',name:'الاسم غير صحيح.',phone:'رقم الجوال غير صحيح.',email:'البريد غير صحيح.'}; go.disabled=false; go.textContent='إرسال الطلب'; if(data.reason==='closed'||data.reason==='full'){ INFO.is_open=data.reason!=='closed'; INFO.is_full=data.reason==='full'; return renderForm(); } return renderFormKeep(m[data.reason]||'تعذّر الإرسال.'); }
+    if(error||!data){ go.disabled=false; go.textContent=INFO.auto_approve?'تأكيد الحضور':'إرسال الطلب'; return renderFormKeep('تعذّر الإرسال: '+((error&&error.message)||'حاول مرة أخرى')); }
+    if(!data.ok){ const m={closed:'انتهى التسجيل.',full:'اكتمل العدد.',name:'الاسم غير صحيح.',phone:'رقم الجوال غير صحيح.',email:'البريد غير صحيح.'}; go.disabled=false; go.textContent=INFO.auto_approve?'تأكيد الحضور':'إرسال الطلب'; if(data.reason==='closed'||data.reason==='full'){ INFO.is_open=data.reason!=='closed'; INFO.is_full=data.reason==='full'; return renderForm(); } return renderFormKeep(m[data.reason]||'تعذّر الإرسال.'); }
     saveToken(data.token); await showStatus();
   });
 }
