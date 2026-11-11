@@ -5111,7 +5111,7 @@ async function renderTeaserAdminBox(classified){
         <button class="btn btn-primary btn-sm" id="teaserPdfBtn">${icon('download',{size:13})} دليل المشاريع (PDF واحد)</button>
         <button class="btn btn-ghost btn-sm" id="teaserPptxBtn">${icon('download',{size:13})} دليل المشاريع (PowerPoint)</button>
         <button class="btn btn-ghost btn-sm" id="teaserZipBtn">${icon('download',{size:13})} PDF لكل مشروع (ZIP)</button>
-        <button class="btn btn-ghost btn-sm" id="teaserLogosBtn" title="الشعارات الأصلية بأعلى جودة، كل مشروع بملفه">${icon('download',{size:13})} الشعارات (ZIP — ${rows.filter(r=>r.profile&&r.profile.logo_path).length})</button>
+        <button class="btn btn-ghost btn-sm" id="teaserLogosBtn" title="الشعارات الأصلية بأعلى جودة + ملف Excel بكامل بيانات المشاريع (النبذة، التواصل، الأعضاء)">${icon('download',{size:13})} الشعارات + البيانات (ZIP — ${rows.filter(r=>r.profile&&r.profile.logo_path).length})</button>
       </div>
     </div>
 
@@ -5215,6 +5215,11 @@ async function openTeaserDetailModal(r){
 
 function exportTeaserTracker(rows){
   if(typeof XLSX === 'undefined'){ showToast('تعذّر تحميل مكتبة التصدير'); return; }
+  const { wb, count } = buildTeaserWorkbook(rows);
+  XLSX.writeFile(wb, `متابعة_استكمال_بيانات_دليل_المشاريع_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast(`تم تصدير ${count} مشروعًا`);
+}
+function buildTeaserWorkbook(rows){
   const stLabel = { complete:'مكتمل', partial:'قيد الاستكمال', none:'لم يبدأ' };
   const rank = { none:0, partial:1, complete:2 };
   const sorted = rows.slice().sort((a,b)=> a.domain.localeCompare(b.domain,'ar') || rank[a.status]-rank[b.status] || a.project_id.localeCompare(b.project_id,'ar',{numeric:true}));
@@ -5239,8 +5244,7 @@ function exportTeaserTracker(rows){
   ws2['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:0,c:maoa[0].length-1} }) };
   ws2['!views'] = [{ state:'frozen', ySplit:1 }];
   XLSX.utils.book_append_sheet(wb, ws2, 'أعضاء الفريق');
-  XLSX.writeFile(wb, `متابعة_استكمال_بيانات_دليل_المشاريع_${new Date().toISOString().slice(0,10)}.xlsx`);
-  showToast(`تم تصدير ${sorted.length} مشروعًا`);
+  return { wb, count: sorted.length };
 }
 
 /* ---------------- صفحات PDF ---------------- */
@@ -5346,6 +5350,7 @@ async function exportTeaserLogos(rows){
     }
     if(batchCancelled){ showToast('تم إلغاء التصدير'); return; }
     zip.file('manifest.csv', '\uFEFF' + manifest.map(row=>row.map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`).join(',')).join('\n'));
+    if(typeof XLSX !== 'undefined'){ try{ zip.file('project-data.xlsx', XLSX.write(buildTeaserWorkbook(rows).wb, { type:'array', bookType:'xlsx' })); }catch(e){ console.error(e); } }
     const out = await zip.generateAsync({ type:'blob', compression:'DEFLATE' });
     const url = URL.createObjectURL(out);
     const a = document.createElement('a'); a.href = url; a.download = `project-logos-${new Date().toISOString().slice(0,10)}.zip`;
