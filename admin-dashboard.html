@@ -5225,9 +5225,33 @@ async function teaserLogoLinks(rows){
   }catch(e){ console.error('[الشعارات] تعذّر توليد الروابط', e); }
   return out;
 }
+/* ورقة «إجابات النموذج الكاملة»: كل إجابات نموذج التحقق لكل مشروع (قسم / سؤال / إجابة) */
+async function teaserAddAnswersSheet(wb, rows){
+  try{
+    const ids = rows.map(r=>r.form_id);
+    const res = await Promise.all(chunkArr(ids, 80).map(c=>sb.from('form_answers').select('form_id, field_key, value_text, value_json').in('form_id', c)));
+    const by = {};
+    res.forEach(x=>{ if(x.error) throw x.error; (x.data||[]).forEach(a=>{ (by[a.form_id]=by[a.form_id]||{})[a.field_key] = (a.value_text!==null && a.value_text!=='') ? a.value_text : a.value_json; }); });
+    const aoa = [['المجال','رقم المشروع','اسم المشروع','القسم','السؤال','الإجابة']];
+    rows.forEach(r=>{
+      const av = by[r.form_id] || {};
+      (sections||[]).forEach(sec=>sec.questions.forEach(q=>{
+        let v = av[q.id]; if(v===null || v===undefined || v==='') return;
+        if(Array.isArray(v)) v = v.join('، '); else if(typeof v==='object') v = JSON.stringify(v);
+        aoa.push([r.domain, r.project_id, r.project_name, sec.title, q.label, String(v)]);
+      }));
+    });
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{wch:22},{wch:20},{wch:30},{wch:24},{wch:46},{wch:70}];
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:0,c:5} }) };
+    ws['!views'] = [{ state:'frozen', ySplit:1 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'إجابات النموذج الكاملة');
+  }catch(e){ console.error('[الدليل] تعذّر إضافة إجابات النموذج', e); showToast('تعذّر إضافة إجابات النموذج الكاملة: '+(e.message||'')); }
+}
 async function exportTeaserTracker(rows){
   if(typeof XLSX === 'undefined'){ showToast('تعذّر تحميل مكتبة التصدير'); return; }
   const { wb, count } = buildTeaserWorkbook(rows, await teaserLogoLinks(rows));
+  await teaserAddAnswersSheet(wb, rows);
   XLSX.writeFile(wb, `متابعة_استكمال_بيانات_دليل_المشاريع_${new Date().toISOString().slice(0,10)}.xlsx`);
   showToast(`تم تصدير ${count} مشروعًا`);
 }
@@ -5366,7 +5390,7 @@ async function exportTeaserLogos(rows){
     }
     if(batchCancelled){ showToast('تم إلغاء التصدير'); return; }
     zip.file('manifest.csv', '\uFEFF' + manifest.map(row=>row.map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`).join(',')).join('\n'));
-    if(typeof XLSX !== 'undefined'){ try{ const fmap={}; manifest.slice(1).forEach(m=>{ fmap[m[0]]=m[3]; }); zip.file('project-data.xlsx', XLSX.write(buildTeaserWorkbook(rows, await teaserLogoLinks(rows), fmap).wb, { type:'array', bookType:'xlsx' })); }catch(e){ console.error(e); } }
+    if(typeof XLSX !== 'undefined'){ try{ const fmap={}; manifest.slice(1).forEach(m=>{ fmap[m[0]]=m[3]; }); const bw = buildTeaserWorkbook(rows, await teaserLogoLinks(rows), fmap); await teaserAddAnswersSheet(bw.wb, rows); zip.file('project-data.xlsx', XLSX.write(bw.wb, { type:'array', bookType:'xlsx' })); }catch(e){ console.error(e); } }
     const out = await zip.generateAsync({ type:'blob', compression:'DEFLATE' });
     const url = URL.createObjectURL(out);
     const a = document.createElement('a'); a.href = url; a.download = `project-logos-${new Date().toISOString().slice(0,10)}.zip`;
