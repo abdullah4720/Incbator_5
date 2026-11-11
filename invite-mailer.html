@@ -68,13 +68,16 @@ pre{white-space:pre-wrap;background:#fafbff;border:1px dashed var(--line);border
   <h2>٣) المعاينة والإرسال <span id="cnt" class="hint"></span></h2>
   <div id="prev"></div>
   <div class="bar">
+    <button id="eml">تنزيل مسودات Outlook (.eml)</button>
     <button id="csv" class="g">تنزيل ملف للدمج (CSV)</button>
     <button id="copyAll" class="g">نسخ كل الرسائل</button>
   </div>
   <p class="hint">زر Gmail يفتح مسودة جاهزة باسم الشخص. وفي Outlook استخدم «Outlook (التطبيق)» إن كان البرنامج مثبّتاً على جهازك، أو «Outlook (ويب)» وسيُنسخ النص تلقائياً لتلصقه إن لم يظهر. وللقوائم الكبيرة نزّل ملف الدمج واستخدمه مع إضافة دمج المراسلات (مثل YAMM على Gmail).</p>
+  <p class="hint"><b>الأسهل لـ Outlook على ويندوز:</b> زر «تنزيل مسودات Outlook (.eml)» ينتج ملفاً لكل مدعو، تفتحه بنقرتين فتظهر الرسالة كاملة باسمه وبريده، فتضغط «إرسال».</p>
   <div id="tbl"></div>
 </section>
 </main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const $ = id=>document.getElementById(id);
@@ -117,6 +120,27 @@ function copy(t){ if(navigator.clipboard) navigator.clipboard.writeText(t).catch
 function fb(t){ const a=document.createElement('textarea'); a.value=t; document.body.appendChild(a); a.select(); try{document.execCommand('copy');}catch(e){} a.remove(); }
 ['list','link','title','subj','body'].forEach(id=>$(id).addEventListener('input',render));
 $('copyAll').addEventListener('click',()=>{ copy(PEOPLE.map(p=>{const c=compose(p); return `إلى: ${p.name}${p.email?' <'+p.email+'>':''}\nالموضوع: ${c.subj}\n\n${c.body}`;}).join('\n\n————————\n\n')); });
+/* مسودات .eml: تفتح في Outlook (ويندوز) كرسالة جاهزة غير مرسلة (X-Unsent) باسم كل مدعو، واتجاه عربي RTL */
+function b64(str){ const u=new TextEncoder().encode(str); let bin=''; u.forEach(b=>bin+=String.fromCharCode(b)); return btoa(bin); }
+function wrap76(x){ return x.replace(/(.{76})/g,'$1\r\n'); }
+function toHtml(body){
+  const e = esc(body).replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1">$1</a>').replace(/\r?\n/g,'<br>');
+  return `<html dir="rtl" lang="ar"><body dir="rtl" style="font-family:Tahoma,Arial,sans-serif;font-size:14pt;line-height:1.8;direction:rtl;text-align:right">${e}</body></html>`;
+}
+function buildEml(p){
+  const c = compose(p);
+  return ['X-Unsent: 1', 'To: '+(p.email||''), 'Subject: =?UTF-8?B?'+b64(c.subj)+'?=', 'MIME-Version: 1.0',
+    'Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', wrap76(b64(toHtml(c.body))), ''].join('\r\n');
+}
+$('eml').addEventListener('click',async()=>{
+  if(!PEOPLE.length){ toast('أضف الأسماء أولًا'); return; }
+  if(typeof JSZip==='undefined'){ toast('تعذّر تحميل مكتبة الضغط — تحقق من الاتصال'); return; }
+  const zip=new JSZip();
+  PEOPLE.forEach((p,i)=>{ const nm=p.name.replace(/[\\/:*?"<>|]+/g,' ').trim().slice(0,50); zip.file(String(i+1).padStart(3,'0')+'_'+nm+'.eml', buildEml(p)); });
+  const blob=await zip.generateAsync({type:'blob'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='invitations-outlook-drafts.zip'; document.body.appendChild(a); a.click(); a.remove();
+  toast('تم التنزيل — فك الضغط وافتح كل ملف في Outlook ثم اضغط إرسال');
+});
 $('csv').addEventListener('click',()=>{
   if(!PEOPLE.length) return;
   const q=v=>`"${String(v).replace(/"/g,'""')}"`;
