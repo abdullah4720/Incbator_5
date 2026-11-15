@@ -38,3 +38,40 @@ create policy "public read judged presentations"
         and teaser_is_eligible(jp.form_id)
     )
   );
+
+-- ===== شعار المشروع: رابط ثابت (logo.html?p=رقم_المشروع) =====
+create or replace function logo_info(p_project_id text)
+returns jsonb
+language sql stable security definer
+set search_path = public
+as $$
+  select coalesce(
+    (select jsonb_build_object('ok', true,
+              'project_id', vf.project_id,
+              'project_name', coalesce(nullif(btrim(tp.project_title),''), ep.project_name, vf.project_id),
+              'file_name', coalesce(tp.logo_name, 'logo'),
+              'storage_path', tp.logo_path)
+       from verification_forms vf
+       join teaser_profiles tp on tp.form_id = vf.id
+       left join eligible_projects ep on ep.project_id = vf.project_id
+      where vf.project_id = p_project_id
+        and tp.logo_path is not null
+        and teaser_is_eligible(vf.id)
+      limit 1),
+    jsonb_build_object('ok', false));
+$$;
+grant execute on function logo_info(text) to anon, authenticated;
+
+drop policy if exists "public read judged logos" on storage.objects;
+create policy "public read judged logos"
+  on storage.objects for select
+  to anon, authenticated
+  using (
+    bucket_id = 'form-attachments'
+    and (storage.foldername(name))[2] = 'teaser-logo'
+    and exists (
+      select 1 from teaser_profiles tp
+      where tp.logo_path = storage.objects.name
+        and teaser_is_eligible(tp.form_id)
+    )
+  );
