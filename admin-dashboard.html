@@ -5214,6 +5214,16 @@ async function openTeaserDetailModal(r){
 }
 
 const TEASER_LINK_DAYS = 14;
+/* ملفات العروض المرفوعة للتحكيم: project_id → اسم الملف */
+async function teaserPresMap(rows){
+  const out = {};
+  try{
+    const byForm = {}; rows.forEach(r=>{ byForm[r.form_id] = r.project_id; });
+    const res = await Promise.all(chunkArr(rows.map(r=>r.form_id), 80).map(c=>sb.from('judging_presentations').select('form_id, file_name').in('form_id', c)));
+    res.forEach(x=>{ if(x.error) throw x.error; (x.data||[]).forEach(d=>{ out[byForm[d.form_id]] = d.file_name || 'عرض'; }); });
+  }catch(e){ console.error('[العروض] تعذّر جلب ملفات العروض', e); }
+  return out;
+}
 async function teaserLogoLinks(rows){
   const list = rows.filter(r=> r.profile && r.profile.logo_path);
   const out = {};
@@ -5250,17 +5260,18 @@ async function teaserAddAnswersSheet(wb, rows){
 }
 async function exportTeaserTracker(rows){
   if(typeof XLSX === 'undefined'){ showToast('تعذّر تحميل مكتبة التصدير'); return; }
-  const { wb, count } = buildTeaserWorkbook(rows, await teaserLogoLinks(rows));
+  const { wb, count } = buildTeaserWorkbook(rows, await teaserLogoLinks(rows), null, await teaserPresMap(rows));
   await teaserAddAnswersSheet(wb, rows);
   XLSX.writeFile(wb, `متابعة_استكمال_بيانات_دليل_المشاريع_${new Date().toISOString().slice(0,10)}.xlsx`);
   showToast(`تم تصدير ${count} مشروعًا`);
 }
-function buildTeaserWorkbook(rows, links, files){
-  links = links || {}; files = files || null;
+function buildTeaserWorkbook(rows, links, files, pres){
+  links = links || {}; files = files || null; pres = pres || {};
+  const deckBase = location.origin + location.pathname.replace(/[^/]*$/,'') + 'deck.html?p=';
   const stLabel = { complete:'مكتمل', partial:'قيد الاستكمال', none:'لم يبدأ' };
   const rank = { none:0, partial:1, complete:2 };
   const sorted = rows.slice().sort((a,b)=> a.domain.localeCompare(b.domain,'ar') || rank[a.status]-rank[b.status] || a.project_id.localeCompare(b.project_id,'ar',{numeric:true}));
-  const aoa = [['المجال','رقم المشروع','اسم المشروع','الحالة','النواقص','كلمات النبذة','شعار',`رابط الشعار (صالح ${TEASER_LINK_DAYS} يومًا)`].concat(files?['ملف الشعار في ZIP']:[]).concat(['بريد التواصل','موافقة النشر','عدد الأعضاء','اسم قائد الفريق','بريد قائد الفريق (للتذكير)','جوال قائد الفريق','نبذة المشروع','رابط المشروع','جوال التواصل'])];
+  const aoa = [['المجال','رقم المشروع','اسم المشروع','الحالة','النواقص','كلمات النبذة','شعار',`رابط الشعار (صالح ${TEASER_LINK_DAYS} يومًا)`].concat(files?['ملف الشعار في ZIP']:[]).concat(['ملف العرض','رابط العرض (دائم)']).concat(['بريد التواصل','موافقة النشر','عدد الأعضاء','اسم قائد الفريق','بريد قائد الفريق (للتذكير)','جوال قائد الفريق','نبذة المشروع','رابط المشروع','جوال التواصل'])];
   const maxM = Math.max(1, ...sorted.map(r=>r.members.length));
   for(let i=1;i<=maxM;i++) aoa[0].push(`عضو ${i} - الاسم`, `عضو ${i} - الدور`, `عضو ${i} - الجوال`, `عضو ${i} - البريد`);
   sorted.forEach(r=>aoa.push([
@@ -5268,12 +5279,14 @@ function buildTeaserWorkbook(rows, links, files){
     r.profile && r.profile.logo_path ? 'نعم' : 'لا',
     links[r.project_id] ? { t:'s', v:'فتح الشعار', l:{ Target: links[r.project_id], Tooltip:'رابط مؤقت' } } : '',
     ...(files ? [files[r.project_id]||''] : []),
+    pres[r.project_id] ? pres[r.project_id] : 'لا يوجد',
+    pres[r.project_id] ? { t:'s', v:'فتح العرض', l:{ Target: deckBase + encodeURIComponent(r.project_id), Tooltip:'رابط دائم — صالح لرمز QR' } } : '',
     r.profile ? (r.profile.contact_email||'') : '',
     r.profile && r.profile.consent_publish ? 'نعم' : 'لا', r.members.length, r.leader_name, r.leader_email, r.leader_phone,
     r.profile ? (r.profile.summary||'') : '', r.profile ? (r.profile.project_url||'') : '', r.profile ? (r.profile.contact_phone||'') : '',
   ].concat(Array.from({length:maxM}).flatMap((_,i)=>{ const m = r.members[i]; return m ? [m.full_name||'', m.is_leader?'قائد الفريق':(m.role_in_project||''), m.phone||'', m.email||''] : ['','','','']; }))));
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{wch:22},{wch:20},{wch:30},{wch:14},{wch:34},{wch:10},{wch:8},{wch:20}].concat(files?[{wch:26}]:[]).concat([{wch:28},{wch:12},{wch:10},{wch:22},{wch:30},{wch:16},{wch:60},{wch:30},{wch:16}]).concat(Array.from({length:maxM}).flatMap(()=>[{wch:24},{wch:20},{wch:15},{wch:28}]));
+  ws['!cols'] = [{wch:22},{wch:20},{wch:30},{wch:14},{wch:34},{wch:10},{wch:8},{wch:20}].concat(files?[{wch:26}]:[]).concat([{wch:30},{wch:16}]).concat([{wch:28},{wch:12},{wch:10},{wch:22},{wch:30},{wch:16},{wch:60},{wch:30},{wch:16}]).concat(Array.from({length:maxM}).flatMap(()=>[{wch:24},{wch:20},{wch:15},{wch:28}]));
   ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:0,c:aoa[0].length-1} }) };
   ws['!views'] = [{ state:'frozen', ySplit:1 }];
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'متابعة الدليل');
@@ -5390,7 +5403,7 @@ async function exportTeaserLogos(rows){
     }
     if(batchCancelled){ showToast('تم إلغاء التصدير'); return; }
     zip.file('manifest.csv', '\uFEFF' + manifest.map(row=>row.map(v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`).join(',')).join('\n'));
-    if(typeof XLSX !== 'undefined'){ try{ const fmap={}; manifest.slice(1).forEach(m=>{ fmap[m[0]]=m[3]; }); const bw = buildTeaserWorkbook(rows, await teaserLogoLinks(rows), fmap); await teaserAddAnswersSheet(bw.wb, rows); zip.file('project-data.xlsx', XLSX.write(bw.wb, { type:'array', bookType:'xlsx' })); }catch(e){ console.error(e); } }
+    if(typeof XLSX !== 'undefined'){ try{ const fmap={}; manifest.slice(1).forEach(m=>{ fmap[m[0]]=m[3]; }); const bw = buildTeaserWorkbook(rows, await teaserLogoLinks(rows), fmap, await teaserPresMap(rows)); await teaserAddAnswersSheet(bw.wb, rows); zip.file('project-data.xlsx', XLSX.write(bw.wb, { type:'array', bookType:'xlsx' })); }catch(e){ console.error(e); } }
     const out = await zip.generateAsync({ type:'blob', compression:'DEFLATE' });
     const url = URL.createObjectURL(out);
     const a = document.createElement('a'); a.href = url; a.download = `project-logos-${new Date().toISOString().slice(0,10)}.zip`;
