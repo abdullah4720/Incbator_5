@@ -5277,16 +5277,16 @@ function buildTeaserWorkbook(rows, links, files, pres){
   sorted.forEach(r=>aoa.push([
     r.domain, r.project_id, r.project_name, stLabel[r.status], r.missing.join('، '), r.words,
     r.profile && r.profile.logo_path ? 'نعم' : 'لا',
-    r.profile && r.profile.logo_path ? { t:'s', v:'فتح الشعار', l:{ Target: deckBase.replace('deck.html','logo.html') + encodeURIComponent(r.project_id), Tooltip:'رابط دائم — صالح لرمز QR' } } : '',
+    r.profile && r.profile.logo_path ? deckBase.replace('deck.html','logo.html') + encodeURIComponent(r.project_id) : '',
     ...(files ? [files[r.project_id]||''] : []),
     pres[r.project_id] ? pres[r.project_id] : 'لا يوجد',
-    pres[r.project_id] ? { t:'s', v:'فتح العرض', l:{ Target: deckBase + encodeURIComponent(r.project_id), Tooltip:'رابط دائم — صالح لرمز QR' } } : '',
+    pres[r.project_id] ? deckBase + encodeURIComponent(r.project_id) : '',
     r.profile ? (r.profile.contact_email||'') : '',
     r.profile && r.profile.consent_publish ? 'نعم' : 'لا', r.members.length, r.leader_name, r.leader_email, r.leader_phone,
     r.profile ? (r.profile.summary||'') : '', r.profile ? (r.profile.project_url||'') : '', r.profile ? (r.profile.contact_phone||'') : '',
   ].concat(Array.from({length:maxM}).flatMap((_,i)=>{ const m = r.members[i]; return m ? [m.full_name||'', m.is_leader?'قائد الفريق':(m.role_in_project||''), m.phone||'', m.email||''] : ['','','','']; }))));
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{wch:22},{wch:20},{wch:30},{wch:14},{wch:34},{wch:10},{wch:8},{wch:20}].concat(files?[{wch:26}]:[]).concat([{wch:30},{wch:16}]).concat([{wch:28},{wch:12},{wch:10},{wch:22},{wch:30},{wch:16},{wch:60},{wch:30},{wch:16}]).concat(Array.from({length:maxM}).flatMap(()=>[{wch:24},{wch:20},{wch:15},{wch:28}]));
+  ws['!cols'] = [{wch:22},{wch:20},{wch:30},{wch:14},{wch:34},{wch:10},{wch:8},{wch:58}].concat(files?[{wch:26}]:[]).concat([{wch:30},{wch:58}]).concat([{wch:28},{wch:12},{wch:10},{wch:22},{wch:30},{wch:16},{wch:60},{wch:30},{wch:16}]).concat(Array.from({length:maxM}).flatMap(()=>[{wch:24},{wch:20},{wch:15},{wch:28}]));
   ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:0,c:aoa[0].length-1} }) };
   ws['!views'] = [{ state:'frozen', ySplit:1 }];
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'متابعة الدليل');
