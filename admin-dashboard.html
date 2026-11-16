@@ -5783,6 +5783,131 @@ const GUEST_CAT = { invited:'مدعو', public:'عامة' };
 const guestOwnLink = g => guestPublicLink() + '?t=' + g.token;
 let GUESTS_UI = { filter:'all', cat:'all', q:'' };
 
+/* ===== مقاعد الحفل: مخطط القاعة + التخصيص (add-ceremony-seats.sql) ===== */
+const SEAT_TIER_COL = { 'VIP':'#C9A24B', 'مشارك':'#1A1852', 'ضيف':'#2E8B8B', 'شريك':'#7B3FA0' };
+const seatTierColor = t=> SEAT_TIER_COL[t] || '#5B6B8C';
+const SEATS_UI = { sel:null, pick:null, move:false, q:'' };
+let SEATS_ST = null;
+function seatGeom(h){
+  const per = h.rows_per_block*h.seats_per_row, blocks = [];
+  for(let b=0;b<h.cols*h.block_rows;b++){
+    const rows=[]; for(let r=0;r<h.rows_per_block;r++){ const row=[]; for(let s=0;s<h.seats_per_row;s++) row.push(b*per+r*h.seats_per_row+s+1); rows.push(row); }
+    blocks.push({ idx:b, br:Math.floor(b/h.cols)+1, col:(b%h.cols)+1, from:b*per+1, to:(b+1)*per, rows });
+  }
+  return blocks;
+}
+function seatLocate(h, no){
+  const per=h.rows_per_block*h.seats_per_row, b=Math.floor((no-1)/per), within=(no-1)%per;
+  return { block:b+1, blockRow:Math.floor(b/h.cols)+1, row:Math.floor(within/h.seats_per_row)+1, pos:(within%h.seats_per_row)+1 };
+}
+async function renderSeatsAdminBox(){
+  const box = document.getElementById('seatsAdminBox'); if(!box) return;
+  if(!SEATS_ST) box.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  let d;
+  try{ const { data, error } = await sb.rpc('seats_state'); if(error) throw error; d = data; if(!d || !d.ok) throw new Error(d && d.reason || 'غير مصرّح'); }
+  catch(e){ console.error(e); box.innerHTML = `<div class="empty-hint">تعذّر تحميل المقاعد: ${escHtml(e.message||'')} — تأكد من تشغيل add-ceremony-seats.sql في Supabase</div>`; return; }
+  SEATS_ST = d;
+  const h = d.hall, geom = seatGeom(h), bySeat = {}; d.seats.forEach(s=>bySeat[s.seat_no]=s);
+  const blocked = new Set(h.blocked||[]), stale = new Set(d.stale||[]);
+  const q = SEATS_UI.q.trim().toLowerCase();
+  const un = d.unseated.filter(u=>!q || (u.name+' '+(u.org||'')+' '+u.tier).toLowerCase().includes(q));
+  const kpi=(n,l,c)=>`<div style="flex:1;min-width:110px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:${c}">${n}</div><div style="font-size:12px;color:var(--ink-400)">${l}</div></div>`;
+  const free = h.total - blocked.size - d.seats.length;
+  const sel = SEATS_UI.sel!=null ? bySeat[SEATS_UI.sel] : null;
+  const inp = (id,v,w)=>`<input type="number" min="1" id="${id}" value="${v}" style="width:${w||70}px;padding:7px 8px;border:1px solid var(--line);border-radius:8px">`;
+  const seatBtn = n=>{
+    if(blocked.has(n)) return `<span style="width:26px;height:26px;display:inline-block;border-radius:5px;background:repeating-linear-gradient(45deg,#e3e3ec,#e3e3ec 3px,#f4f4f8 3px,#f4f4f8 6px)" title="مقعد مستبعد ${n}"></span>`;
+    const s = bySeat[n], isSel = SEATS_UI.sel===n;
+    const bg = s ? seatTierColor(s.tier) : '#fff', col = s ? '#fff' : '#6B6B80';
+    const bd = isSel ? '2px solid #E53935' : stale.has(n) ? '2px dashed #E53935' : s&&s.locked ? '2px solid #0B0B3D' : '1px solid #C9CCE0';
+    return `<button data-seat="${n}" title="${n}${s?' — '+escHtml(s.name)+' ('+escHtml(s.tier)+')':' — شاغر'}" style="width:26px;height:26px;border-radius:5px;border:${bd};background:${bg};color:${col};font:700 9.5px Cairo,sans-serif;cursor:pointer;padding:0">${n}</button>`;
+  };
+  const mapHtml = `<div style="text-align:center;margin-bottom:10px"><div style="display:inline-block;width:60%;background:#12103C;color:#fff;border-radius:0 0 50% 50%/0 0 100% 100%;padding:6px 0 10px;font-size:12px;font-weight:700">المنصة</div></div>`
+    + Array.from({length:h.block_rows}).map((_,br)=>`<div style="display:grid;grid-template-columns:repeat(${h.cols},1fr);gap:14px;margin-bottom:16px">${geom.filter(b=>b.br===br+1).map(b=>`<div style="border-top:1px solid var(--line);padding-top:4px"><div style="font-size:11px;color:var(--ink-400);text-align:center;margin-bottom:4px">${b.from} – ${b.to}</div>${b.rows.map(r=>`<div style="display:flex;gap:3px;margin-bottom:3px;justify-content:center">${r.map(seatBtn).join('')}</div>`).join('')}</div>`).join('')}</div>`).join('');
+  const legend = Object.keys(SEAT_TIER_COL).map(t=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px"><i style="width:12px;height:12px;border-radius:3px;background:${SEAT_TIER_COL[t]};display:inline-block"></i>${t}</span>`).join('')
+    + `<span style="font-size:11.5px">🔒 مثبّت (إطار داكن)</span><span style="font-size:11.5px;color:#E53935">إطار أحمر منقّط = صاحبه ألغى حضوره</span>`;
+  const selPanel = sel ? `<div style="border:2px solid #E53935;border-radius:12px;padding:10px;margin-bottom:10px;background:#fff">
+      <div style="font-weight:800;font-size:13.5px">مقعد ${sel.seat_no} — ${escHtml(sel.name)}</div>
+      <div style="font-size:12px;color:var(--ink-400);margin-bottom:8px">${escHtml(sel.org||'')} • ${escHtml(sel.tier)}${sel.locked?' • 🔒 مثبّت':''}${stale.has(sel.seat_no)?' • <b style="color:#E53935">ألغى حضوره</b>':''}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <button class="btn ${SEATS_UI.move?'btn-primary':'btn-ghost'} btn-sm" id="stMove">${SEATS_UI.move?'اختر المقعد الجديد…':'نقل / تبديل'}</button>
+        <button class="btn btn-ghost btn-sm" id="stLock">${sel.locked?'إلغاء التثبيت':'تثبيت'}</button>
+        <button class="btn btn-ghost btn-sm" id="stFree">إخلاء المقعد</button>
+        <input id="stTier" value="${escHtml(sel.tier)}" style="width:90px;padding:6px 8px;border:1px solid var(--line);border-radius:8px" title="الفئة المعروضة على البطاقة"><button class="btn btn-ghost btn-sm" id="stTierSave">حفظ الفئة</button>
+      </div></div>` : `<div style="font-size:12px;color:var(--ink-400);margin-bottom:10px">اضغط مقعدًا لعرض صاحبه، أو اختر شخصًا من القائمة ثم اضغط مقعدًا شاغرًا.</div>`;
+  const pick = SEATS_UI.pick;
+  box.innerHTML = `<div class="card" style="padding:16px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      ${kpi(h.total-blocked.size,'إجمالي المقاعد','var(--navy-800)')}${kpi(d.seats.length,'مخصَّص','#1E7D4F')}${kpi(free,'شاغر','#6B3FA0')}${kpi(d.unseated.length,'مؤكَّد بلا مقعد','#B8860B')}${kpi((d.stale||[]).length,'ألغوا ومقاعدهم محجوزة','#B3261E')}
+    </div>
+    <div style="border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px;background:#FCFCFE">
+      <b style="font-size:13.5px">⚙️ مخطط القاعة</b>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12px;font-weight:700">
+        كتل بالصف ${inp('stCols',h.cols,60)} صفوف الكتل ${inp('stBR',h.block_rows,60)} صفوف داخل الكتلة ${inp('stRPB',h.rows_per_block,60)} مقاعد بالصف ${inp('stSPR',h.seats_per_row,60)}
+        <span style="color:var(--ink-400)">= ${h.total} مقعدًا</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12px;font-weight:700">
+        مقاعد مستبعدة (أرقام بفاصلة): <input id="stBlocked" value="${(h.blocked||[]).join(', ')}" style="width:160px;padding:7px 8px;border:1px solid var(--line);border-radius:8px" dir="ltr">
+        البوابة: <input id="stGate" value="${escHtml(h.gate||'')}" placeholder="مثال: 5" style="width:90px;padding:7px 8px;border:1px solid var(--line);border-radius:8px">
+        <button class="btn btn-primary btn-sm" id="stSaveHall">حفظ المخطط</button>
+      </div>
+      <div style="font-size:11.5px;color:var(--ink-400);margin-top:6px">الترقيم من الأمام (قرب المنصة) وبدءًا من اليمين. غيّر المخطط قبل التخصيص؛ تقليله قد يُخرج مقاعد مخصَّصة خارج القاعة.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <button class="btn btn-primary btn-sm" id="stAuto" title="يرتّب: VIP ثم الشركاء ثم المشاركون (كل مشروع معًا) ثم الضيوف، ويملأ من الأمام">⚡ تخصيص تلقائي للجميع</button>
+      <button class="btn btn-ghost btn-sm" id="stClear">مسح التخصيص (عدا المثبّت)</button>
+      <button class="btn btn-ghost btn-sm" id="stExport">تصدير Excel</button>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;cursor:pointer;margin-inline-start:auto" title="عند تفعيله يرى كل حاضر مقعده في صفحته"><input type="checkbox" id="stPub" ${h.published?'checked':''}> إظهار المقاعد للحضور</label>
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">
+      <div style="flex:2;min-width:340px;border:1px solid var(--line);border-radius:12px;padding:12px;background:#F6F7FB;overflow-x:auto">${mapHtml}<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px">${legend}</div></div>
+      <div style="flex:1;min-width:250px">
+        ${selPanel}
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><b style="font-size:13px">بلا مقعد (${d.unseated.length})</b><input id="stQ" value="${escHtml(SEATS_UI.q)}" placeholder="بحث" style="flex:1;padding:6px 8px;border:1px solid var(--line);border-radius:8px"></div>
+        <div style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff">${un.length?un.map(u=>`<div data-un="${u.kind}|${escHtml(u.ref)}" style="padding:7px 10px;border-bottom:1px solid var(--line);cursor:pointer;font-size:12.5px;${pick&&pick.kind===u.kind&&pick.ref===u.ref?'background:#FFF4D6;font-weight:800':''}"><i style="width:9px;height:9px;border-radius:50%;background:${seatTierColor(u.tier)};display:inline-block;margin-inline-end:6px"></i>${escHtml(u.name)}<div style="font-size:11px;color:var(--ink-400)">${escHtml(u.org||'')} • ${escHtml(u.tier)}</div></div>`).join(''):'<div class="empty-hint" style="padding:12px">لا أحد بلا مقعد</div>'}</div>
+        <details style="margin-top:10px"><summary style="cursor:pointer;font-size:12.5px;font-weight:700">+ إضافة شخص يدويًا (شريك / ضيف شرف)</summary>
+          <div style="display:grid;gap:6px;margin-top:8px"><input id="smName" placeholder="الاسم" style="padding:7px 8px;border:1px solid var(--line);border-radius:8px"><input id="smOrg" placeholder="الجهة" style="padding:7px 8px;border:1px solid var(--line);border-radius:8px"><input id="smTier" value="شريك" placeholder="الفئة" style="padding:7px 8px;border:1px solid var(--line);border-radius:8px"><button class="btn btn-primary btn-sm" id="smAdd">إضافة بأول مقعد شاغر</button></div>
+          <div style="font-size:11px;color:var(--ink-400);margin-top:4px">يُثبَّت مقعده تلقائيًا ويمكن نقله بعد إلغاء التثبيت.</div></details>
+      </div>
+    </div></div>`;
+  const by = id=>box.querySelector('#'+id);
+  const call = async (fn, args, okMsg)=>{ const { data, error } = await sb.rpc(fn, args); if(error){ showToast('تعذّر التنفيذ: '+error.message); return null; } if(data && data.ok===false){ const m={locked:'المقعد الحالي مثبّت',target_locked:'المقعد الهدف مثبّت',invalid_seat:'مقعد غير صالح',not_found:'لم يعد مؤكِّدًا للحضور',no_seat:'لا يوجد مقعد شاغر',name:'الاسم مطلوب'}; showToast(m[data.reason]||'تعذّر التنفيذ'); return null; } if(okMsg) showToast(okMsg); return data; };
+  box.querySelectorAll('[data-seat]').forEach(b=>b.addEventListener('click', async ()=>{
+    const n = parseInt(b.dataset.seat), s = bySeat[n];
+    if(SEATS_UI.pick){ if(s) { SEATS_UI.sel = n; return renderSeatsAdminBox(); } const p=SEATS_UI.pick; SEATS_UI.pick=null; if(await call('seat_assign',{p_kind:p.kind,p_ref:p.ref,p_seat:n},'تم التخصيص')) SEATS_UI.sel=n; return renderSeatsAdminBox(); }
+    if(SEATS_UI.move && sel && n!==sel.seat_no){ SEATS_UI.move=false; if(await call('seat_assign',{p_kind:sel.kind,p_ref:sel.ref,p_seat:n},'تم النقل')) SEATS_UI.sel=n; return renderSeatsAdminBox(); }
+    SEATS_UI.sel = n; SEATS_UI.move=false; renderSeatsAdminBox();
+  }));
+  box.querySelectorAll('[data-un]').forEach(r=>r.addEventListener('click', ()=>{ const [k,...rf]=r.dataset.un.split('|'); const ref=rf.join('|'); SEATS_UI.pick = (SEATS_UI.pick&&SEATS_UI.pick.kind===k&&SEATS_UI.pick.ref===ref) ? null : {kind:k,ref}; SEATS_UI.sel=null; SEATS_UI.move=false; renderSeatsAdminBox(); }));
+  let tq; by('stQ').addEventListener('input', e=>{ SEATS_UI.q=e.target.value; clearTimeout(tq); tq=setTimeout(async()=>{ await renderSeatsAdminBox(); const i=box.querySelector('#stQ'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } },300); });
+  if(by('stMove')) by('stMove').addEventListener('click', ()=>{ SEATS_UI.move=!SEATS_UI.move; renderSeatsAdminBox(); });
+  if(by('stLock')) by('stLock').addEventListener('click', async ()=>{ if(await call('seat_set_flags',{p_seat:sel.seat_no,p_locked:!sel.locked})) renderSeatsAdminBox(); });
+  if(by('stFree')) by('stFree').addEventListener('click', async ()=>{ if(sel.locked && !confirm('المقعد مثبّت — إخلاؤه؟')) return; if(await call('seat_free',{p_seat:sel.seat_no},'تم الإخلاء')){ SEATS_UI.sel=null; renderSeatsAdminBox(); } });
+  if(by('stTierSave')) by('stTierSave').addEventListener('click', async ()=>{ if(await call('seat_set_flags',{p_seat:sel.seat_no,p_tier:by('stTier').value},'تم حفظ الفئة')) renderSeatsAdminBox(); });
+  by('stAuto').addEventListener('click', async ()=>{ if(!confirm('تخصيص مقاعد لكل من أكّد حضوره ولم يُخصَّص له؟ (المخصَّص حاليًا لا يتغير، ويُخلى مقعد من ألغى حضوره)')) return; const r = await call('seats_autoassign',{}); if(r){ showToast(`خُصّص ${r.placed} • بلا مقعد ${r.unplaced} • أُخلي ${r.freed}`); renderSeatsAdminBox(); } });
+  by('stClear').addEventListener('click', async ()=>{ if(!confirm('مسح كل التخصيصات غير المثبّتة؟')) return; const r = await call('seats_clear',{p_keep_locked:true}); if(r){ showToast('تم مسح '+r.removed); SEATS_UI.sel=null; renderSeatsAdminBox(); } });
+  by('stPub').addEventListener('change', async e=>{ const { error } = await sb.from('form_settings').update({ seats_published: e.target.checked }).eq('id',1); if(error){ showToast('تعذّر الحفظ: '+error.message); e.target.checked=!e.target.checked; return; } showToast(e.target.checked?'أصبحت المقاعد ظاهرة للحضور':'أُخفيت المقاعد عن الحضور'); });
+  by('stSaveHall').addEventListener('click', async ()=>{
+    const g = id=>Math.max(1,parseInt(by(id).value)||1);
+    const blk = by('stBlocked').value.split(/[,،\s]+/).map(x=>parseInt(x)).filter(x=>x>0);
+    const nt = g('stCols')*g('stBR')*g('stRPB')*g('stSPR');
+    const out = d.seats.filter(s=>s.seat_no>nt).length;
+    if(out && !confirm(`${out} مقعدًا مخصَّصًا سيصبح خارج القاعة بعد التصغير. المتابعة؟ (يمكنك مسحها أو نقلها لاحقًا)`)) return;
+    const { error } = await sb.from('form_settings').update({ seats_cols:g('stCols'), seats_block_rows:g('stBR'), seats_rows_per_block:g('stRPB'), seats_per_row:g('stSPR'), seats_blocked:blk, seats_gate:by('stGate').value.trim()||null }).eq('id',1);
+    if(error) return showToast('تعذّر الحفظ: '+error.message); showToast('تم حفظ المخطط'); renderSeatsAdminBox();
+  });
+  by('smAdd').addEventListener('click', async ()=>{ if(await call('seat_add_manual',{p_name:by('smName').value,p_org:by('smOrg').value,p_tier:by('smTier').value},'تمت الإضافة')) renderSeatsAdminBox(); });
+  by('stExport').addEventListener('click', ()=>{
+    if(typeof XLSX==='undefined') return showToast('تعذّر تحميل مكتبة التصدير');
+    const kindL={guest:'مدعو/ضيف',member:'عضو فريق',manual:'يدوي'};
+    const aoa=[['رقم المقعد','الكتلة','صف الكتل','الصف','الاسم','الجهة / المشروع','الفئة','النوع','مثبّت','ملاحظة']];
+    d.seats.forEach(s=>{ const L=seatLocate(h,s.seat_no); aoa.push([s.seat_no,L.block,L.blockRow,L.row,s.name,s.org||'',s.tier,kindL[s.kind]||s.kind,s.locked?'نعم':'',stale.has(s.seat_no)?'ألغى حضوره':'']); });
+    d.unseated.forEach(u=>aoa.push(['','','','',u.name,u.org||'',u.tier,kindL[u.kind]||u.kind,'','بلا مقعد']));
+    const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:10},{wch:8},{wch:9},{wch:7},{wch:28},{wch:30},{wch:10},{wch:12},{wch:7},{wch:16}]; ws['!views']=[{rightToLeft:true,state:'frozen',ySplit:1}];
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'مقاعد الحفل'); XLSX.writeFile(wb,`مقاعد_الحفل_${new Date().toISOString().slice(0,10)}.xlsx`);
+  });
+}
+
 async function renderGuestsAdminBox(){
   const box = document.getElementById('guestsAdminBox'); if(!box) return;
   box.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
@@ -6539,6 +6664,8 @@ async function renderDataCenterTab(){
     <div id="partnersAdminBox" style="margin-bottom:20px"></div>
     <div class="ac-title" style="margin-bottom:10px">🎟️ مدعوو الحفل — تسجيل عام واعتماد</div>
     <div id="guestsAdminBox" style="margin-bottom:20px"></div>
+    <div class="ac-title" style="margin-bottom:10px">💺 مقاعد الحفل — تخصيص وإدارة</div>
+    <div id="seatsAdminBox" style="margin-bottom:20px"></div>
 
     <div class="ac-title" style="margin-bottom:10px">💾 نسخ احتياطية</div>
     <div class="card" style="margin-bottom:16px">
@@ -6588,6 +6715,7 @@ async function renderDataCenterTab(){
   renderCeremonyAdminBox();
   renderPartnersAdminBox();
   renderGuestsAdminBox();
+  renderSeatsAdminBox();
   document.getElementById('dcGotoRankingBtn').addEventListener('click', ()=>{ activeTab='judging'; judgingSubtab='ranking'; renderTabs(); renderAll(); });
   document.getElementById('dcGotoReportBtn').addEventListener('click', ()=>{ activeTab='report'; renderTabs(); renderAll(); });
   document.getElementById('quickBackupBtn').addEventListener('click', ()=>runBackup(false));
