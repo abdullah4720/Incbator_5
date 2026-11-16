@@ -5784,7 +5784,7 @@ const guestOwnLink = g => guestPublicLink() + '?t=' + g.token;
 let GUESTS_UI = { filter:'all', cat:'all', q:'' };
 
 /* ===== مقاعد الحفل: مخطط القاعة + التخصيص (add-ceremony-seats.sql) ===== */
-const SEAT_TIER_COL = { 'VIP':'#C9A24B', 'مشارك':'#1A1852', 'ضيف':'#2E8B8B', 'شريك':'#7B3FA0' };
+const SEAT_TIER_COL = { 'مكرَّم':'#B3261E', 'ممثل جهة':'#8E3B6E', 'VIP':'#C9A24B', 'شريك':'#7B3FA0', 'مشارك':'#1A1852', 'ضيف':'#2E8B8B' };
 const seatTierColor = t=> SEAT_TIER_COL[t] || '#5B6B8C';
 const SEATS_UI = { sel:null, pick:null, move:false, q:'' };
 let SEATS_ST = null;
@@ -5818,14 +5818,15 @@ async function renderSeatsAdminBox(){
   const seatBtn = n=>{
     if(blocked.has(n)) return `<span style="width:26px;height:26px;display:inline-block;border-radius:5px;background:repeating-linear-gradient(45deg,#e3e3ec,#e3e3ec 3px,#f4f4f8 3px,#f4f4f8 6px)" title="مقعد مستبعد ${n}"></span>`;
     const s = bySeat[n], isSel = SEATS_UI.sel===n;
-    const bg = s ? seatTierColor(s.tier) : '#fff', col = s ? '#fff' : '#6B6B80';
-    const bd = isSel ? '2px solid #E53935' : stale.has(n) ? '2px dashed #E53935' : s&&s.locked ? '2px solid #0B0B3D' : '1px solid #C9CCE0';
+    const res = n <= (h.reserved||0);
+    const bg = s ? seatTierColor(s.tier) : res ? '#FFF1C9' : '#fff', col = s ? '#fff' : '#6B6B80';
+    const bd = isSel ? '2px solid #E53935' : stale.has(n) ? '2px dashed #E53935' : s&&s.locked ? '2px solid #0B0B3D' : res ? '1px solid #C9A24B' : '1px solid #C9CCE0';
     return `<button data-seat="${n}" title="${n}${s?' — '+escHtml(s.name)+' ('+escHtml(s.tier)+')':' — شاغر'}" style="width:26px;height:26px;border-radius:5px;border:${bd};background:${bg};color:${col};font:700 9.5px Cairo,sans-serif;cursor:pointer;padding:0">${n}</button>`;
   };
   const mapHtml = `<div style="text-align:center;margin-bottom:10px"><div style="display:inline-block;width:60%;background:#12103C;color:#fff;border-radius:0 0 50% 50%/0 0 100% 100%;padding:6px 0 10px;font-size:12px;font-weight:700">المنصة</div></div>`
     + Array.from({length:h.block_rows}).map((_,br)=>`<div style="display:grid;grid-template-columns:repeat(${h.cols},1fr);gap:14px;margin-bottom:16px">${geom.filter(b=>b.br===br+1).map(b=>`<div style="border-top:1px solid var(--line);padding-top:4px"><div style="font-size:11px;color:var(--ink-400);text-align:center;margin-bottom:4px">${b.from} – ${b.to}</div>${b.rows.map(r=>`<div style="display:flex;gap:3px;margin-bottom:3px;justify-content:center">${r.map(seatBtn).join('')}</div>`).join('')}</div>`).join('')}</div>`).join('');
   const legend = Object.keys(SEAT_TIER_COL).map(t=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px"><i style="width:12px;height:12px;border-radius:3px;background:${SEAT_TIER_COL[t]};display:inline-block"></i>${t}</span>`).join('')
-    + `<span style="font-size:11.5px">🔒 مثبّت (إطار داكن)</span><span style="font-size:11.5px;color:#E53935">إطار أحمر منقّط = صاحبه ألغى حضوره</span>`;
+    + `<span style="font-size:11.5px"><i style="width:12px;height:12px;border-radius:3px;background:#FFF1C9;border:1px solid #C9A24B;display:inline-block"></i> محجوز للمكرَّمين وممثلي الجهات</span><span style="font-size:11.5px">🔒 مثبّت (إطار داكن)</span><span style="font-size:11.5px;color:#E53935">إطار أحمر منقّط = صاحبه ألغى حضوره</span>`;
   const selPanel = sel ? `<div style="border:2px solid #E53935;border-radius:12px;padding:10px;margin-bottom:10px;background:#fff">
       <div style="font-weight:800;font-size:13.5px">مقعد ${sel.seat_no} — ${escHtml(sel.name)}</div>
       <div style="font-size:12px;color:var(--ink-400);margin-bottom:8px">${escHtml(sel.org||'')} • ${escHtml(sel.tier)}${sel.locked?' • 🔒 مثبّت':''}${stale.has(sel.seat_no)?' • <b style="color:#E53935">ألغى حضوره</b>':''}</div>
@@ -5847,6 +5848,7 @@ async function renderSeatsAdminBox(){
         <span style="color:var(--ink-400)">= ${h.total} مقعدًا</span>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12px;font-weight:700">
+        <span title="المقاعد من 1 إلى هذا الرقم لا يشغلها في التخصيص التلقائي إلا «مكرَّم» و«ممثل جهة»">🏅 محجوزة للمكرَّمين وممثلي الجهات (أول): ${inp('stRes',h.reserved||0,60).replace('min="1"','min="0"')} مقعد</span>
         مقاعد مستبعدة (أرقام بفاصلة): <input id="stBlocked" value="${(h.blocked||[]).join(', ')}" style="width:160px;padding:7px 8px;border:1px solid var(--line);border-radius:8px" dir="ltr">
         البوابة: <input id="stGate" value="${escHtml(h.gate||'')}" placeholder="مثال: 5" style="width:90px;padding:7px 8px;border:1px solid var(--line);border-radius:8px">
         <button class="btn btn-primary btn-sm" id="stSaveHall">حفظ المخطط</button>
@@ -5854,7 +5856,7 @@ async function renderSeatsAdminBox(){
       <div style="font-size:11.5px;color:var(--ink-400);margin-top:6px">الترقيم من الأمام (قرب المنصة) وبدءًا من اليمين. غيّر المخطط قبل التخصيص؛ تقليله قد يُخرج مقاعد مخصَّصة خارج القاعة.</div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-      <button class="btn btn-primary btn-sm" id="stAuto" title="يرتّب: VIP ثم الشركاء ثم المشاركون (كل مشروع معًا) ثم الضيوف، ويملأ من الأمام">⚡ تخصيص تلقائي للجميع</button>
+      <button class="btn btn-primary btn-sm" id="stAuto" title="الترتيب: مكرَّم ← ممثل جهة ← VIP ← شريك ← مشارك (كل مشروع معًا) ← ضيف، ويملأ من الأمام. المقاعد المحجوزة للمكرَّمين وممثلي الجهات فقط">⚡ تخصيص تلقائي للجميع</button>
       <button class="btn btn-ghost btn-sm" id="stClear">مسح التخصيص (عدا المثبّت)</button>
       <button class="btn btn-ghost btn-sm" id="stExport">تصدير Excel</button>
       <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;cursor:pointer;margin-inline-start:auto" title="عند تفعيله يرى كل حاضر مقعده في صفحته"><input type="checkbox" id="stPub" ${h.published?'checked':''}> إظهار المقاعد للحضور</label>
@@ -5893,13 +5895,13 @@ async function renderSeatsAdminBox(){
     const nt = g('stCols')*g('stBR')*g('stRPB')*g('stSPR');
     const out = d.seats.filter(s=>s.seat_no>nt).length;
     if(out && !confirm(`${out} مقعدًا مخصَّصًا سيصبح خارج القاعة بعد التصغير. المتابعة؟ (يمكنك مسحها أو نقلها لاحقًا)`)) return;
-    const { error } = await sb.from('form_settings').update({ seats_cols:g('stCols'), seats_block_rows:g('stBR'), seats_rows_per_block:g('stRPB'), seats_per_row:g('stSPR'), seats_blocked:blk, seats_gate:by('stGate').value.trim()||null }).eq('id',1);
+    const { error } = await sb.from('form_settings').update({ seats_cols:g('stCols'), seats_block_rows:g('stBR'), seats_rows_per_block:g('stRPB'), seats_per_row:g('stSPR'), seats_blocked:blk, seats_reserved:Math.max(0,parseInt(by('stRes').value)||0), seats_gate:by('stGate').value.trim()||null }).eq('id',1);
     if(error) return showToast('تعذّر الحفظ: '+error.message); showToast('تم حفظ المخطط'); renderSeatsAdminBox();
   });
   by('smAdd').addEventListener('click', async ()=>{ if(await call('seat_add_manual',{p_name:by('smName').value,p_org:by('smOrg').value,p_tier:by('smTier').value},'تمت الإضافة')) renderSeatsAdminBox(); });
   by('stExport').addEventListener('click', ()=>{
     if(typeof XLSX==='undefined') return showToast('تعذّر تحميل مكتبة التصدير');
-    const kindL={guest:'مدعو/ضيف',member:'عضو فريق',manual:'يدوي'};
+    const kindL={guest:'مدعو/ضيف',member:'عضو فريق',manual:'يدوي',partner:'ممثل شريك'};
     const aoa=[['رقم المقعد','الكتلة','صف الكتل','الصف','الاسم','الجهة / المشروع','الفئة','النوع','مثبّت','ملاحظة']];
     d.seats.forEach(s=>{ const L=seatLocate(h,s.seat_no); aoa.push([s.seat_no,L.block,L.blockRow,L.row,s.name,s.org||'',s.tier,kindL[s.kind]||s.kind,s.locked?'نعم':'',stale.has(s.seat_no)?'ألغى حضوره':'']); });
     d.unseated.forEach(u=>aoa.push(['','','','',u.name,u.org||'',u.tier,kindL[u.kind]||u.kind,'','بلا مقعد']));

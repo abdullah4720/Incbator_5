@@ -9,6 +9,7 @@ alter table form_settings add column if not exists seats_per_row         int not
 alter table form_settings add column if not exists seats_blocked         int[] not null default '{}'; -- مقاعد مستبعدة (ممرات/صيانة)
 alter table form_settings add column if not exists seats_published       boolean not null default false; -- إظهار المقعد للحضور
 alter table form_settings add column if not exists seats_gate            text;                      -- رقم/اسم البوابة
+alter table form_settings add column if not exists seats_reserved        int not null default 0;    -- عدد المقاعد الأمامية (1..N) المحجوزة للمكرَّمين وممثلي الجهات
 
 -- 2) جدول التخصيص: مقعد واحد لكل شخص
 create table if not exists ceremony_seats (
@@ -22,6 +23,17 @@ create table if not exists ceremony_seats (
   assigned_at timestamptz not null default now(),
   unique (kind, ref)
 );
+alter table ceremony_seats drop constraint if exists ceremony_seats_kind_check;
+alter table ceremony_seats add constraint ceremony_seats_kind_check check (kind in ('guest','member','manual','partner'));
+-- فئة مثبّتة لشخص (تبقى عند إعادة التخصيص حتى لو غُيّرت يدويًا)
+create table if not exists ceremony_tier_override (
+  kind text not null, ref text not null, tier text not null,
+  primary key (kind, ref)
+);
+alter table ceremony_tier_override enable row level security;
+drop policy if exists "admin all ceremony tier override" on ceremony_tier_override;
+create policy "admin all ceremony tier override" on ceremony_tier_override for all to authenticated
+  using (is_admin_or_reviewer()) with check (is_admin_or_reviewer());
 alter table ceremony_seats enable row level security;
 drop policy if exists "admin all ceremony seats" on ceremony_seats;
 create policy "admin all ceremony seats" on ceremony_seats for all to authenticated
@@ -36,20 +48,46 @@ $$;
 -- كل من أكّد حضوره (ضيوف معتمدون + أعضاء فرق مؤكدون) — للاستخدام الداخلي فقط
 create or replace function seats_pool() returns table(kind text, ref text, name text, org text, tier text, sort_key text)
 language sql stable security definer set search_path = public as $$
-  select 'guest'::text, g.id::text, g.full_name, g.org,
-         case g.category when 'invited' then 'VIP' else 'ضيف' end,
-         to_char(g.created_at, 'YYYYMMDDHH24MISSUS')
-    from ceremony_guests g where g.status = 'approved'
-  union all
-  select 'member'::text, tm.id::text, tm.full_name,
-         coalesce(nullif(btrim(tp.project_title),''), ep.project_name, vf.project_id), 'مشارك',
-         coalesce(vf.project_id,'') || lpad(tm.id::text, 10, '0')
-    from ceremony_rsvp r
-    join team_members tm on tm.id = r.member_id
-    join verification_forms vf on vf.id = tm.form_id
-    left join eligible_projects ep on ep.project_id = vf.project_id
-    left join teaser_profiles tp on tp.form_id = vf.id
-   where r.status = 'attending';
+  with base as (
+    select 'guest'::text as kind, g.id::text as ref, g.full_name as name, g.org as org,
+           case g.category when 'invited' then 'VIP' else 'ضيف' end as tier,
+           to_char(g.created_at, 'YYYYMMDDHH24MISSUS') as sort_key
+      from ceremony_guests g where g.status = 'approved'
+    union all
+    select 'member', tm.id::text, tm.full_name,
+           coalesce(nullif(btrim(tp.project_title),''), ep.project_name, vf.project_id), 'مشارك',
+           coalesce(vf.project_id,'') || lpad(tm.id::text, 10, '0')
+      from ceremony_rsvp r
+      join team_members tm on tm.id = r.member_id
+      join verification_forms vf on vf.id = tm.form_id
+      left join eligible_projects ep on ep.project_id = vf.project_id
+      left join teaser_profiles tp on tp.form_id = vf.id
+     where r.status = 'attending'
+    union all
+    -- ممثل التكريم لكل شريك (من صفحة الشركاء)
+    select 'partner', p.id::text || ':h', btrim(p.data->'honoree'->>'name'), p.org_name, 'مكرَّم', p.org_name || '0'
+      from partners p
+     where (p.submitted_at is not null or p.is_locked)
+       and btrim(coalesce(p.data->'honoree'->>'name','')) <> ''
+    union all
+    -- ممثلو الجهة الحاضرون (باستثناء من يطابق ممثل التكريم بالاسم أو الجوال)
+    select 'partner', p.id::text || ':a' || (a.ord - 1), btrim(a.v->>'name'), p.org_name, 'ممثل جهة',
+           p.org_name || '1' || lpad(a.ord::text, 3, '0')
+      from partners p
+      cross join lateral jsonb_array_elements(coalesce(p.data->'attendees'->'list', '[]'::jsonb)) with ordinality as a(v, ord)
+     where (p.submitted_at is not null or p.is_locked)
+       and btrim(coalesce(a.v->>'name','')) <> ''
+       and a.ord <= case when coalesce(p.data->'attendees'->>'count','') ~ '^[0-9]+$' then (p.data->'attendees'->>'count')::int else 0 end
+       and not (
+         btrim(coalesce(p.data->'honoree'->>'name','')) <> '' and (
+           lower(btrim(a.v->>'name')) = lower(btrim(p.data->'honoree'->>'name'))
+           or (right(regexp_replace(coalesce(a.v->>'phone',''), '\D', '', 'g'), 9) <> ''
+               and right(regexp_replace(coalesce(a.v->>'phone',''), '\D', '', 'g'), 9) = right(regexp_replace(coalesce(p.data->'honoree'->>'phone',''), '\D', '', 'g'), 9))
+         )
+       )
+  )
+  select b.kind, b.ref, b.name, b.org, coalesce(o.tier, b.tier), b.sort_key
+    from base b left join ceremony_tier_override o on o.kind = b.kind and o.ref = b.ref;
 $$;
 revoke all on function seats_pool() from public, anon, authenticated;
 revoke all on function seats_total() from public, anon, authenticated;
@@ -63,29 +101,30 @@ begin
   select json_build_object(
     'ok', true,
     'hall', (select json_build_object('cols', seats_cols, 'block_rows', seats_block_rows, 'rows_per_block', seats_rows_per_block,
-                                      'seats_per_row', seats_per_row, 'blocked', seats_blocked, 'published', seats_published, 'gate', seats_gate,
+                                      'seats_per_row', seats_per_row, 'blocked', seats_blocked, 'published', seats_published, 'gate', seats_gate, 'reserved', seats_reserved,
                                       'total', seats_total()) from form_settings where id = 1),
     'seats', (select coalesce(json_agg(json_build_object('seat_no', seat_no, 'kind', kind, 'ref', ref, 'name', name, 'org', org, 'tier', tier, 'locked', locked) order by seat_no), '[]'::json) from ceremony_seats),
     'unseated', (select coalesce(json_agg(json_build_object('kind', p.kind, 'ref', p.ref, 'name', p.name, 'org', p.org, 'tier', p.tier) order by p.tier, p.sort_key), '[]'::json)
                    from seats_pool() p where not exists (select 1 from ceremony_seats s where s.kind = p.kind and s.ref = p.ref)),
     'stale', (select coalesce(json_agg(s.seat_no order by s.seat_no), '[]'::json) from ceremony_seats s
-               where s.kind in ('guest','member') and not exists (select 1 from seats_pool() p where p.kind = s.kind and p.ref = s.ref))
+               where s.kind in ('guest','member','partner') and not exists (select 1 from seats_pool() p where p.kind = s.kind and p.ref = s.ref))
   ) into v;
   return v;
 end $$;
 grant execute on function seats_state() to authenticated;
 
 -- 5) تخصيص تلقائي: يرتّب الفئات (VIP ثم المشاركون — مجمّعين حسب المشروع — ثم الضيوف) ويملأ المقاعد من الأمام
-create or replace function seats_autoassign(p_order text[] default array['VIP','شريك','مشارك','ضيف']) returns json
+drop function if exists seats_autoassign(text[]) cascade;
+create or replace function seats_autoassign(p_order text[] default array['مكرَّم','ممثل جهة','VIP','شريك','مشارك','ضيف'], p_priv text[] default array['مكرَّم','ممثل جهة']) returns json
 language plpgsql security definer set search_path = public as $$
-declare v_total int; v_blocked int[]; r record; v_seat int; v_placed int := 0; v_left int := 0; v_freed int;
+declare v_total int; v_blocked int[]; v_res int; r record; v_seat int; v_placed int := 0; v_left int := 0; v_freed int;
 begin
   if not is_admin_or_reviewer() then return json_build_object('ok', false, 'reason', 'forbidden'); end if;
   perform pg_advisory_xact_lock(7002);
-  select seats_total(), seats_blocked into v_total, v_blocked from form_settings where id = 1;
+  select seats_total(), seats_blocked, seats_reserved into v_total, v_blocked, v_res from form_settings where id = 1;
   -- إخلاء مقاعد من ألغوا/اعتذروا (غير المثبّتة)
   delete from ceremony_seats s
-   where s.kind in ('guest','member') and not s.locked
+   where s.kind in ('guest','member','partner') and not s.locked
      and not exists (select 1 from seats_pool() p where p.kind = s.kind and p.ref = s.ref);
   get diagnostics v_freed = row_count;
   for r in
@@ -93,7 +132,8 @@ begin
      where not exists (select 1 from ceremony_seats s where s.kind = p.kind and s.ref = p.ref)
      order by coalesce(array_position(p_order, p.tier), 99), p.sort_key
   loop
-    select min(n) into v_seat from generate_series(1, v_total) n
+    -- المقاعد الأمامية (1..المحجوز) لا يشغلها إلا المكرَّمون وممثلو الجهات
+    select min(n) into v_seat from generate_series(case when r.tier = any (p_priv) then 1 else v_res + 1 end, v_total) n
      where n <> all (v_blocked) and not exists (select 1 from ceremony_seats s where s.seat_no = n);
     if v_seat is null then v_left := v_left + 1; continue; end if;
     insert into ceremony_seats(seat_no, kind, ref, name, org, tier) values (v_seat, r.kind, r.ref, r.name, r.org, r.tier);
@@ -101,7 +141,7 @@ begin
   end loop;
   return json_build_object('ok', true, 'placed', v_placed, 'unplaced', v_left, 'freed', v_freed);
 end $$;
-grant execute on function seats_autoassign(text[]) to authenticated;
+grant execute on function seats_autoassign(text[], text[]) to authenticated;
 
 -- 6) نقل/تبديل يدوي: يضع الشخص في المقعد (إن كان المقعد مشغولًا بغير مثبّت يتبادلان)
 create or replace function seat_assign(p_kind text, p_ref text, p_seat int) returns json
@@ -149,6 +189,11 @@ language plpgsql security definer set search_path = public as $$
 begin
   if not is_admin_or_reviewer() then return json_build_object('ok', false, 'reason', 'forbidden'); end if;
   update ceremony_seats set locked = coalesce(p_locked, locked), tier = coalesce(nullif(btrim(p_tier),''), tier) where seat_no = p_seat;
+  if nullif(btrim(coalesce(p_tier,'')),'') is not null then
+    insert into ceremony_tier_override(kind, ref, tier)
+      select kind, ref, tier from ceremony_seats where seat_no = p_seat and kind <> 'manual'
+      on conflict (kind, ref) do update set tier = excluded.tier;
+  end if;
   return json_build_object('ok', true);
 end $$;
 grant execute on function seat_set_flags(int, boolean, text) to authenticated;
