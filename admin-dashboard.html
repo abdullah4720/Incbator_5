@@ -5902,12 +5902,12 @@ async function renderSeatsAdminBox(){
   by('smAdd').addEventListener('click', async ()=>{ if(await call('seat_add_manual',{p_name:by('smName').value,p_org:by('smOrg').value,p_tier:by('smTier').value},'تمت الإضافة')) renderSeatsAdminBox(); });
   by('stExport').addEventListener('click', async ()=>{
     if(typeof XLSX==='undefined') return showToast('تعذّر تحميل مكتبة التصدير');
-    const PI = await seatPeopleInfo(); const pos = x=>(PI[x.kind+'|'+x.ref]||{}).pos||'';
+    const PI = await seatPeopleInfo(); const pos = x=>(PI[x.kind+'|'+x.ref]||{}).pos||''; const ct = x=>{ const i=PI[x.kind+'|'+x.ref]||{}; return [i.phone||'',i.email||'']; };
     const kindL={guest:'مدعو/ضيف',member:'عضو فريق',manual:'يدوي',partner:'ممثل شريك'};
-    const aoa=[['رقم المقعد','الكتلة','صف الكتل','الصف','الاسم','الجهة / المشروع','الفئة','النوع','مثبّت','ملاحظة','المسمى الوظيفي / الصفة']];
-    d.seats.forEach(s=>{ const L=seatLocate(h,s.seat_no); aoa.push([s.seat_no,L.block,L.blockRow,L.row,s.name,s.org||'',s.tier,kindL[s.kind]||s.kind,s.locked?'نعم':'',stale.has(s.seat_no)?'ألغى حضوره':'',pos(s)]); });
-    d.unseated.forEach(u=>aoa.push(['','','','',u.name,u.org||'',u.tier,kindL[u.kind]||u.kind,'','بلا مقعد',pos(u)]));
-    const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:10},{wch:8},{wch:9},{wch:7},{wch:28},{wch:30},{wch:10},{wch:12},{wch:7},{wch:16},{wch:28}]; ws['!views']=[{rightToLeft:true,state:'frozen',ySplit:1}];
+    const aoa=[['رقم المقعد','الكتلة','صف الكتل','الصف','الاسم','الجهة / المشروع','الفئة','النوع','مثبّت','ملاحظة','المسمى الوظيفي / الصفة','الجوال','البريد الإلكتروني']];
+    d.seats.forEach(s=>{ const L=seatLocate(h,s.seat_no); aoa.push([s.seat_no,L.block,L.blockRow,L.row,s.name,s.org||'',s.tier,kindL[s.kind]||s.kind,s.locked?'نعم':'',stale.has(s.seat_no)?'ألغى حضوره':'',pos(s),...ct(s)]); });
+    d.unseated.forEach(u=>aoa.push(['','','','',u.name,u.org||'',u.tier,kindL[u.kind]||u.kind,'','بلا مقعد',pos(u),...ct(u)]));
+    const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:10},{wch:8},{wch:9},{wch:7},{wch:28},{wch:30},{wch:10},{wch:12},{wch:7},{wch:16},{wch:28},{wch:16},{wch:30}]; ws['!views']=[{rightToLeft:true,state:'frozen',ySplit:1}];
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'مقاعد الحفل'); XLSX.writeFile(wb,`مقاعد_الحفل_${new Date().toISOString().slice(0,10)}.xlsx`);
   });
 }
@@ -6063,10 +6063,11 @@ async function certPdfBlob(c){
 async function seatPeopleInfo(){
   const M = {};
   try{
-    const [pa, gu] = await Promise.all([ sb.from('partners').select('id, data'), sb.from('ceremony_guests').select('id, position, phone') ]);
-    (pa.data||[]).forEach(r=>{ const d = r.data||{}, f = p=>p?{ pos:(p.position||p.title||'').trim(), phone:p.phone||'' }:{ pos:'', phone:'' };
+    const [pa, gu, tm] = await Promise.all([ sb.from('partners').select('id, data'), sb.from('ceremony_guests').select('id, position, phone, email'), sb.from('team_members').select('id, role_in_project, phone, email') ]);
+    (pa.data||[]).forEach(r=>{ const d = r.data||{}, f = p=>p?{ pos:(p.position||p.title||'').trim(), phone:p.phone||'', email:p.email||'' }:{ pos:'', phone:'', email:'' };
       M['partner|'+r.id+':h'] = f(d.honoree); ((d.attendees&&d.attendees.list)||[]).forEach((a,i)=>{ M['partner|'+r.id+':a'+i] = f(a); }); });
-    (gu.data||[]).forEach(g=>{ M['guest|'+g.id] = { pos:(g.position||'').trim(), phone:g.phone||'' }; });
+    (gu.data||[]).forEach(g=>{ M['guest|'+g.id] = { pos:(g.position||'').trim(), phone:g.phone||'', email:g.email||'' }; });
+    (tm.data||[]).forEach(m=>{ M['member|'+m.id] = { pos:(m.role_in_project||'').trim(), phone:m.phone||'', email:m.email||'' }; });
   }catch(e){ console.error(e); }
   return M;
 }
@@ -6134,9 +6135,9 @@ async function renderAttendanceAdminBox(){
     if(typeof XLSX==='undefined') return showToast('تعذّر تحميل مكتبة التصدير');
     let partners = []; const PI = await seatPeopleInfo();
     try{ const { data } = await sb.rpc('seats_state'); if(data && data.ok){ partners = (data.seats||[]).filter(x=>x.kind==='partner').concat((data.unseated||[]).filter(x=>x.kind==='partner')); } }catch(e){ console.error(e); }
-    const aoa=[['رقم المشروع / الجهة','المشروع','الاسم','الدور','الجوال','أكّد مسبقًا','الحضور','وقت الحضور','رقم الشهادة','المقعد','المسمى الوظيفي / الصفة']].concat(all.map(x=>[x.t.project_id,x.t.project_name,x.m.full_name,x.m.is_leader?'قائد':'عضو',x.m.phone||'',x.m.rsvp?(x.m.rsvp.status==='attending'?'نعم':'اعتذر'):'لم يردّ',x.a?'حضر':'لم يحضر',x.a?new Date(x.a.checked_in_at).toLocaleString('ar-SA'):'',x.a?x.a.cert_code:'',seatMap[String(x.m.id)]||'',x.m.role_in_project||(x.m.is_leader?'قائد الفريق':'عضو فريق')]))
-      .concat(partners.map(x=>{ const i=PI['partner|'+x.ref]||{}; return ['',x.org||'',x.name,x.tier||'',i.phone||'', 'مدعو', '', '', '', x.seat_no||'', i.pos||'']; }));
-    const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[16,30,26,12,14,12,10,22,16,8,28].map(w=>({wch:w})); ws['!views']=[{rightToLeft:true,state:'frozen',ySplit:1}];
+    const aoa=[['رقم المشروع / الجهة','المشروع','الاسم','الدور','الجوال','أكّد مسبقًا','الحضور','وقت الحضور','رقم الشهادة','المقعد','المسمى الوظيفي / الصفة','البريد الإلكتروني']].concat(all.map(x=>[x.t.project_id,x.t.project_name,x.m.full_name,x.m.is_leader?'قائد':'عضو',x.m.phone||'',x.m.rsvp?(x.m.rsvp.status==='attending'?'نعم':'اعتذر'):'لم يردّ',x.a?'حضر':'لم يحضر',x.a?new Date(x.a.checked_in_at).toLocaleString('ar-SA'):'',x.a?x.a.cert_code:'',seatMap[String(x.m.id)]||'',x.m.role_in_project||(x.m.is_leader?'قائد الفريق':'عضو فريق'),x.m.email||'']))
+      .concat(partners.map(x=>{ const i=PI['partner|'+x.ref]||{}; return ['',x.org||'',x.name,x.tier||'',i.phone||'', 'مدعو', '', '', '', x.seat_no||'', i.pos||'', i.email||'']; }));
+    const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[16,30,26,12,14,12,10,22,16,8,28,30].map(w=>({wch:w})); ws['!views']=[{rightToLeft:true,state:'frozen',ySplit:1}];
     all.forEach((x,i)=>{ const c=ws['E'+(i+2)]; if(c){ c.t='s'; c.v=String(x.m.phone||''); } });
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'حضور الحفل'); XLSX.writeFile(wb,`حضور_الحفل_${new Date().toISOString().slice(0,10)}.xlsx`);
     if(partners.length) showToast(`تمت إضافة ${partners.length} من المكرَّمين وممثلي الجهات`);
