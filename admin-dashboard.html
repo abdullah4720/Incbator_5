@@ -6017,6 +6017,130 @@ async function renderNotifyAdminBox(){
   });
 }
 
+/* ===== شهادة المشاركة (مشتركة بين لوحة الإدارة وصفحة certificate.html) ===== */
+const CERT_DEF = { title:'شهادة مشاركة', body:'تشهد حاضنة ابتكار في نسختها الخامسة بأن\n{الاسم}\nقد شارك في الحفل الختامي ضمن فريق مشروع «{المشروع}»، وذلك يوم {التاريخ}، تقديرًا لجهوده ومشاركته الفاعلة في البرنامج.' };
+function certEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function certHtml(c){
+  const title = (c.title||'').trim() || CERT_DEF.title, body = (c.body||'').trim() || CERT_DEF.body;
+  const rep = t=>t.replace(/\{الاسم\}/g,c.name||'').replace(/\{المشروع\}/g,c.project||'').replace(/\{التاريخ\}/g,c.date_text||'');
+  const paras = body.split('\n').map(l=>l.trim()).filter(Boolean).map(l=> l==='{الاسم}'
+    ? `<div style="font-size:50px;font-weight:900;color:#B8860B;margin:10px 0 14px;line-height:1.4">${certEsc(c.name)}</div>`
+    : `<div style="font-size:23px;line-height:2;color:#2B2B45">${certEsc(rep(l))}</div>`).join('');
+  const sg = (c.signers||[]).filter(x=>x && (x.name||x.title)).slice(0,3);
+  const signers = sg.length ? `<div style="display:flex;justify-content:space-around;gap:30px;margin-top:26px">${sg.map(x=>`<div style="min-width:220px;text-align:center"><div style="height:46px"></div><div style="border-top:1.5px solid #12103C;padding-top:6px;font-weight:800;font-size:19px;color:#12103C">${certEsc(x.name)}</div><div style="font-size:15px;color:#555">${certEsc(x.title)}</div></div>`).join('')}</div>` : '';
+  return `<div style="width:1123px;height:794px;box-sizing:border-box;background:#fff;position:relative;font-family:'Cairo','IBM Plex Sans Arabic',Tahoma,sans-serif;direction:rtl;overflow:hidden">
+    <div style="position:absolute;inset:18px;border:6px solid #12103C"></div>
+    <div style="position:absolute;inset:30px;border:2px solid #C9A24B"></div>
+    <div style="position:absolute;top:0;left:0;right:0;height:10px;background:linear-gradient(90deg,#00BFA5 0 25%,#7AD03A 25% 50%,#F7B731 50% 75%,#7B3FA0 75%)"></div>
+    <div style="position:absolute;inset:48px 70px 70px;display:flex;flex-direction:column;align-items:center;text-align:center">
+      <div style="width:100%;display:flex;justify-content:space-between;align-items:center;height:78px"><img src="${SHOW_LOGO_INC}" style="height:70px;object-fit:contain"><img src="${SHOW_LOGO_QU}" style="height:70px;object-fit:contain"></div>
+      <div style="font-size:60px;font-weight:900;color:#12103C;margin-top:6px;line-height:1.3">${certEsc(title)}</div>
+      <div style="width:150px;height:3px;background:#C9A24B;margin:6px 0 14px"></div>
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:center;max-width:860px">${paras}</div>
+      ${signers}
+    </div>
+    <div style="position:absolute;bottom:42px;left:0;right:0;text-align:center;font-size:12.5px;color:#777;direction:ltr">${certEsc(c.code||'')}${c.verify?' &nbsp;•&nbsp; '+certEsc(c.verify):''}</div>
+  </div>`;
+}
+function certLoadScript(src){ return new Promise((res,rej)=>{ if(document.querySelector('script[data-src="'+src+'"]')) return res(); const s=document.createElement('script'); s.src=src; s.dataset.src=src; s.onload=res; s.onerror=()=>rej(new Error('تعذّر تحميل '+src)); document.head.appendChild(s); }); }
+async function certPdfBlob(c){
+  await certLoadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+  await certLoadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  if(document.fonts && document.fonts.ready) await document.fonts.ready;
+  const host = document.createElement('div'); host.style.cssText='position:fixed;left:-99999px;top:0;width:1123px;height:794px'; host.innerHTML = certHtml(c); document.body.appendChild(host);
+  try{
+    await Promise.all([...host.querySelectorAll('img')].map(i=>i.complete?1:new Promise(r=>{i.onload=i.onerror=r;})));
+    const cv = await html2canvas(host.firstElementChild, { scale:2, backgroundColor:'#ffffff', useCORS:true });
+    const { jsPDF } = window.jspdf; const pdf = new jsPDF({ orientation:'landscape', unit:'pt', format:'a4' });
+    pdf.addImage(cv.toDataURL('image/jpeg',0.93),'JPEG',0,0,pdf.internal.pageSize.getWidth(),pdf.internal.pageSize.getHeight());
+    return pdf.output('blob');
+  } finally { host.remove(); }
+}
+
+/* ===== تحضير المشاركين + الشهادات (add-ceremony-certificates.sql) ===== */
+const ATT_UI = { f:'all', q:'' };
+async function renderAttendanceAdminBox(){
+  const box = document.getElementById('attendAdminBox'); if(!box) return;
+  box.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  let teams, att, st, seatMap = {};
+  try{
+    const [t, a, s, sr] = await Promise.all([
+      fetchCeremonyData(),
+      sb.from('ceremony_attendance').select('member_id, checked_in_at, cert_code'),
+      sb.from('form_settings').select('cert_open, cert_title, cert_body, cert_signers, ceremony_date_text').eq('id',1).maybeSingle(),
+      sb.from('ceremony_seats').select('seat_no, ref').eq('kind','member'),
+    ]);
+    if(a.error) throw a.error; if(s.error) throw s.error;
+    teams = t.filter(x=>x.included); att = {}; (a.data||[]).forEach(r=>att[r.member_id]=r); st = s.data||{};
+    (sr.data||[]).forEach(r=>seatMap[r.ref]=r.seat_no);
+  }catch(e){ console.error(e); box.innerHTML = `<div class="empty-hint">تعذّر تحميل التحضير: ${escHtml(e.message||'')} — تأكد من تشغيل add-ceremony-certificates.sql في Supabase</div>`; return; }
+  const all = teams.flatMap(t=>t.members.map(m=>({ m, t, a:att[m.id]||null })));
+  const present = all.filter(x=>x.a).length, rsvpYes = all.filter(x=>x.m.rsvp&&x.m.rsvp.status==='attending').length, walk = all.filter(x=>x.a && !(x.m.rsvp&&x.m.rsvp.status==='attending')).length;
+  const q = ATT_UI.q.trim().toLowerCase();
+  const rows = all.filter(x=>(ATT_UI.f==='all'||(ATT_UI.f==='in'&&x.a)||(ATT_UI.f==='out'&&!x.a)||(ATT_UI.f==='rsvp'&&!x.a&&x.m.rsvp&&x.m.rsvp.status==='attending')) && (!q || (x.m.full_name+' '+x.t.project_name+' '+x.t.project_id+' '+(x.m.phone||'')).toLowerCase().includes(q)));
+  const kpi=(n,l,c)=>`<div style="flex:1;min-width:110px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:800;color:${c}">${n}</div><div style="font-size:12px;color:var(--ink-400)">${l}</div></div>`;
+  const sg = (st.cert_signers&&st.cert_signers.length?st.cert_signers:[{},{},{}]).concat([{},{},{}]).slice(0,3);
+  const inp = (id,v,ph,w)=>`<input id="${id}" value="${escHtml(v||'')}" placeholder="${ph}" style="${w?'width:'+w+'px;':'flex:1;min-width:140px;'}padding:7px 9px;border:1px solid var(--line);border-radius:8px">`;
+  const shown = rows.slice(0, 120);
+  box.innerHTML = `<div class="card" style="padding:16px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${kpi(all.length,'إجمالي المشاركين','var(--navy-800)')}${kpi(present,'حضروا','#1E7D4F')}${kpi(all.length-present,'لم يحضروا بعد','#B8860B')}${kpi(rsvpYes,'أكّدوا الحضور مسبقًا','#6B3FA0')}${kpi(walk,'حضروا دون تأكيد','#2E8B8B')}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input id="atQ" value="${escHtml(ATT_UI.q)}" placeholder="ابحث بالاسم أو المشروع أو الجوال" style="flex:1;min-width:200px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px">
+      <select id="atF" style="width:auto;padding:9px 10px;border:1px solid var(--line);border-radius:10px">${[['all','الكل'],['out','لم يحضر'],['rsvp','أكّد ولم يحضر'],['in','حضر']].map(([v,l])=>`<option value="${v}" ${ATT_UI.f===v?'selected':''}>${l}</option>`).join('')}</select>
+      <button class="btn btn-ghost btn-sm" id="atExp">تصدير الحضور (Excel)</button>
+    </div>
+    <div style="font-size:12px;color:var(--ink-400);margin-bottom:6px">${rows.length} مشاركًا${rows.length>shown.length?' (يُعرض أول '+shown.length+' — استخدم البحث)':''} • اضغط «حضر» لتسجيل الحضور، و«تحضير الفريق» لتسجيل كل أعضاء المشروع معًا.</div>
+    <div style="max-height:520px;overflow:auto;border:1px solid var(--line);border-radius:10px">${shown.length?shown.map((x,i)=>`<div style="padding:10px 12px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;flex-wrap:wrap;${x.a?'background:#F1FAF5':''}">
+      <div style="flex:1;min-width:210px"><b style="font-size:14px">${escHtml(x.m.full_name)}</b>${x.m.is_leader?' <span style="font-size:11px;color:#B8860B">قائد</span>':''}<div style="font-size:12px;color:var(--ink-400)">${escHtml(x.t.project_name)} • ${escHtml(x.t.project_id)}${seatMap[String(x.m.id)]?' • مقعد '+seatMap[String(x.m.id)]:''} ${x.m.rsvp?(x.m.rsvp.status==='attending'?'• ✓ أكّد':'• ✕ اعتذر'):''}</div></div>
+      ${x.a?`<span style="font-size:12px;color:#1E7D4F;font-weight:700">✓ حضر ${new Date(x.a.checked_in_at).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</span><button class="btn btn-ghost btn-sm" data-atun="${x.m.id}">تراجع</button>`:`<button class="btn btn-primary" data-atin="${x.m.id}" style="padding:9px 22px;font-size:14px">حضر</button>`}
+      <button class="btn btn-ghost btn-sm" data-atteam="${x.t.form_id}" title="تسجيل حضور كل أعضاء المشروع">تحضير الفريق</button></div>`).join(''):'<div class="empty-hint" style="padding:14px">لا نتائج</div>'}</div>
+    <div style="border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:14px;background:#FCFCFE">
+      <b style="font-size:13.5px">🎓 شهادة المشاركة</b> <span style="font-size:12px;color:var(--ink-400)">— للمحضَّرين فقط (أعضاء الفرق)</span>
+      <div style="display:grid;gap:8px;margin-top:10px">
+        ${inp('ctTitle',st.cert_title,'عنوان الشهادة (الافتراضي: '+CERT_DEF.title+')')}
+        <textarea id="ctBody" rows="5" placeholder="نص الشهادة — استخدم {الاسم} في سطر مستقل، و{المشروع} و{التاريخ}" style="padding:9px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px">${escHtml(st.cert_body||CERT_DEF.body)}</textarea>
+        <div style="font-size:12px;font-weight:700">الموقِّعون (حتى ثلاثة)</div>
+        ${sg.map((x,i)=>`<div style="display:flex;gap:8px;flex-wrap:wrap">${inp('ctSn'+i,x.name,'الاسم')}${inp('ctSt'+i,x.title,'المسمى الوظيفي')}</div>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+        <button class="btn btn-primary btn-sm" id="ctSave">حفظ</button>
+        <button class="btn btn-ghost btn-sm" id="ctPrev">معاينة PDF</button>
+        <button class="btn btn-ghost btn-sm" id="ctZip">تنزيل شهادات الحاضرين (ZIP — ${present})</button>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;cursor:pointer;margin-inline-start:auto" title="عند تفعيله يستطيع كل مشارك حضر تحميل شهادته من صفحة certificate.html"><input type="checkbox" id="ctOpen" ${st.cert_open?'checked':''}> فتح الشهادات للمشاركين</label>
+      </div>
+      <div dir="ltr" class="mono" style="font-size:12px;color:var(--ink-600);margin-top:8px;overflow-wrap:anywhere">${escHtml(new URL('certificate.html', location.href).href.split('?')[0])}</div>
+    </div></div>`;
+  const by = id=>box.querySelector('#'+id);
+  const setIn = async (ids)=>{ const { error } = await sb.from('ceremony_attendance').upsert(ids.map(id=>({ member_id:id })), { onConflict:'member_id', ignoreDuplicates:true }); if(error){ showToast('تعذّر التسجيل: '+error.message); return false; } return true; };
+  let tq; by('atQ').addEventListener('input',e=>{ ATT_UI.q=e.target.value; clearTimeout(tq); tq=setTimeout(async()=>{ await renderAttendanceAdminBox(); const i=box.querySelector('#atQ'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } },300); });
+  by('atF').addEventListener('change',e=>{ ATT_UI.f=e.target.value; renderAttendanceAdminBox(); });
+  box.querySelectorAll('[data-atin]').forEach(b=>b.addEventListener('click', async ()=>{ b.disabled=true; if(await setIn([+b.dataset.atin])) renderAttendanceAdminBox(); else b.disabled=false; }));
+  box.querySelectorAll('[data-atun]').forEach(b=>b.addEventListener('click', async ()=>{ const { error } = await sb.from('ceremony_attendance').delete().eq('member_id', +b.dataset.atun); if(error) return showToast('تعذّر التراجع: '+error.message); renderAttendanceAdminBox(); }));
+  box.querySelectorAll('[data-atteam]').forEach(b=>b.addEventListener('click', async ()=>{ const t=teams.find(x=>x.form_id===b.dataset.atteam); if(!t) return; if(await setIn(t.members.map(m=>m.id))){ showToast('تم تحضير '+t.members.length+' من فريق '+t.project_name); renderAttendanceAdminBox(); } }));
+  by('atExp').addEventListener('click',()=>{
+    if(typeof XLSX==='undefined') return showToast('تعذّر تحميل مكتبة التصدير');
+    const aoa=[['رقم المشروع','المشروع','الاسم','الدور','الجوال','أكّد مسبقًا','الحضور','وقت الحضور','رقم الشهادة']].concat(all.map(x=>[x.t.project_id,x.t.project_name,x.m.full_name,x.m.is_leader?'قائد':'عضو',x.m.phone||'',x.m.rsvp?(x.m.rsvp.status==='attending'?'نعم':'اعتذر'):'لم يردّ',x.a?'حضر':'لم يحضر',x.a?new Date(x.a.checked_in_at).toLocaleString('ar-SA'):'',x.a?x.a.cert_code:'']));
+    const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[14,30,26,8,14,12,10,22,16].map(w=>({wch:w})); ws['!views']=[{rightToLeft:true,state:'frozen',ySplit:1}];
+    all.forEach((x,i)=>{ const c=ws['E'+(i+2)]; if(c){ c.t='s'; c.v=String(x.m.phone||''); } });
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'حضور الحفل'); XLSX.writeFile(wb,`حضور_الحفل_${new Date().toISOString().slice(0,10)}.xlsx`);
+  });
+  const certData = x=>({ name:x.m.full_name, project:x.t.project_name, code:x.a?x.a.cert_code:'INC5-XXXXXXXX', date_text:st.ceremony_date_text||'', title:by('ctTitle').value, body:by('ctBody').value,
+    signers:[0,1,2].map(i=>({ name:by('ctSn'+i).value.trim(), title:by('ctSt'+i).value.trim() })), verify:new URL('certificate.html', location.href).href.split('?')[0]+'?v='+(x.a?x.a.cert_code:'') });
+  const save = async ()=>{ const signers=[0,1,2].map(i=>({ name:by('ctSn'+i).value.trim(), title:by('ctSt'+i).value.trim() })).filter(x=>x.name||x.title);
+    const { error } = await sb.from('form_settings').update({ cert_title:by('ctTitle').value.trim()||null, cert_body:by('ctBody').value.trim()||null, cert_signers:signers }).eq('id',1); if(error){ showToast('تعذّر الحفظ: '+error.message); return false; } return true; };
+  by('ctSave').addEventListener('click', async ()=>{ if(await save()){ showToast('تم الحفظ'); renderAttendanceAdminBox(); } });
+  by('ctOpen').addEventListener('change', async e=>{ const { error } = await sb.from('form_settings').update({ cert_open:e.target.checked }).eq('id',1); if(error){ showToast('تعذّر الحفظ: '+error.message); e.target.checked=!e.target.checked; return; } showToast(e.target.checked?'فُتحت الشهادات للمشاركين':'أُغلقت الشهادات'); });
+  by('ctPrev').addEventListener('click', async ()=>{ const x = all.find(y=>y.a) || all[0]; if(!x) return showToast('لا مشاركين'); try{ showToast('جارٍ إنشاء المعاينة…'); const blob = await certPdfBlob(certData(x)); window.open(URL.createObjectURL(blob),'_blank'); }catch(e){ console.error(e); showToast('تعذّر إنشاء المعاينة: '+(e.message||'')); } });
+  by('ctZip').addEventListener('click', async ()=>{
+    const list = all.filter(x=>x.a); if(!list.length) return showToast('لا حاضرين بعد');
+    if(typeof JSZip==='undefined') return showToast('تعذّر تحميل مكتبة الضغط');
+    if(!confirm(`إنشاء ${list.length} شهادة؟ قد يستغرق ذلك دقيقة.`)) return;
+    const zip = new JSZip(); let n=0;
+    for(const x of list){ try{ showToast(`جارٍ إنشاء الشهادات ${++n}/${list.length}…`); const blob = await certPdfBlob(certData(x)); zip.file(`${x.t.project_id}_${x.m.full_name.replace(/[\\/:*?"<>|]+/g,' ').trim()}.pdf`, blob); }catch(e){ console.error(e); showToast('تعذّر إنشاء شهادة '+x.m.full_name); } }
+    const out = await zip.generateAsync({ type:'blob' }); const a=document.createElement('a'); a.href=URL.createObjectURL(out); a.download='participation-certificates.zip'; document.body.appendChild(a); a.click(); a.remove(); showToast('تم تنزيل الشهادات');
+  });
+}
+
 async function renderGuestsAdminBox(){
   const box = document.getElementById('guestsAdminBox'); if(!box) return;
   box.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
@@ -6777,6 +6901,8 @@ async function renderDataCenterTab(){
     <div id="seatsAdminBox" style="margin-bottom:20px"></div>
     <div class="ac-title" style="margin-bottom:10px">📣 إشعارات المسجلين — التسجيل والمقاعد والتذكير</div>
     <div id="notifyAdminBox" style="margin-bottom:20px"></div>
+    <div class="ac-title" style="margin-bottom:10px">✅ تحضير المشاركين في الحفل — وشهادات المشاركة</div>
+    <div id="attendAdminBox" style="margin-bottom:20px"></div>
 
     <div class="ac-title" style="margin-bottom:10px">💾 نسخ احتياطية</div>
     <div class="card" style="margin-bottom:16px">
@@ -6828,6 +6954,7 @@ async function renderDataCenterTab(){
   renderGuestsAdminBox();
   renderSeatsAdminBox();
   renderNotifyAdminBox();
+  renderAttendanceAdminBox();
   document.getElementById('dcGotoRankingBtn').addEventListener('click', ()=>{ activeTab='judging'; judgingSubtab='ranking'; renderTabs(); renderAll(); });
   document.getElementById('dcGotoReportBtn').addEventListener('click', ()=>{ activeTab='report'; renderTabs(); renderAll(); });
   document.getElementById('quickBackupBtn').addEventListener('click', ()=>runBackup(false));
