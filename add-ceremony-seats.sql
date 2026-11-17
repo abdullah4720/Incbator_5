@@ -67,16 +67,14 @@ language sql stable security definer set search_path = public as $$
     -- ممثل التكريم لكل شريك (من صفحة الشركاء)
     select 'partner', p.id::text || ':h', btrim(p.data->'honoree'->>'name'), p.org_name, 'مكرَّم', p.org_name || '0'
       from partners p
-     where (p.submitted_at is not null or p.is_locked)
-       and btrim(coalesce(p.data->'honoree'->>'name','')) <> ''
+     where btrim(coalesce(p.data->'honoree'->>'name','')) <> ''
     union all
     -- ممثلو الجهة الحاضرون (باستثناء من يطابق ممثل التكريم بالاسم أو الجوال)
     select 'partner', p.id::text || ':a' || (a.ord - 1), btrim(a.v->>'name'), p.org_name, 'ممثل جهة',
            p.org_name || '1' || lpad(a.ord::text, 3, '0')
       from partners p
       cross join lateral jsonb_array_elements(coalesce(p.data->'attendees'->'list', '[]'::jsonb)) with ordinality as a(v, ord)
-     where (p.submitted_at is not null or p.is_locked)
-       and btrim(coalesce(a.v->>'name','')) <> ''
+     where btrim(coalesce(a.v->>'name','')) <> ''
        and a.ord <= case when coalesce(p.data->'attendees'->>'count','') ~ '^[0-9]+$' then (p.data->'attendees'->>'count')::int else 0 end
        and not (
          btrim(coalesce(p.data->'honoree'->>'name','')) <> '' and (
