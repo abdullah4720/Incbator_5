@@ -5910,6 +5910,113 @@ async function renderSeatsAdminBox(){
   });
 }
 
+/* ===== إشعارات المسجلين: قوالب + قوائم المنتظرين + واتساب/بريد/نسخ + سجل (add-ceremony-notices.sql) ===== */
+const NOTIFY_EVENTS = {
+  registration:{ l:'تأكيد التسجيل', t:'السلام عليكم {الاسم}،\nيسرّنا تأكيد تسجيلكم في الحفل الختامي لحاضنة ابتكار في نسختها الخامسة، {التاريخ}.\nيمكنكم متابعة حالة تسجيلكم عبر الرابط:\n{الرابط}\nمع خالص التقدير،\nمركز الابتكار والملكية الفكرية — جامعة القصيم' },
+  seat:        { l:'مقعد الحفل', t:'السلام عليكم {الاسم}،\nنفيدكم بتخصيص مقعدكم في الحفل الختامي لحاضنة ابتكار: رقم {المقعد} ({الفئة}){البوابة_سطر}.\nيمكنكم الاطلاع على بطاقة المقعد عبر الرابط:\n{الرابط}\nمع خالص التقدير،\nمركز الابتكار والملكية الفكرية — جامعة القصيم' },
+  seat_change: { l:'تغيير المقعد', t:'السلام عليكم {الاسم}،\nنفيدكم بتعديل مقعدكم في الحفل الختامي ليصبح رقم {المقعد} ({الفئة}){البوابة_سطر}.\nبطاقة المقعد المحدَّثة:\n{الرابط}\nنعتذر عن أي إزعاج، ونشكر تفهمكم.\nمركز الابتكار والملكية الفكرية — جامعة القصيم' },
+  reminder:    { l:'تذكير بالحفل', t:'السلام عليكم {الاسم}،\nنذكّركم بموعد الحفل الختامي لحاضنة ابتكار في نسختها الخامسة، {التاريخ}، {المكان}.\n{المقعد_سطر}ويُرجى إبراز بطاقة المقعد عند الدخول:\n{الرابط}\nنتطلع للقائكم.\nمركز الابتكار والملكية الفكرية — جامعة القصيم' },
+};
+const NOTIFY_UI = { ev:'registration', all:false, q:'' };
+function notifyPhone(p){ let d=String(p||'').replace(/\D/g,''); if(!d) return ''; if(d.startsWith('00')) d=d.slice(2); if(d.startsWith('966')) return d; if(d.startsWith('0')) d=d.slice(1); return d.length===9 ? '966'+d : d; }
+function notifyPlace(details){ const m=/(?:^|\n)\s*(?:المكان|الموقع)\s*[:：]\s*(.+)(?:\n(.+))?/.exec(details||''); if(!m) return ''; return [m[1],m[2]].filter(Boolean).join(' — ').trim(); }
+function notifyCompose(tpl, r, ctx){
+  const lines = String(tpl||'').split('\n');
+  const out = lines.filter(l=> !( (l.includes('{الرابط}') && !r.link) ) ).join('\n');
+  const seatLine = r.seat ? `مقعدكم رقم ${r.seat.seat_no}، ` : '';
+  const gate = ctx.gate ? `، البوابة ${ctx.gate}` : '';
+  return out.replace(/\{البوابة_سطر\}/g, gate).replace(/\{المقعد_سطر\}/g, seatLine)
+    .replace(/\{الاسم\}/g, r.name).replace(/\{المقعد\}/g, r.seat?String(r.seat.seat_no):'').replace(/\{الفئة\}/g, r.seat?r.seat.tier:'')
+    .replace(/\{الرابط\}/g, r.link||'').replace(/\{التاريخ\}/g, ctx.date||'').replace(/\{المكان\}/g, ctx.place||'').replace(/\{البوابة\}/g, ctx.gate||'');
+}
+async function loadNotifyData(){
+  const [stR, gR, teams, pR, seatsR, ntc] = await Promise.all([
+    sb.from('form_settings').select('notify_templates, ceremony_date_text, ceremony_details, seats_gate, seats_published').eq('id',1).maybeSingle(),
+    sb.from('ceremony_guests').select('id, token, full_name, org, phone, email, status').eq('status','approved'),
+    fetchCeremonyData(),
+    sb.from('partners').select('id, org_name, data, submitted_at, is_locked'),
+    sb.rpc('seats_state'),
+    fetchAllRows('ceremony_notices', 'id, kind, ref, event, seat_no, created_at', 'id'),
+  ]);
+  if(stR.error) throw stR.error; if(gR.error) throw gR.error; if(pR.error) throw pR.error; if(seatsR.error) throw seatsR.error;
+  const seatMap = {}; ((seatsR.data&&seatsR.data.seats)||[]).forEach(s=>{ seatMap[s.kind+'|'+s.ref]=s; });
+  const base = new URL('.', location.href).href;
+  const R = [];
+  (gR.data||[]).forEach(g=>R.push({ kind:'guest', ref:String(g.id), name:g.full_name, org:g.org||'', phone:g.phone, email:g.email, link:guestOwnLink(g), group:'ضيف' }));
+  teams.filter(t=>t.included).forEach(t=>t.members.forEach(m=>{ if(m.rsvp && m.rsvp.status==='attending') R.push({ kind:'member', ref:String(m.id), name:m.full_name, org:t.project_name, phone:m.phone, email:m.email, link: base+'ceremony.html?t='+m.rsvp_token, group:'فريق' }); }));
+  (pR.data||[]).filter(p=>p.submitted_at||p.is_locked).forEach(p=>{
+    const d=p.data||{}, h=d.honoree||{}, cnt=/^\d+$/.test(String((d.attendees||{}).count||''))?+d.attendees.count:0, key=x=>String(x||'').replace(/\D/g,'').slice(-9);
+    if((h.name||'').trim()) R.push({ kind:'partner', ref:p.id+':h', name:h.name.trim(), org:p.org_name, phone:h.phone, email:h.email, link:'', group:'شريك' });
+    ((d.attendees||{}).list||[]).slice(0,cnt).forEach((a,i)=>{ if(!(a.name||'').trim()) return; if((h.name||'').trim() && (a.name.trim().toLowerCase()===h.name.trim().toLowerCase() || (key(a.phone) && key(a.phone)===key(h.phone)))) return; R.push({ kind:'partner', ref:p.id+':a'+i, name:a.name.trim(), org:p.org_name, phone:a.phone, email:a.email, link:'', group:'شريك' }); });
+  });
+  const log = {}; (ntc||[]).forEach(n=>{ (log[n.kind+'|'+n.ref+'|'+n.event] = log[n.kind+'|'+n.ref+'|'+n.event]||[]).push(n); });
+  R.forEach(r=>{ r.seat = seatMap[r.kind+'|'+r.ref]||null; });
+  return { R, log, st:stR.data||{}, published:!!(seatsR.data&&seatsR.data.hall&&seatsR.data.hall.published) };
+}
+async function renderNotifyAdminBox(){
+  const box = document.getElementById('notifyAdminBox'); if(!box) return;
+  box.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
+  let D;
+  try{ D = await loadNotifyData(); }catch(e){ console.error(e); box.innerHTML = `<div class="empty-hint">تعذّر تحميل الإشعارات: ${escHtml(e.message||'')} — تأكد من تشغيل add-ceremony-notices.sql (وadd-ceremony-seats.sql) في Supabase</div>`; return; }
+  const ev = NOTIFY_UI.ev, tpls = Object.assign({}, ...Object.keys(NOTIFY_EVENTS).map(k=>({[k]:NOTIFY_EVENTS[k].t})), D.st.notify_templates||{});
+  const ctx = { date:D.st.ceremony_date_text||'', place:notifyPlace(D.st.ceremony_details), gate:D.st.seats_gate||'' };
+  const lastSent = (r,e)=>{ const a=D.log[r.kind+'|'+r.ref+'|'+e]; return a&&a.length ? a[a.length-1] : null; };
+  const pendingOf = (r,e)=>{
+    if(e==='registration') return !lastSent(r,'registration');
+    if(e==='seat') return !!r.seat && !lastSent(r,'seat');
+    if(e==='seat_change'){ const l=lastSent(r,'seat_change')||lastSent(r,'seat'); return !!r.seat && !!l && l.seat_no!==r.seat.seat_no; }
+    return !lastSent(r,'reminder');
+  };
+  const counts = {}; Object.keys(NOTIFY_EVENTS).forEach(e=>counts[e]=D.R.filter(r=>pendingOf(r,e)).length);
+  const q = NOTIFY_UI.q.trim().toLowerCase();
+  const rows = D.R.filter(r=>(NOTIFY_UI.all || pendingOf(r,ev)) && (!q || (r.name+' '+r.org+' '+(r.phone||'')+' '+(r.email||'')).toLowerCase().includes(q)));
+  const sentTag = r=>{ const l=lastSent(r,ev)||(ev==='seat_change'?lastSent(r,'seat'):null); return l?`<span style="font-size:11px;color:#1E7D4F">أُشعر ${new Date(l.created_at).toLocaleString('ar-SA',{dateStyle:'short',timeStyle:'short'})}${l.seat_no?' (مقعد '+l.seat_no+')':''}</span>`:''; };
+  box.innerHTML = `<div class="card" style="padding:16px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${Object.keys(NOTIFY_EVENTS).map(k=>`<button class="btn ${k===ev?'btn-primary':'btn-ghost'} btn-sm" data-nev="${k}">${NOTIFY_EVENTS[k].l} <b style="margin-inline-start:4px">${counts[k]}</b></button>`).join('')}</div>
+    ${(ev==='seat'||ev==='seat_change'||ev==='reminder') && !D.published ? `<div style="background:#FFF4D6;border:1px solid #E8C86A;border-radius:10px;padding:8px 12px;font-size:12.5px;margin-bottom:10px">⚠️ المقاعد غير ظاهرة للحضور بعد — فعّل «إظهار المقاعد للحضور» في بطاقة المقاعد قبل إرسال هذه الرسالة، وإلا لن يرى المستلم بطاقته عبر الرابط.</div>` : ''}
+    <details style="margin-bottom:12px"><summary style="cursor:pointer;font-size:12.5px;font-weight:700">✏️ قالب «${NOTIFY_EVENTS[ev].l}» (قابل للتعديل)</summary>
+      <textarea id="ntTpl" rows="8" style="width:100%;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:13px;direction:rtl">${escHtml(tpls[ev])}</textarea>
+      <div style="font-size:11.5px;color:var(--ink-400);margin:4px 0 6px">المتغيرات: {الاسم} {المقعد} {الفئة} {الرابط} {التاريخ} {المكان} {البوابة} {البوابة_سطر} {المقعد_سطر}. سطر الرابط يُحذف تلقائيًا لمن لا رابط له (ممثلو الشركاء).</div>
+      <button class="btn btn-primary btn-sm" id="ntTplSave">حفظ القالب</button> <button class="btn btn-ghost btn-sm" id="ntTplReset">استعادة الافتراضي</button></details>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input id="ntQ" value="${escHtml(NOTIFY_UI.q)}" placeholder="بحث بالاسم أو الجهة أو الجوال" style="flex:1;min-width:180px;padding:8px 10px;border:1px solid var(--line);border-radius:8px">
+      <label style="font-size:12.5px;font-weight:700;display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="ntAll" ${NOTIFY_UI.all?'checked':''}> عرض من أُشعر أيضًا</label>
+      <button class="btn btn-ghost btn-sm" id="ntCsv">تنزيل ملف دمج (Excel)</button>
+      <button class="btn btn-ghost btn-sm" id="ntMarkAll">تعليم الظاهرين كمُشعَرين</button>
+    </div>
+    <div style="font-size:12px;color:var(--ink-400);margin-bottom:6px">${rows.length} في القائمة • زر واتساب/بريد يفتح الرسالة جاهزة باسم الشخص ويعلّمه «أُشعر» تلقائيًا (يمكن التراجع).</div>
+    <div style="max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:10px">${rows.length?rows.map((r,i)=>{ const wa=notifyPhone(r.phone); return `<div style="padding:9px 12px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px"><b style="font-size:13px">${escHtml(r.name)}</b> <span style="font-size:11px;color:var(--ink-400)">${r.group}${r.seat?' • مقعد '+r.seat.seat_no+' ('+escHtml(r.seat.tier)+')':''}</span><div style="font-size:11.5px;color:var(--ink-400)">${escHtml(r.org)} ${r.phone?'• <span dir="ltr">'+escHtml(r.phone)+'</span>':''} ${r.email?'• <span dir="ltr">'+escHtml(r.email)+'</span>':''}</div>${sentTag(r)}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" data-nwa="${i}" ${wa?'':'disabled title="لا رقم جوال"'}>واتساب</button>
+        <button class="btn btn-ghost btn-sm" data-nml="${i}" ${r.email?'':'disabled title="لا بريد"'}>بريد</button>
+        <button class="btn btn-ghost btn-sm" data-ncp="${i}">نسخ</button>
+        ${lastSent(r,ev)&&NOTIFY_UI.all?`<button class="btn btn-ghost btn-sm" data-nun="${i}">تراجع</button>`:`<button class="btn btn-ghost btn-sm" data-nok="${i}">✓ تم</button>`}
+      </div></div>`; }).join(''):'<div class="empty-hint" style="padding:14px">لا أحد بانتظار هذا الإشعار 🎉</div>'}</div>
+  </div>`;
+  const by = id=>box.querySelector('#'+id);
+  const msgOf = r=>notifyCompose(by('ntTpl')?by('ntTpl').value:tpls[ev], r, ctx);
+  const mark = async (list, channel)=>{ const ins = list.map(r=>({ kind:r.kind, ref:r.ref, event:ev, seat_no:r.seat?r.seat.seat_no:null, channel })); if(!ins.length) return true; const { error } = await sb.from('ceremony_notices').insert(ins); if(error){ showToast('تعذّر التسجيل: '+error.message); return false; } return true; };
+  box.querySelectorAll('[data-nev]').forEach(b=>b.addEventListener('click',()=>{ NOTIFY_UI.ev=b.dataset.nev; renderNotifyAdminBox(); }));
+  by('ntAll').addEventListener('change',e=>{ NOTIFY_UI.all=e.target.checked; renderNotifyAdminBox(); });
+  let tq; by('ntQ').addEventListener('input',e=>{ NOTIFY_UI.q=e.target.value; clearTimeout(tq); tq=setTimeout(async()=>{ await renderNotifyAdminBox(); const i=box.querySelector('#ntQ'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } },300); });
+  by('ntTplSave').addEventListener('click', async ()=>{ const t=Object.assign({}, D.st.notify_templates||{}, {[ev]:by('ntTpl').value}); const { error } = await sb.from('form_settings').update({ notify_templates:t }).eq('id',1); if(error) return showToast('تعذّر الحفظ: '+error.message); showToast('تم حفظ القالب'); renderNotifyAdminBox(); });
+  by('ntTplReset').addEventListener('click', async ()=>{ const t=Object.assign({}, D.st.notify_templates||{}); delete t[ev]; const { error } = await sb.from('form_settings').update({ notify_templates:t }).eq('id',1); if(error) return showToast('تعذّر الحفظ: '+error.message); renderNotifyAdminBox(); });
+  box.querySelectorAll('[data-nwa]').forEach(b=>b.addEventListener('click', async ()=>{ const r=rows[+b.dataset.nwa]; window.open('https://wa.me/'+notifyPhone(r.phone)+'?text='+encodeURIComponent(msgOf(r)),'_blank','noopener'); if(await mark([r],'whatsapp')) renderNotifyAdminBox(); }));
+  box.querySelectorAll('[data-nml]').forEach(b=>b.addEventListener('click', async ()=>{ const r=rows[+b.dataset.nml]; const subj='الحفل الختامي لحاضنة ابتكار — '+NOTIFY_EVENTS[ev].l; window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(r.email)+'&su='+encodeURIComponent(subj)+'&body='+encodeURIComponent(msgOf(r)),'_blank','noopener'); if(await mark([r],'email')) renderNotifyAdminBox(); }));
+  box.querySelectorAll('[data-ncp]').forEach(b=>b.addEventListener('click', async ()=>{ const r=rows[+b.dataset.ncp]; await copyToClipboard(msgOf(r)); showToast('تم نسخ الرسالة'); }));
+  box.querySelectorAll('[data-nok]').forEach(b=>b.addEventListener('click', async ()=>{ if(await mark([rows[+b.dataset.nok]],'manual')) renderNotifyAdminBox(); }));
+  box.querySelectorAll('[data-nun]').forEach(b=>b.addEventListener('click', async ()=>{ const r=rows[+b.dataset.nun], l=lastSent(r,ev); const { error } = await sb.from('ceremony_notices').delete().eq('id',l.id); if(error) return showToast('تعذّر التراجع: '+error.message); renderNotifyAdminBox(); }));
+  by('ntMarkAll').addEventListener('click', async ()=>{ const list=rows.filter(r=>!lastSent(r,ev)||pendingOf(r,ev)); if(!list.length) return showToast('لا أحد للتعليم'); if(!confirm(`تعليم ${list.length} شخصًا كمُشعَرين بـ«${NOTIFY_EVENTS[ev].l}»؟`)) return; if(await mark(list,'manual')) renderNotifyAdminBox(); });
+  by('ntCsv').addEventListener('click', ()=>{
+    if(typeof XLSX==='undefined') return showToast('تعذّر تحميل مكتبة التصدير');
+    const aoa=[['الاسم','الجهة','الجوال (واتساب)','البريد','المقعد','الرابط','الرسالة']].concat(rows.map(r=>[r.name,r.org,notifyPhone(r.phone),r.email||'',r.seat?r.seat.seat_no:'',r.link,msgOf(r)]));
+    const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[26,26,16,28,8,50,90].map(w=>({wch:w})); ws['!views']=[{rightToLeft:true,state:'frozen',ySplit:1}];
+    rows.forEach((r,i)=>{ const c=ws['C'+(i+2)]; if(c){ c.t='s'; c.v=String(c.v||''); } });
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,NOTIFY_EVENTS[ev].l); XLSX.writeFile(wb,`إشعارات_${NOTIFY_EVENTS[ev].l}_${new Date().toISOString().slice(0,10)}.xlsx`);
+  });
+}
+
 async function renderGuestsAdminBox(){
   const box = document.getElementById('guestsAdminBox'); if(!box) return;
   box.innerHTML = `<div class="empty-hint">جارٍ التحميل…</div>`;
@@ -6668,6 +6775,8 @@ async function renderDataCenterTab(){
     <div id="guestsAdminBox" style="margin-bottom:20px"></div>
     <div class="ac-title" style="margin-bottom:10px">💺 مقاعد الحفل — تخصيص وإدارة</div>
     <div id="seatsAdminBox" style="margin-bottom:20px"></div>
+    <div class="ac-title" style="margin-bottom:10px">📣 إشعارات المسجلين — التسجيل والمقاعد والتذكير</div>
+    <div id="notifyAdminBox" style="margin-bottom:20px"></div>
 
     <div class="ac-title" style="margin-bottom:10px">💾 نسخ احتياطية</div>
     <div class="card" style="margin-bottom:16px">
@@ -6718,6 +6827,7 @@ async function renderDataCenterTab(){
   renderPartnersAdminBox();
   renderGuestsAdminBox();
   renderSeatsAdminBox();
+  renderNotifyAdminBox();
   document.getElementById('dcGotoRankingBtn').addEventListener('click', ()=>{ activeTab='judging'; judgingSubtab='ranking'; renderTabs(); renderAll(); });
   document.getElementById('dcGotoReportBtn').addEventListener('click', ()=>{ activeTab='report'; renderTabs(); renderAll(); });
   document.getElementById('quickBackupBtn').addEventListener('click', ()=>runBackup(false));
