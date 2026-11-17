@@ -6117,12 +6117,16 @@ async function renderAttendanceAdminBox(){
   box.querySelectorAll('[data-atin]').forEach(b=>b.addEventListener('click', async ()=>{ b.disabled=true; if(await setIn([+b.dataset.atin])) renderAttendanceAdminBox(); else b.disabled=false; }));
   box.querySelectorAll('[data-atun]').forEach(b=>b.addEventListener('click', async ()=>{ const { error } = await sb.from('ceremony_attendance').delete().eq('member_id', +b.dataset.atun); if(error) return showToast('تعذّر التراجع: '+error.message); renderAttendanceAdminBox(); }));
   box.querySelectorAll('[data-atteam]').forEach(b=>b.addEventListener('click', async ()=>{ const t=teams.find(x=>x.form_id===b.dataset.atteam); if(!t) return; if(await setIn(t.members.map(m=>m.id))){ showToast('تم تحضير '+t.members.length+' من فريق '+t.project_name); renderAttendanceAdminBox(); } }));
-  by('atExp').addEventListener('click',()=>{
+  by('atExp').addEventListener('click', async ()=>{
     if(typeof XLSX==='undefined') return showToast('تعذّر تحميل مكتبة التصدير');
-    const aoa=[['رقم المشروع','المشروع','الاسم','الدور','الجوال','أكّد مسبقًا','الحضور','وقت الحضور','رقم الشهادة']].concat(all.map(x=>[x.t.project_id,x.t.project_name,x.m.full_name,x.m.is_leader?'قائد':'عضو',x.m.phone||'',x.m.rsvp?(x.m.rsvp.status==='attending'?'نعم':'اعتذر'):'لم يردّ',x.a?'حضر':'لم يحضر',x.a?new Date(x.a.checked_in_at).toLocaleString('ar-SA'):'',x.a?x.a.cert_code:'']));
-    const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[14,30,26,8,14,12,10,22,16].map(w=>({wch:w})); ws['!views']=[{rightToLeft:true,state:'frozen',ySplit:1}];
+    let partners = [];
+    try{ const { data } = await sb.rpc('seats_state'); if(data && data.ok){ const seat = {}; (data.seats||[]).forEach(x=>{ if(x.kind==='partner') seat[x.ref]=x; }); partners = (data.seats||[]).filter(x=>x.kind==='partner').concat((data.unseated||[]).filter(x=>x.kind==='partner')); } }catch(e){ console.error(e); }
+    const aoa=[['رقم المشروع / الجهة','المشروع','الاسم','الدور','الجوال','أكّد مسبقًا','الحضور','وقت الحضور','رقم الشهادة','المقعد']].concat(all.map(x=>[x.t.project_id,x.t.project_name,x.m.full_name,x.m.is_leader?'قائد':'عضو',x.m.phone||'',x.m.rsvp?(x.m.rsvp.status==='attending'?'نعم':'اعتذر'):'لم يردّ',x.a?'حضر':'لم يحضر',x.a?new Date(x.a.checked_in_at).toLocaleString('ar-SA'):'',x.a?x.a.cert_code:'',seatMap[String(x.m.id)]||'']))
+      .concat(partners.map(x=>['',x.org||'',x.name,x.tier||'',  '', 'مدعو', '', '', '', x.seat_no||'']));
+    const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[16,30,26,12,14,12,10,22,16,8].map(w=>({wch:w})); ws['!views']=[{rightToLeft:true,state:'frozen',ySplit:1}];
     all.forEach((x,i)=>{ const c=ws['E'+(i+2)]; if(c){ c.t='s'; c.v=String(x.m.phone||''); } });
     const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'حضور الحفل'); XLSX.writeFile(wb,`حضور_الحفل_${new Date().toISOString().slice(0,10)}.xlsx`);
+    if(partners.length) showToast(`تمت إضافة ${partners.length} من المكرَّمين وممثلي الجهات`);
   });
   const certData = x=>({ name:x.m.full_name, project:x.t.project_name, code:x.a?x.a.cert_code:'INC5-XXXXXXXX', date_text:st.ceremony_date_text||'', title:by('ctTitle').value, body:by('ctBody').value,
     signers:[0,1,2].map(i=>({ name:by('ctSn'+i).value.trim(), title:by('ctSt'+i).value.trim() })), verify:new URL('certificate.html', location.href).href.split('?')[0]+'?v='+(x.a?x.a.cert_code:'') });
