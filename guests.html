@@ -186,7 +186,7 @@ function renderLookup(msg){
 /* ===== بطاقة المقعد (add-ceremony-seats.sql) ===== */
 function seatTicket(R, dateText){
   if(!R || !R.ok) return '';
-  if(!R.published) return `<div class="tk-w">سيصلكم رقم مقعدكم قبل موعد الحفل، يمكنكم العودة إلى هذه الصفحة لمعرفته.</div>`;
+  if(!R.published) return '';
   if(!R.seat) return `<div class="tk-w">لم يُخصَّص لكم مقعد بعد، وسيظهر هنا فور تخصيصه.</div>`;
   const h = R.hall, no = R.seat.no, per = h.rows_per_block*h.seats_per_row, blocked = new Set(h.blocked||[]);
   let map = '';
