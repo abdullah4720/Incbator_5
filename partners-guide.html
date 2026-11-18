@@ -187,7 +187,7 @@ svg.i.fill{fill:currentColor}
   <div class="cb-h"><svg class="i" style="width:24px;height:24px;color:#E6C570"><use href="#i-bot"/></svg><b>مساعد الدليل<small>يجيب من خدمات الدليل فقط</small></b><button id="cbX" aria-label="إغلاق"><svg class="i"><use href="#i-x"/></svg></button></div>
   <div class="cb-m" id="cbM"></div>
   <div class="cb-s" id="cbS"></div>
-  <form class="cb-i" id="cbF"><input id="cbQ" maxlength="500" placeholder="اكتبوا سؤالكم هنا…" autocomplete="off" aria-label="سؤالك"><button id="cbGo" type="submit">إرسال</button></form>
+  <form class="cb-i" id="cbF"><input id="cbQ" maxlength="500" placeholder="يُرجى كتابة سؤالكم هنا" autocomplete="off" aria-label="سؤالك"><button id="cbGo" type="submit">إرسال</button></form>
 </section>
 <div class="modal" id="qrm"><div class="mbox"><h3>رمز QR للدليل</h3><p>امسحوا الرمز للوصول مباشرة إلى الدليل</p><canvas id="qrc" width="240" height="240"></canvas><input id="qrUrl" aria-label="رابط الدليل"><div class="row"><button class="btn" id="qrDl">تنزيل الصورة</button><button class="btn ghost" id="qrClose">إغلاق</button></div></div></div>
 <script src="partners-guide-data.js"></script>
@@ -2662,7 +2662,7 @@ render();
     w.querySelectorAll('[data-d]').forEach(b=>b.addEventListener('click',()=>{ cb.classList.remove('on'); $('#cbFab').style.display=''; go('#/service/'+b.dataset.d); }));
     M.appendChild(w); scroll();
   }
-  function open(){ cb.classList.add('on'); $('#cbFab').style.display='none'; if(!opened){ opened=true; bubble('a','أهلًا بكم! أنا مساعد دليل شركاء النجاح. صفوا لي مشروعكم أو احتياجكم، وسأرشّح لكم الخدمات والبرامج الأنسب من الدليل.'); S.innerHTML=['أحتاج تمويلًا لمشروعي','أبحث عن احتضان وتسريع','أريد اعتمادات سحابية','عندي نموذج أولي وأريد تطويره'].map(x=>`<button type="button">${x}</button>`).join(''); S.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>send(b.textContent))); } setTimeout(()=>I.focus(),50); }
+  function open(){ cb.classList.add('on'); $('#cbFab').style.display='none'; if(!opened){ opened=true; bubble('a','مرحبًا بكم في دليل شركاء النجاح. يسرّني مساعدتكم؛ يُرجى وصف مشروعكم أو احتياجكم، وسأرشّح لكم الخدمات والبرامج الأنسب من الدليل.'); S.innerHTML=['أحتاج إلى تمويل لمشروعي','أبحث عن برامج احتضان وتسريع','أرغب في اعتمادات سحابية','لدي نموذج أولي وأرغب في تطويره'].map(x=>`<button type="button">${x}</button>`).join(''); S.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>send(b.textContent))); } setTimeout(()=>I.focus(),50); }
   function close(){ cb.classList.remove('on'); $('#cbFab').style.display=''; }
   async function send(text){
     text=String(text||'').trim(); if(!text||busy) return; busy=true; GO.disabled=true; I.value=''; S.innerHTML=''; bubble('u',text);
@@ -2671,14 +2671,14 @@ render();
     try{
       if(localMode) throw new Error('local');
       const r=await fetch('/api/guide-chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:text,history:HIST.slice(-6)})});
-      if(r.status===429){ wait.remove(); bubble('n','تجاوزتم عدد الأسئلة المسموح به في الساعة، حاولوا لاحقًا أو تصفحوا الدليل مباشرة.'); busy=false; GO.disabled=false; return; }
+      if(r.status===429){ wait.remove(); bubble('n','تجاوزتم الحد المسموح به من الأسئلة في الساعة. يُرجى المحاولة لاحقًا أو تصفح الدليل مباشرة.'); busy=false; GO.disabled=false; return; }
       if(!r.ok) throw new Error('http '+r.status);
       const j=await r.json(); reply=j.reply; ids=j.ids||[];
     }catch(e){
       if(!localMode) note=true; localMode=true; const found=retrieve(text,4); ids=found.map(x=>x.id);
-      reply=found.length?'هذه أقرب الخدمات في الدليل لسؤالكم:':'لم أجد في الدليل خدمات مطابقة لهذا السؤال. جرّبوا كلمات أخرى مثل «تمويل» أو «احتضان» أو «سحابي»، أو تصفحوا الجهات والتصنيفات.';
+      reply=found.length?'نرشّح لكم الخدمات التالية، وهي الأقرب إلى سؤالكم في الدليل:':'لم نجد في الدليل خدمات مطابقة لهذا السؤال. يُرجى إعادة صياغته بكلمات أخرى مثل «تمويل» أو «احتضان» أو «سحابي»، أو تصفح الجهات والتصنيفات.';
     }
-    wait.remove(); bubble('a',reply); cards(ids); if(note) bubble('n','المساعد الذكي غير مفعّل حاليًا، فتُعرض نتائج البحث المباشر في الدليل.'); HIST.push({role:'user',text},{role:'assistant',text:reply}); busy=false; GO.disabled=false; I.focus();
+    wait.remove(); bubble('a',reply); cards(ids); if(note) bubble('n','المساعد الذكي غير مفعّل حاليًا؛ وتُعرض نتائج البحث المباشر في الدليل.'); HIST.push({role:'user',text},{role:'assistant',text:reply}); busy=false; GO.disabled=false; I.focus();
   }
   F.addEventListener('submit',e=>{ e.preventDefault(); send(I.value); });
   $('#cbFab').addEventListener('click',open); $('#cbX').addEventListener('click',close);
