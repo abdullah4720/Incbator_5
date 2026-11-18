@@ -139,6 +139,62 @@ svg.i.fill{fill:currentColor}
 @media(max-width:560px){.stages{grid-template-columns:1fr}.tabs{display:grid;grid-template-columns:1fr 1fr}.lgbox.sm{width:110px;height:48px}.hero{padding:30px 16px 90px}.det{padding:16px}.grid{grid-template-columns:1fr}}
 </style>
 <link rel="stylesheet" href="brand.css">
+<style id="pgx">
+.hero{padding:26px 20px 100px!important}
+.hero h1{font-size:clamp(21px,4vw,34px);margin:8px auto}
+.hero p{font-size:14.5px;line-height:1.85;max-width:600px}
+.stats{margin-top:14px;gap:10px;flex-wrap:nowrap}
+.stat{padding:6px 18px;min-width:0;border-color:rgba(0,191,156,.5)!important;border-radius:12px;display:flex;align-items:baseline;gap:8px}
+.stat b{display:inline;font-size:20px}.stat span{font-size:13px}
+.tools{position:sticky;top:6px;z-index:30;margin-top:-52px}
+.panel{padding:12px}
+.tabs{display:flex!important;gap:6px;margin-top:10px;overflow-x:auto;scrollbar-width:none}
+.tab{flex:1 0 auto;padding:9px 12px;font-size:13.5px;white-space:nowrap}
+.tools.stuck .panel{padding:8px;border-radius:14px}.tools.stuck .tabs{margin-top:8px}
+.tools.stuck .tab .tl{display:none}.tools.stuck .tab.on .tl{display:inline}.tools.stuck .tab{padding:8px 12px}
+.strip{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:2px 16px 10px;margin:0 -16px 14px}
+.strip::-webkit-scrollbar{display:none}
+.sbtn{flex:none;display:flex;align-items:center;gap:7px;border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:7px 14px 7px 12px;font:600 13px inherit;font-family:inherit;color:var(--navy);cursor:pointer}
+.sbtn svg.i{width:17px;height:17px;color:var(--c,#00A088)}.sbtn em{font-style:normal;font-size:11.5px;color:var(--gray)}
+.sbtn:hover,.sbtn.on{border-color:var(--c,#00A088);background:#F2FCFA}
+.sbtn.on{box-shadow:inset 0 0 0 1px var(--c,#00A088)}
+.wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.wc{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 12px 14px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:10px;font:inherit;color:inherit;transition:.15s;text-align:center}
+.wc:hover,.wc:focus-visible{border-color:#00BF9C;box-shadow:0 10px 24px rgba(20,20,79,.1);transform:translateY(-2px);outline:none}
+.wc .lw{height:78px;width:100%;display:flex;align-items:center;justify-content:center}
+.wc .lw img{max-width:100%;max-height:72px;object-fit:contain}
+.wc .lw .ico{width:56px;height:56px}
+.wc .wn{font-family:'Cairo',sans-serif;font-weight:800;font-size:13px;line-height:1.55;color:var(--navy);min-height:40px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.wc .wk{font-size:12px;color:#00604F;background:#E6F8F4;border-radius:999px;padding:3px 11px;font-weight:700}
+.svc p{-webkit-line-clamp:2!important}
+.cbadge{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--c,#00604F)}
+.cbadge:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--c,#00A088)}
+.vbar{display:flex;gap:8px;align-items:center;margin:0 0 12px;flex-wrap:wrap}
+.vbar select{padding:8px 10px;border:1.5px solid var(--line);border-radius:10px;font:500 13px inherit;font-family:inherit;background:#fff;color:var(--ink)}
+.vbar .sp{flex:1}
+.vt{display:flex;border:1.5px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+.vt button{border:0;background:#fff;padding:7px 11px;cursor:pointer;color:var(--gray);display:flex}
+.vt button.on{background:var(--navy2);color:#fff}
+.rows{display:grid;gap:8px}
+.rw{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 14px;cursor:pointer}
+.rw:hover{border-color:#00BF9C;box-shadow:0 6px 16px rgba(20,20,79,.08)}
+.rw .tx{flex:1;min-width:0}.rw b{font-family:'Cairo',sans-serif;font-size:14.5px;color:var(--navy);display:block;line-height:1.6}
+.rw small{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--gray);align-items:center}
+.rw .fav{position:static;flex:none}.rw .chev{color:#00A088;flex:none}
+.orghead{padding:18px!important;gap:18px!important}
+.lgbox.lg{height:96px;width:210px;flex:none}
+.cb-fab .lb{display:inline}
+@media(max-width:560px){
+  .hero{padding:18px 16px 96px!important}.hero p{font-size:13px;line-height:1.75}.hero .k{font-size:12px}
+  .stat{padding:5px 14px}.stat b{font-size:18px}.stat span{font-size:12px}
+  .wall{grid-template-columns:repeat(2,1fr);gap:10px}.wc{padding:12px 8px}.wc .lw{height:62px}.wc .lw img{max-height:56px}.wc .wn{font-size:12px;min-height:36px}
+  .lgbox.lg{width:120px;height:64px}.orghead{gap:12px!important;padding:14px!important}
+  .tab{flex:1 1 0;padding:9px 4px;font-size:12.5px;gap:4px}.tab svg.i{width:15px;height:15px}
+  .cb-fab{padding:0;width:52px;height:52px;justify-content:center}.cb-fab .lb{display:none}.cb-fab svg.i{width:24px;height:24px}
+}
+.more{background:#fff;border:1px solid var(--line);border-radius:12px;padding:0 14px;margin-bottom:10px}.more summary{cursor:pointer;padding:11px 0;font-weight:700;font-size:13.5px;color:var(--navy2);display:flex;align-items:center;gap:8px;list-style:none}.more summary::-webkit-details-marker{display:none}.more .filters{padding-bottom:12px}
+input[type=search]::-webkit-search-cancel-button{display:none;-webkit-appearance:none}
+</style>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
@@ -167,6 +223,7 @@ svg.i.fill{fill:currentColor}
 <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.800 5.200L19 10l-5.200 1.800L12 17l-1.800-5.200L5 10l5.200-1.800Z"/><path d="M18.500 16.500v3M17 18h3"/></symbol>
 <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4.500M9 13v1.500M15 13v1.500M2 13v3M22 13v3"/><circle cx="12" cy="3.500" r="1"/></symbol>
 <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3 10 14M21 3l-7 18-4-7-7-4Z"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
 <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
 <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="6" height="6" rx="1"/><rect x="14.5" y="3.5" width="6" height="6" rx="1"/><rect x="3.5" y="14.5" width="6" height="6" rx="1"/><path d="M14.5 14.5h2.5v2.5M20.5 14.5v.01M14.5 20.5h.01M17 20.5h3.5v-3"/></symbol>
 </defs></svg>
@@ -179,11 +236,11 @@ svg.i.fill{fill:currentColor}
 </header>
 <div class="wrap tools"><div class="panel">
   <div class="search" id="sbox"><svg class="i"><use href="#i-search"/></svg><input id="q" type="search" placeholder="ابحث عن جهة أو خدمة أو كلمة مفتاحية" autocomplete="off" enterkeyhint="search"><button class="x" id="qx" aria-label="مسح البحث"><svg class="i"><use href="#i-x"/></svg></button></div>
-  <div class="tabs" id="tabs"><button class="tab" data-t="home"><svg class="i"><use href="#i-building"/></svg>الجهات</button><button class="tab" data-t="services"><svg class="i"><use href="#i-layers"/></svg>جميع الخدمات</button><button class="tab" data-t="foryou"><svg class="i"><use href="#i-spark"/></svg>مقترح لك</button><button class="tab" data-t="saved"><svg class="i"><use href="#i-heart"/></svg>قائمتي <span class="badge" id="favN" style="display:none">0</span></button></div>
+  <div class="tabs" id="tabs"><button class="tab" data-t="home"><svg class="i"><use href="#i-building"/></svg><span class="tl">الجهات</span></button><button class="tab" data-t="services"><svg class="i"><use href="#i-layers"/></svg><span class="tl">الخدمات</span></button><button class="tab" data-t="foryou"><svg class="i"><use href="#i-spark"/></svg><span class="tl">مقترح لك</span></button><button class="tab" data-t="saved"><svg class="i"><use href="#i-heart"/></svg><span class="tl">قائمتي</span> <span class="badge" id="favN" style="display:none">0</span></button></div>
 </div></div>
 <main><div class="wrap" id="view"></div></main>
 <div class="foot">مركز الابتكار والملكية الفكرية — جامعة القصيم<br><button class="btn ghost" id="qrBtn"><svg class="i"><use href="#i-qr"/></svg>رمز QR للدليل</button></div>
-<button class="cb-fab" id="cbFab" aria-label="فتح مساعد الدليل"><svg class="i"><use href="#i-bot"/></svg>اسأل مساعد الدليل</button>
+<button class="cb-fab" id="cbFab" aria-label="فتح مساعد الدليل"><svg class="i"><use href="#i-bot"/></svg><span class="lb">اسأل مساعد الدليل</span></button>
 <section class="cb" id="cb" aria-label="مساعد الدليل" role="dialog">
   <div class="cb-h"><svg class="i" style="width:24px;height:24px;color:#7EE8D2"><use href="#i-bot"/></svg><b>مساعد الدليل<small>يجيب من خدمات الدليل فقط</small></b><button id="cbX" aria-label="إغلاق"><svg class="i"><use href="#i-x"/></svg></button></div>
   <div class="cb-m" id="cbM"></div>
@@ -2512,6 +2569,15 @@ const isFav = id=>FAV.includes(id);
 function toggleFav(id){ FAV = isFav(id)?FAV.filter(x=>x!==id):FAV.concat(id); try{ localStorage.setItem('pg_fav',JSON.stringify(FAV)); }catch(e){} updFav(); }
 function updFav(){ const n=$('#favN'); n.textContent=FAV.length; n.style.display=FAV.length?'':'none'; }
 updFav();
+const CATCOL = ['#00A088','#9B05B9','#3D5A99','#D98E04','#3FA535','#0E8F9E','#C2338A','#6B4FA0','#B5651D','#1E7D4F','#5B6B8C'];
+const CATC = {}; CATS.forEach((c,i)=>CATC[c.id]=CATCOL[i%CATCOL.length]);
+let VIEW = 'cards', SORT = 'def', OC = '', OCid = '';
+try{ VIEW = localStorage.getItem('pg_view')||'cards'; }catch(e){}
+const catBadge = s=>{ const c=CBY[(s.cats||[])[0]]; return c?`<span class="cbadge" style="--c:${CATC[c.id]}">${esc(c.name)}</span>`:''; };
+function sorted(list){ if(SORT==='alpha') return list.slice().sort((a,b)=>a.title.localeCompare(b.title,'ar')); if(SORT==='cat') return list.slice().sort((a,b)=>CATS.findIndex(c=>c.id===(a.cats||[])[0])-CATS.findIndex(c=>c.id===(b.cats||[])[0])||a.id-b.id); return list; }
+function vbar(n){ return `<div class="vbar"><span style="font-size:13px;color:var(--gray)">${n} خدمة</span><span class="sp"></span><select id="sortSel" aria-label="ترتيب الخدمات"><option value="def" ${SORT==='def'?'selected':''}>الترتيب الافتراضي</option><option value="alpha" ${SORT==='alpha'?'selected':''}>أبجديًا</option><option value="cat" ${SORT==='cat'?'selected':''}>حسب التصنيف</option></select><div class="vt"><button data-vt="cards" class="${VIEW==='cards'?'on':''}" aria-label="عرض بطاقات">${ic('grid')}</button><button data-vt="list" class="${VIEW==='list'?'on':''}" aria-label="عرض قائمة">${ic('list')}</button></div></div>`; }
+function svcRow(s,showOrg=true){ const o=OBY[s.org]||{}; return `<div class="rw svc" data-id="${s.id}"><button class="fav ${isFav(s.id)?'on':''}" data-fav="${s.id}" aria-label="حفظ في قائمتي" aria-pressed="${isFav(s.id)}">${ic('heart')}</button><div class="tx"><b>${esc(s.title)}</b><small>${showOrg?`<span>${esc(o.name)}</span>`:''}${catBadge(s)}</small></div><span class="chev">${ic('arrow-l')}</span></div>`; }
+const listHtml = (list,showOrg=true)=> VIEW==='list'?`<div class="rows">${sorted(list).map(s=>svcRow(s,showOrg)).join('')}</div>`:`<div class="grid">${sorted(list).map(s=>svcCard(s,showOrg)).join('')}</div>`;
 const tagCount = {}; SVCS.forEach(s=>(s.tags||[]).forEach(t=>tagCount[t]=(tagCount[t]||0)+1));
 const TOPTAGS = Object.keys(tagCount).sort((a,b)=>tagCount[b]-tagCount[a]||a.localeCompare(b,'ar')).slice(0,60);
 const matchQ = (hay,q)=> q.split(' ').every(w=>hay.includes(w));
@@ -2529,15 +2595,19 @@ function svcCard(s, showOrg=true){
     <h3>${esc(s.title)}</h3>
     ${showOrg?`<button class="by" data-org="${esc(s.org)}">${ic('building')}${esc(o.name)}</button>`:''}
     <p>${esc(s.desc)}</p>
-    ${t.length?`<div class="tags">${t.slice(0,3).map(x=>`<span class="tag">${esc(x)}</span>`).join('')}${t.length>3?`<span class="tag more">+${t.length-3}</span>`:''}</div>`:''}
+    ${catBadge(s)}
+    ${t.length?`<div class="tags">${t.slice(0,2).map(x=>`<span class="tag">${esc(x)}</span>`).join('')}${t.length>2?`<span class="tag more">+${t.length-2}</span>`:''}</div>`:''}
     <button class="btn" data-open="${s.id}">التفاصيل ${ic('arrow-l')}</button></article>`;
 }
 function orgCard(o){
-  return `<button class="card org" data-org="${esc(o.id)}">${orgIco(o)}<div class="nm">${esc(o.name)}</div><span class="cnt">${cnt(o.count)}</span><span class="go">${ic('arrow-l')}</span></button>`;
+  const lg = o.logo?`<img class="lg-img" src="${esc(o.logo)}" alt="${esc(o.name)}">`:fbIco(o);
+  return `<button class="wc" data-org="${esc(o.id)}"><div class="lw">${lg}</div><div class="wn">${esc(o.name)}</div><span class="wk">${cnt(o.count)}</span></button>`;
 }
 function bind(root){
   root.querySelectorAll('[data-org]').forEach(b=>b.addEventListener('click',e=>{ e.stopPropagation(); go('#/org/'+b.dataset.org); }));
   root.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',e=>{ e.stopPropagation(); go('#/service/'+b.dataset.open); }));
+  root.querySelectorAll('[data-vt]').forEach(b=>b.addEventListener('click',()=>{ VIEW=b.dataset.vt; try{ localStorage.setItem('pg_view',VIEW); }catch(e){} render(); }));
+  const ss=root.querySelector('#sortSel'); if(ss) ss.addEventListener('change',()=>{ SORT=ss.value; render(); });
   root.querySelectorAll('[data-fav]').forEach(b=>b.addEventListener('click',e=>{ e.stopPropagation(); toggleFav(+b.dataset.fav); b.classList.toggle('on',isFav(+b.dataset.fav)); b.setAttribute('aria-pressed',isFav(+b.dataset.fav)); if(route().a==='saved') render(); }));
   root.querySelectorAll('[data-cat]').forEach(b=>b.addEventListener('click',()=>{ F={org:'',tag:'',cat:b.dataset.cat}; Q=''; setQ(''); go('#/services'); }));
   root.querySelectorAll('.svc').forEach(c=>c.addEventListener('click',()=>go('#/service/'+c.dataset.id)));
@@ -2548,28 +2618,34 @@ function viewHome(){
   if(Q){
     const no = ORGS.filter(o=>norm(o.name).includes(norm(Q))), ss = searchSvcs(Q,'','');
     view.innerHTML = `<div class="sec-h"><h2>نتائج البحث</h2><span>${no.length} جهة • ${ss.length} خدمة</span></div>`
-      + (no.length?`<div class="grid" style="margin-bottom:18px">${no.map(orgCard).join('')}</div>`:'')
+      + (no.length?`<div class="wall" style="margin-bottom:18px">${no.map(orgCard).join('')}</div>`:'')
       + (ss.length?`<div class="grid">${ss.map(s=>svcCard(s)).join('')}</div>`:(no.length?'':`<div class="empty">لا توجد نتائج مطابقة لـ «${esc(Q)}».<br>جرّبوا كلمات أخرى أو اطلعوا على قائمة الجهات.</div>`));
-  } else view.innerHTML = (CATS.length?`<div class="sec-h"><h2>ماذا تحتاج؟</h2><span>تصفحوا الخدمات حسب نوع الدعم</span></div><div class="cats">${CATS.map(c=>`<button class="cat" data-cat="${c.id}"><div class="ci">${ic(c.icon)}</div><b>${esc(c.name)}</b><span>${cnt(c.count)}</span></button>`).join('')}</div>`:'') + `<div class="sec-h"><h2>الجهات الداعمة</h2><span>اختاروا جهة لاستعراض خدماتها</span></div><div class="grid">${ORGS.map(orgCard).join('')}</div>`;
+  } else view.innerHTML = (CATS.length?`<div class="strip" aria-label="تصفح حسب نوع الدعم">${CATS.map(c=>`<button class="sbtn" style="--c:${CATC[c.id]}" data-cat="${c.id}">${ic(c.icon)}${esc(c.name)} <em>${c.count}</em></button>`).join('')}</div>`:'') + `<div class="sec-h"><h2>الجهات الداعمة</h2><span>اختاروا جهة لاستعراض خدماتها</span></div><div class="wall">${ORGS.map(orgCard).join('')}</div>`;
   bind(view);
 }
 function viewOrg(id){
   const o = OBY[id]; setTab('home');
   if(!o){ view.innerHTML = `<div class="empty">الجهة غير موجودة.</div>`; return; }
-  const list = searchSvcs(Q,id,'');
+  if(OCid!==id){ OCid=id; OC=''; }
+  const base = searchSvcs(Q,id,''), list = OC?base.filter(s=>(s.cats||[]).includes(OC)):base;
+  const present = CATS.map(c=>({c,n:SVCS.filter(s=>s.org===id&&(s.cats||[]).includes(c.id)).length})).filter(x=>x.n);
   view.innerHTML = `<button class="back" data-back="#/">${ic('arrow-r')}قائمة الجهات</button>
-    <div class="orghead">${orgIco(o,true)}<div><h2>${esc(o.name)}</h2><small>${cnt(o.count)}${Q?` • ${list.length} مطابقة للبحث`:''}</small></div></div>
-    ${list.length?`<div class="grid">${list.map(s=>svcCard(s,false)).join('')}</div>`:`<div class="empty">لا توجد خدمات مطابقة للبحث في هذه الجهة.</div>`}`;
+    <div class="orghead">${o.logo?`<div class="lgbox lg"><img class="lg-img" src="${esc(o.logo)}" alt="${esc(o.name)}"></div>`:fbIco(o)}<div><h2>${esc(o.name)}</h2><small>${cnt(o.count)}${Q?` • ${base.length} مطابقة للبحث`:''}</small></div></div>
+    ${present.length>1?`<div class="strip"><button class="sbtn ${!OC?'on':''}" data-oc="">الكل <em>${o.count}</em></button>${present.map(x=>`<button class="sbtn ${OC===x.c.id?'on':''}" style="--c:${CATC[x.c.id]}" data-oc="${x.c.id}">${ic(x.c.icon)}${esc(x.c.name)} <em>${x.n}</em></button>`).join('')}</div>`:''}
+    ${list.length?vbar(list.length)+listHtml(list,false):`<div class="empty">لا توجد خدمات مطابقة.</div>`}`;
+  view.querySelectorAll('[data-oc]').forEach(b=>b.addEventListener('click',()=>{ OC=b.dataset.oc; render(); }));
   bind(view);
 }
 function viewServices(){
   setTab('services');
   const list = searchSvcs(Q,F.org,F.tag,F.cat), tags = showAllTags?TOPTAGS:TOPTAGS.slice(0,14);
   view.innerHTML = `<div class="sec-h"><h2>جميع الخدمات</h2><span>${list.length} من ${SVCS.length}</span></div>
+   <div class="strip">${CATS.map(c=>`<button class="sbtn ${F.cat===c.id?'on':''}" style="--c:${CATC[c.id]}" data-catf="${c.id}">${ic(c.icon)}${esc(c.name)} <em>${c.count}</em></button>`).join('')}</div>
+   <details class="more" ${(F.org||F.tag)?'open':''}><summary>${ic('tag')}تصفية بالجهة والكلمات المفتاحية${(F.org||F.tag)?' • مفعّلة':''}</summary>
    <div class="filters"><select id="fOrg" aria-label="تصفية حسب الجهة"><option value="">كل الجهات</option>${ORGS.map(o=>`<option value="${o.id}" ${F.org===o.id?'selected':''}>${esc(o.name)} (${o.count})</option>`).join('')}</select>
-   <div class="chips">${CATS.map(c=>`<button class="chip ${F.cat===c.id?'on':''}" data-catf="${c.id}">${esc(c.name)}</button>`).join('')}</div>
-   <div class="chips">${ic('tag')}${tags.map(t=>`<button class="chip ${F.tag===t?'on':''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}<button class="chip lnk" id="tagMore">${showAllTags?'عرض أقل':'المزيد من الكلمات'}</button>${(F.org||F.tag||F.cat)?`<button class="chip lnk" id="fClear">مسح التصفية</button>`:''}</div></div>
-   ${list.length?`<div class="grid">${list.map(s=>svcCard(s)).join('')}</div>`:`<div class="empty">لا توجد خدمات مطابقة.<br>جرّبوا تغيير التصفية أو كلمات البحث.</div>`}`;
+   <div class="chips">${tags.map(t=>`<button class="chip ${F.tag===t?'on':''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}<button class="chip lnk" id="tagMore">${showAllTags?'عرض أقل':'المزيد من الكلمات'}</button></div></div></details>
+   ${(F.org||F.tag||F.cat)?`<div style="margin:6px 0 10px"><button class="chip lnk" id="fClear">مسح كل التصفية</button></div>`:''}
+   ${list.length?vbar(list.length)+listHtml(list):`<div class="empty">لا توجد خدمات مطابقة.<br>جرّبوا تغيير التصفية أو كلمات البحث.</div>`}`;
   $('#fOrg').addEventListener('change',e=>{ F.org = e.target.value; render(); });
   view.querySelectorAll('[data-tag]').forEach(b=>b.addEventListener('click',()=>{ F.tag = F.tag===b.dataset.tag?'':b.dataset.tag; render(); }));
   view.querySelectorAll('[data-catf]').forEach(b=>b.addEventListener('click',()=>{ F.cat = F.cat===b.dataset.catf?'':b.dataset.catf; render(); }));
@@ -2632,6 +2708,7 @@ let nav = 0; window.addEventListener('hashchange',()=>{ window.__navd = true; re
 $('#q').addEventListener('input',e=>{ Q = e.target.value; $('#sbox').classList.toggle('has', !!Q); const r=route(); if(r.a==='service'||r.a==='foryou'||r.a==='saved'){ go('#/'); return; } render(); });
 $('#qx').addEventListener('click',()=>{ Q=''; setQ(''); render(); $('#q').focus(); });
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>go({home:'#/',services:'#/services',foryou:'#/foryou',saved:'#/saved'}[b.dataset.t])));
+const toolsEl = document.querySelector('.tools'); const onScroll = ()=>toolsEl.classList.toggle('stuck', window.scrollY>260); window.addEventListener('scroll',onScroll,{passive:true});
 /* QR */
 const qm = $('#qrm');
 function drawQR(){
