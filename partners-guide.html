@@ -2675,12 +2675,14 @@ function viewService(id){
   const cta = s.link ? `<a class="btn gold" href="${esc(s.link)}" target="_blank" rel="noopener noreferrer">${apply} ${ic('ext')}</a><div class="u">${esc(s.raw||s.link)}</div>`
     : s.note ? `<div class="warn">${ic('info')}<div>للاستفادة من هذه الخدمة: <b>${esc(s.note)}</b></div></div>`
     : `<div class="warn">${ic('info')}<div>رابط الاستفادة غير متاح حالياً</div></div>`;
-  view.innerHTML = `<button class="back" data-back="#/org/${esc(s.org)}">${ic('arrow-r')}العودة</button>
+  const fc = !!window.__fromChat;
+  view.innerHTML = `${fc?`<button class="back" id="backChat">${ic('arrow-r')}العودة إلى المساعد</button>`:`<button class="back" data-back="#/org/${esc(s.org)}">${ic('arrow-r')}العودة</button>`}
    <article class="det"><h1>${esc(s.title)}</h1><button class="by" data-org="${esc(s.org)}">${ic('building')}${esc(o.name)}</button>
    <div class="lb">وصف الخدمة</div><div class="ds">${esc(s.desc)}</div>
    ${t.length?`<div class="lb">الكلمات المفتاحية</div><div class="tags">${t.map(x=>`<button class="tag" data-tagjump="${esc(x)}">${ic('tag')}${esc(x)}</button>`).join('')}</div>`:''}
    <div class="cta">${cta}<button class="btn fvb ${isFav(s.id)?'on':''}" id="favBtn" style="width:100%">${ic('heart')}<span>${isFav(s.id)?'محفوظة في قائمتي':'حفظ في قائمتي'}</span></button></div></article>
    ${more.length?`<div class="sec-h"><h2>خدمات أخرى من الجهة</h2><span><button class="chip lnk" data-org="${esc(s.org)}">عرض الكل (${o.count})</button></span></div><div class="grid">${more.map(x=>svcCard(x,false)).join('')}</div>`:''}`;
+  const bc=$('#backChat'); if(bc) bc.addEventListener('click',()=>{ window.__fromChat=false; history.back(); setTimeout(()=>window.__openChat&&window.__openChat(),120); });
   $('#favBtn').addEventListener('click',()=>{ toggleFav(s.id); const b=$('#favBtn'); b.classList.toggle('on',isFav(s.id)); b.querySelector('span').textContent=isFav(s.id)?'محفوظة في قائمتي':'حفظ في قائمتي'; });
   view.querySelectorAll('[data-tagjump]').forEach(b=>b.addEventListener('click',()=>{ F={org:'',cat:'',tag:b.dataset.tagjump}; Q=''; setQ(''); go('#/services'); }));
   bind(view);
@@ -2713,7 +2715,7 @@ function viewSaved(){
   bind(view);
 }
 function render(){
-  const r = route();
+  const r = route(); if(r.a!=='service') window.__fromChat=false;
   if(r.a==='foryou') viewForYou(); else if(r.a==='saved') viewSaved(); else if(r.a==='org') viewOrg(r.b); else if(r.a==='service') viewService(+r.b); else if(r.a==='services') viewServices(); else viewHome();
 }
 function setQ(v){ $('#q').value = v; $('#sbox').classList.toggle('has', !!v); }
@@ -2750,7 +2752,7 @@ render();
     const list=ids.map(id=>SBY[id]).filter(Boolean); if(!list.length) return;
     const w=document.createElement('div'); w.className='cb-r';
     w.innerHTML=list.map(s=>`<div class="cb-c"><b>${esc(s.title)}</b><span>${esc((OBY[s.org]||{}).name)}</span><div class="row"><button class="btn ghost" data-d="${s.id}">التفاصيل</button>${s.link?`<a class="btn gold" href="${esc(s.link)}" target="_blank" rel="noopener noreferrer">${/برنامج/.test(s.title)?'التقديم':'الاستفادة'}</a>`:''}</div></div>`).join('');
-    w.querySelectorAll('[data-d]').forEach(b=>b.addEventListener('click',()=>{ cb.classList.remove('on'); $('#cbFab').style.display=''; go('#/service/'+b.dataset.d); }));
+    w.querySelectorAll('[data-d]').forEach(b=>b.addEventListener('click',()=>{ cb.classList.remove('on'); $('#cbFab').style.display=''; window.__fromChat=true; go('#/service/'+b.dataset.d); }));
     M.appendChild(w); scroll();
   }
   function open(){ cb.classList.add('on'); $('#cbFab').style.display='none'; if(!opened){ opened=true; bubble('a','مرحبًا بكم في دليل شركاء النجاح. يسرّني مساعدتكم؛ يُرجى وصف مشروعكم أو احتياجكم، وسأرشّح لكم الخدمات والبرامج الأنسب من الدليل.'); S.innerHTML=['أحتاج إلى تمويل لمشروعي','أبحث عن برامج احتضان وتسريع','أرغب في اعتمادات سحابية','لدي نموذج أولي وأرغب في تطويره'].map(x=>`<button type="button">${x}</button>`).join(''); S.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>send(b.textContent))); } setTimeout(()=>I.focus(),50); }
@@ -2772,6 +2774,7 @@ render();
     wait.remove(); bubble('a',reply); cards(ids); if(note) bubble('n','المساعد الذكي غير مفعّل حاليًا؛ وتُعرض نتائج البحث المباشر في الدليل.'); HIST.push({role:'user',text},{role:'assistant',text:reply}); busy=false; GO.disabled=false; I.focus();
   }
   F.addEventListener('submit',e=>{ e.preventDefault(); send(I.value); });
+  window.__openChat=open;
   $('#cbFab').addEventListener('click',open); $('#cbX').addEventListener('click',close);
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') close(); });
 })();
