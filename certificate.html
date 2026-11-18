@@ -8,20 +8,20 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Cairo:wght@700;800;900&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <style>
-:root{--navy:#12103C;--navy2:#1A1852;--gold:#C9A24B;--gold-l:#FBF0DA;--ink:#1A1A2E;--gray:#6B6B80;--line:#E4E4EE;--ok:#1E7D4F;--ok-bg:#E6F4EC;--no:#B3261E;--no-bg:#FBE9E7;}
+:root{--navy:#14144F;--navy2:#1D1D63;--gold:#00BF9C;--gold-l:#E6F8F4;--ink:#1A1A2E;--gray:#6B6B80;--line:#E4E4EE;--ok:#1E7D4F;--ok-bg:#E6F4EC;--no:#B3261E;--no-bg:#FBE9E7;}
 *{box-sizing:border-box}
-body{margin:0;font-family:'IBM Plex Sans Arabic',sans-serif;background:#F4F4F9;color:var(--ink);min-height:100vh;display:flex;flex-direction:column;align-items:center}
-.hero{width:100%;background:linear-gradient(160deg,#12103C,#1A1852 60%,#2a1d5e);color:#fff;text-align:center;padding:34px 20px 70px;position:relative}
-.hero:before{content:"";position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,#C9A24B,#2C8C8B,#6B3FA0)}
-.hero .k{color:#E6C570;font-size:13px;font-family:'Cairo',sans-serif}
+body{margin:0;font-family:'IBM Plex Sans Arabic',sans-serif;background:#F5FBFA;color:var(--ink);min-height:100vh;display:flex;flex-direction:column;align-items:center}
+.hero{width:100%;background:linear-gradient(160deg,#14144F,#1D1D63 60%,#262070);color:#fff;text-align:center;padding:34px 20px 70px;position:relative}
+.hero:before{content:"";position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,#00BF9C 0 25%,#63D654 25% 50%,#FCC242 50% 75%,#9B05B9 75%)}
+.hero .k{color:#7EE8D2;font-size:13px;font-family:'Cairo',sans-serif}
 .hero h1{font-family:'Cairo',sans-serif;font-size:26px;margin:8px 0 6px;line-height:1.5}
-.hero .d{display:inline-block;margin-top:6px;background:rgba(255,255,255,.12);border:1px solid rgba(230,197,112,.5);padding:6px 16px;border-radius:999px;font-size:14px;color:#E6C570;font-weight:600}
-.card{width:calc(100% - 32px);max-width:560px;background:#fff;border:1px solid var(--line);border-radius:18px;margin:-44px 16px 24px;padding:26px 22px;position:relative;z-index:2;box-shadow:0 8px 28px rgba(18,16,60,.08)}
+.hero .d{display:inline-block;margin-top:6px;background:rgba(255,255,255,.12);border:1px solid rgba(230,197,112,.5);padding:6px 16px;border-radius:999px;font-size:14px;color:#7EE8D2;font-weight:600}
+.card{width:calc(100% - 32px);max-width:560px;background:#fff;border:1px solid var(--line);border-radius:18px;margin:-44px 16px 24px;padding:26px 22px;position:relative;z-index:2;box-shadow:0 8px 28px rgba(20,20,79,.08)}
 .hi{font-size:13px;color:var(--gray)}
 .name{font-family:'Cairo',sans-serif;font-weight:800;font-size:20px;color:var(--navy);margin:2px 0}
 .proj{font-size:14px;color:var(--ink);margin-bottom:16px}
 .proj b{color:var(--navy2)}
-.details{background:var(--gold-l);border:1px solid #E9D6AB;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.9;color:#5C4315;white-space:pre-wrap;margin-bottom:18px}
+.details{background:var(--gold-l);border:1px solid #BDEBE0;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.9;color:#00604F;white-space:pre-wrap;margin-bottom:18px}
 .q{font-weight:700;font-size:15px;margin-bottom:10px}
 .btns{display:flex;gap:10px}
 .btn{flex:1;padding:14px 8px;border-radius:12px;border:2px solid var(--line);background:#fff;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:.15s}
@@ -31,7 +31,7 @@ body{margin:0;font-family:'IBM Plex Sans Arabic',sans-serif;background:#F4F4F9;c
 .btn:disabled{opacity:.55;cursor:not-allowed}
 .status{margin-top:14px;font-size:13px;padding:10px 12px;border-radius:10px;background:#F7F7FB;color:var(--gray);line-height:1.8}
 .status.ok{background:var(--ok-bg);color:var(--ok)}.status.no{background:var(--no-bg);color:var(--no)}
-.warn{margin-top:12px;font-size:12.5px;color:#8A6D00}
+.warn{margin-top:12px;font-size:12.5px;color:#00604F}
 .err{text-align:center;padding:10px;color:var(--no);line-height:2}
 .foot{font-size:12px;color:var(--gray);margin:0 0 24px;text-align:center}
 input.f{width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:12px;font-family:inherit;font-size:15px;margin-bottom:12px;direction:ltr;text-align:right}
@@ -65,6 +65,7 @@ input.f:focus{outline:none;border-color:var(--navy2)}
 .tk-w{margin-top:14px;font-size:13px;padding:10px 12px;border-radius:10px;background:#F7F7FB;color:var(--gray);text-align:center;line-height:1.8}
 .go{width:100%;padding:14px;border:0;border-radius:12px;background:var(--navy);color:#fff;font:700 15px inherit;font-family:inherit;cursor:pointer}.go:disabled{opacity:.6}.ghost{background:#fff;color:var(--navy);border:2px solid var(--line);margin-top:10px}.cprev{overflow:hidden;border:1px solid var(--line);border-radius:10px;margin:14px 0;direction:ltr}
 </style>
+<link rel="stylesheet" href="brand.css">
 </head>
 <body>
 <div class="topbar">
@@ -93,18 +94,18 @@ function certHtml(c){
   const title = (c.title||'').trim() || CERT_DEF.title, body = (c.body||'').trim() || CERT_DEF.body;
   const rep = t=>t.replace(/\{الاسم\}/g,c.name||'').replace(/\{المشروع\}/g,c.project||'').replace(/\{التاريخ\}/g,c.date_text||'');
   const paras = body.split('\n').map(l=>l.trim()).filter(Boolean).map(l=> l==='{الاسم}'
-    ? `<div style="font-size:50px;font-weight:900;color:#B8860B;margin:10px 0 14px;line-height:1.4">${certEsc(c.name)}</div>`
+    ? `<div style="font-size:50px;font-weight:900;color:#00846E;margin:10px 0 14px;line-height:1.4">${certEsc(c.name)}</div>`
     : `<div style="font-size:23px;line-height:2;color:#2B2B45">${certEsc(rep(l))}</div>`).join('');
   const sg = (c.signers||[]).filter(x=>x && (x.name||x.title)).slice(0,3);
-  const signers = sg.length ? `<div style="display:flex;justify-content:space-around;gap:30px;margin-top:26px">${sg.map(x=>`<div style="min-width:220px;text-align:center"><div style="height:46px"></div><div style="border-top:1.5px solid #12103C;padding-top:6px;font-weight:800;font-size:19px;color:#12103C">${certEsc(x.name)}</div><div style="font-size:15px;color:#555">${certEsc(x.title)}</div></div>`).join('')}</div>` : '';
+  const signers = sg.length ? `<div style="display:flex;justify-content:space-around;gap:30px;margin-top:26px">${sg.map(x=>`<div style="min-width:220px;text-align:center"><div style="height:46px"></div><div style="border-top:1.5px solid #14144F;padding-top:6px;font-weight:800;font-size:19px;color:#14144F">${certEsc(x.name)}</div><div style="font-size:15px;color:#555">${certEsc(x.title)}</div></div>`).join('')}</div>` : '';
   return `<div style="width:1123px;height:794px;box-sizing:border-box;background:#fff;position:relative;font-family:'Cairo','IBM Plex Sans Arabic',Tahoma,sans-serif;direction:rtl;overflow:hidden">
-    <div style="position:absolute;inset:18px;border:6px solid #12103C"></div>
-    <div style="position:absolute;inset:30px;border:2px solid #C9A24B"></div>
-    <div style="position:absolute;top:0;left:0;right:0;height:10px;background:linear-gradient(90deg,#00BFA5 0 25%,#7AD03A 25% 50%,#F7B731 50% 75%,#7B3FA0 75%)"></div>
+    <div style="position:absolute;inset:18px;border:6px solid #14144F"></div>
+    <div style="position:absolute;inset:30px;border:2px solid #00BF9C"></div>
+    <div style="position:absolute;top:0;left:0;right:0;height:10px;background:linear-gradient(90deg,#00BFA5 0 25%,#7AD03A 25% 50%,#F7B731 50% 75%,#9B05B9 75%)"></div>
     <div style="position:absolute;inset:48px 70px 70px;display:flex;flex-direction:column;align-items:center;text-align:center">
       <div style="width:100%;display:flex;justify-content:space-between;align-items:center;height:78px"><img src="${SHOW_LOGO_INC}" style="height:70px;object-fit:contain"><img src="${SHOW_LOGO_QU}" style="height:70px;object-fit:contain"></div>
-      <div style="font-size:60px;font-weight:900;color:#12103C;margin-top:6px;line-height:1.3">${certEsc(title)}</div>
-      <div style="width:150px;height:3px;background:#C9A24B;margin:6px 0 14px"></div>
+      <div style="font-size:60px;font-weight:900;color:#14144F;margin-top:6px;line-height:1.3">${certEsc(title)}</div>
+      <div style="width:150px;height:3px;background:#00BF9C;margin:6px 0 14px"></div>
       <div style="flex:1;display:flex;flex-direction:column;justify-content:center;max-width:860px">${paras}</div>
       ${signers}
     </div>
@@ -155,7 +156,7 @@ async function load(){
   msg('<div class="hi">جارٍ التحميل…</div>');
   let R; try{ const { data, error } = await SB.rpc('cert_get',{ p_token:TOKEN }); if(error) throw error; R = data; }catch(e){ console.error(e); return renderLookup('تعذّر الاتصال، يُرجى إعادة المحاولة.'); }
   if(!R || !R.ok) return renderLookup('تعذّر العثور على بياناتكم. حاولوا من جديد.');
-  if(!R.open) return msg(`<div class="name">${esc(R.name)}</div><div class="status" style="background:var(--gold-l);color:#5C4315;margin-top:10px">ستتوفر الشهادات بعد انتهاء البرنامج، وسيصلكم إشعار من فريق البرنامج. يمكنكم العودة إلى هذه الصفحة لاحقًا.</div><button class="go ghost" id="oth">ليس أنا</button>`), bindOther();
+  if(!R.open) return msg(`<div class="name">${esc(R.name)}</div><div class="status" style="background:var(--gold-l);color:#00604F;margin-top:10px">ستتوفر الشهادات بعد انتهاء البرنامج، وسيصلكم إشعار من فريق البرنامج. يمكنكم العودة إلى هذه الصفحة لاحقًا.</div><button class="go ghost" id="oth">ليس أنا</button>`), bindOther();
   if(!R.attended) return msg(`<div class="name">${esc(R.name)}</div><div class="status no" style="margin-top:10px">لم يُسجَّل حضوركم في الحفل، وتُصدر الشهادة للحاضرين فقط. للاستفسار يُرجى التواصل مع فريق البرنامج.</div><button class="go ghost" id="oth">ليس أنا</button>`), bindOther();
   const c = { name:R.name, project:R.project, code:R.code, date_text:R.date_text, title:R.title, body:R.body, signers:R.signers, verify:location.origin+location.pathname+'?v='+R.code };
   msg(`<div class="hi">شكرًا لمشاركتكم</div><div class="name">${esc(R.name)}</div><div class="proj">${esc(R.project)}</div>

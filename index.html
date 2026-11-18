@@ -13,21 +13,21 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <style>
 :root{
-  --navy-950:#12103C; --navy-800:#1A1852; --navy-700:#242066;
-  --teal-600:#0E7C7B; --teal-500:#149493; --teal-100:#E4F3F2;
-  --gold-500:#C9A24B; --gold-100:#F7EFDD;
-  --purple-500:#6B4FA0; --green-500:#2FA36B;
-  --paper:#F5F6F9; --card:#FFFFFF;
+  --navy-950:#14144F; --navy-800:#1D1D63; --navy-700:#2A2A78;
+  --teal-600:#00A088; --teal-500:#149493; --teal-100:#E6F8F4;
+  --gold-500:#00BF9C; --gold-100:#E6F8F4;
+  --purple-500:#9B05B9; --green-500:#63D654;
+  --paper:#F2FCFA; --card:#FFFFFF;
   --ink-900:#121826; --ink-600:#4C5568; --ink-400:#8790A3;
   --line:#E1E4EB; --danger:#C0392B; --danger-100:#FBEAE8;
   --success:#1E8E5A; --success-100:#E7F5EE;
-  --radius:16px; --shadow:0 10px 40px rgba(18,16,60,.10);
+  --radius:16px; --shadow:0 10px 40px rgba(20,20,79,.10);
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;height:100%;}
 body{
-  background:radial-gradient(circle at 20% 0%, rgba(14,124,123,.10), transparent 45%),
-              radial-gradient(circle at 100% 100%, rgba(201,162,75,.10), transparent 40%),
+  background:radial-gradient(circle at 20% 0%, rgba(0,191,156,.10), transparent 45%),
+              radial-gradient(circle at 100% 100%, rgba(0,191,156,.10), transparent 40%),
               var(--paper);
   color:var(--ink-900);font-family:'IBM Plex Sans Arabic',sans-serif;font-size:15px;line-height:1.7;
   min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
@@ -52,7 +52,7 @@ body{
 h1{font-size:20px;font-weight:800;color:var(--navy-800);margin:0 0 6px;font-family:'Cairo',sans-serif;}
 h1::after{content:'';display:block;width:38px;height:3px;background:var(--teal-600);border-radius:2px;margin-top:9px;}
 .sub{font-size:13px;color:var(--ink-600);margin:14px 0 22px;}
-.restricted-note{background:var(--gold-100);border:1px solid #E9D6AB;border-radius:10px;padding:10px 14px;font-size:12px;color:#7A5C1E;margin-bottom:22px;display:flex;gap:8px;}
+.restricted-note{background:var(--gold-100);border:1px solid #BDEBE0;border-radius:10px;padding:10px 14px;font-size:12px;color:#00604F;margin-bottom:22px;display:flex;gap:8px;}
 
 .eq-ticks{width:100%;height:26px;display:block;margin-bottom:22px;}
 
@@ -62,7 +62,7 @@ input[type=text],input[type=email],input[type=password]{
   width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:10px;font-size:14.5px;
   background:#fff;color:var(--ink-900);font-family:inherit;
 }
-input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(14,124,123,.13);}
+input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(0,191,156,.13);}
 .field-hint{font-size:11.5px;color:var(--ink-400);margin-top:5px;}
 
 .btn{width:100%;border:none;border-radius:10px;padding:13px;font-size:14.5px;font-weight:700;cursor:pointer;transition:all .15s;}
@@ -125,28 +125,28 @@ input:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(
   </div>
 
   <svg class="eq-ticks" viewBox="0 0 440 26" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-    <rect x="8"   y="8"  width="3.5" height="14" rx="1.75" fill="#6B4FA0"/>
-    <rect x="28"  y="3"  width="3.5" height="20" rx="1.75" fill="#2FA36B"/>
-    <rect x="48"  y="11" width="3.5" height="10" rx="1.75" fill="#C9A24B"/>
-    <rect x="68"  y="6"  width="3.5" height="17" rx="1.75" fill="#0E7C7B"/>
-    <rect x="88"  y="10" width="3.5" height="12" rx="1.75" fill="#6B4FA0"/>
-    <rect x="108" y="2"  width="3.5" height="21" rx="1.75" fill="#C9A24B"/>
-    <rect x="128" y="9"  width="3.5" height="13" rx="1.75" fill="#2FA36B"/>
-    <rect x="148" y="5"  width="3.5" height="18" rx="1.75" fill="#0E7C7B"/>
-    <rect x="168" y="8"  width="3.5" height="14" rx="1.75" fill="#C9A24B"/>
-    <rect x="188" y="1"  width="3.5" height="22" rx="1.75" fill="#6B4FA0"/>
-    <rect x="208" y="10" width="3.5" height="12" rx="1.75" fill="#2FA36B"/>
-    <rect x="228" y="6"  width="3.5" height="17" rx="1.75" fill="#0E7C7B"/>
-    <rect x="248" y="9"  width="3.5" height="13" rx="1.75" fill="#C9A24B"/>
-    <rect x="268" y="3"  width="3.5" height="20" rx="1.75" fill="#6B4FA0"/>
-    <rect x="288" y="11" width="3.5" height="10" rx="1.75" fill="#2FA36B"/>
-    <rect x="308" y="5"  width="3.5" height="18" rx="1.75" fill="#0E7C7B"/>
-    <rect x="328" y="8"  width="3.5" height="14" rx="1.75" fill="#C9A24B"/>
-    <rect x="348" y="2"  width="3.5" height="21" rx="1.75" fill="#6B4FA0"/>
-    <rect x="368" y="10" width="3.5" height="12" rx="1.75" fill="#2FA36B"/>
-    <rect x="388" y="6"  width="3.5" height="17" rx="1.75" fill="#0E7C7B"/>
-    <rect x="408" y="9"  width="3.5" height="13" rx="1.75" fill="#C9A24B"/>
-    <rect x="428" y="4"  width="3.5" height="19" rx="1.75" fill="#6B4FA0"/>
+    <rect x="8"   y="8"  width="3.5" height="14" rx="1.75" fill="#9B05B9"/>
+    <rect x="28"  y="3"  width="3.5" height="20" rx="1.75" fill="#63D654"/>
+    <rect x="48"  y="11" width="3.5" height="10" rx="1.75" fill="#FCC242"/>
+    <rect x="68"  y="6"  width="3.5" height="17" rx="1.75" fill="#00BF9C"/>
+    <rect x="88"  y="10" width="3.5" height="12" rx="1.75" fill="#9B05B9"/>
+    <rect x="108" y="2"  width="3.5" height="21" rx="1.75" fill="#FCC242"/>
+    <rect x="128" y="9"  width="3.5" height="13" rx="1.75" fill="#63D654"/>
+    <rect x="148" y="5"  width="3.5" height="18" rx="1.75" fill="#00BF9C"/>
+    <rect x="168" y="8"  width="3.5" height="14" rx="1.75" fill="#FCC242"/>
+    <rect x="188" y="1"  width="3.5" height="22" rx="1.75" fill="#9B05B9"/>
+    <rect x="208" y="10" width="3.5" height="12" rx="1.75" fill="#63D654"/>
+    <rect x="228" y="6"  width="3.5" height="17" rx="1.75" fill="#00BF9C"/>
+    <rect x="248" y="9"  width="3.5" height="13" rx="1.75" fill="#FCC242"/>
+    <rect x="268" y="3"  width="3.5" height="20" rx="1.75" fill="#9B05B9"/>
+    <rect x="288" y="11" width="3.5" height="10" rx="1.75" fill="#63D654"/>
+    <rect x="308" y="5"  width="3.5" height="18" rx="1.75" fill="#00BF9C"/>
+    <rect x="328" y="8"  width="3.5" height="14" rx="1.75" fill="#FCC242"/>
+    <rect x="348" y="2"  width="3.5" height="21" rx="1.75" fill="#9B05B9"/>
+    <rect x="368" y="10" width="3.5" height="12" rx="1.75" fill="#63D654"/>
+    <rect x="388" y="6"  width="3.5" height="17" rx="1.75" fill="#00BF9C"/>
+    <rect x="408" y="9"  width="3.5" height="13" rx="1.75" fill="#FCC242"/>
+    <rect x="428" y="4"  width="3.5" height="19" rx="1.75" fill="#9B05B9"/>
   </svg>
 
   <div class="card">

@@ -1,0 +1,25 @@
+/* هوية حاضنة ابتكار 5 — مطابقة للعرض التقديمي للحفل الختامي
+   الألوان: كحلي #14144F، أخضر مائي #00BF9C، أخضر فاتح #63D654، كهرماني #FCC242، بنفسجي #9B05B9، خلفية نعناعية #F2FCFA
+   العنصر المميز: خطوط النبض الملونة (equalizer) أسفل الواجهة العلوية. */
+:root{
+  --navy:#14144F;--navy2:#1D1D63;--brand-teal:#00BF9C;--brand-lime:#63D654;--brand-amber:#FCC242;--brand-purple:#9B05B9;--mint:#F2FCFA;
+  --gold:#00BF9C;--gold-l:#E6F8F4;--line:#E3E8EE;--bg:#F5FBFA;
+}
+body{background:#F5FBFA}
+.hero{background:linear-gradient(165deg,#14144F 0%,#1D1D63 70%,#262070 100%)!important;position:relative;overflow:hidden}
+.hero .k{color:#7EE8D2!important;letter-spacing:.3px}
+.hero .d{border-color:rgba(0,191,156,.55)!important;color:#7EE8D2!important;background:rgba(255,255,255,.08)!important}
+.hero:after{content:"";position:absolute;left:0;right:0;bottom:50px;height:46px;opacity:.95;pointer-events:none;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='360' height='46'%3E%3Cg%3E%3Crect x='6' y='18' width='3' height='28' fill='%239B05B9'/%3E%3Crect x='36' y='30' width='3' height='16' fill='%2363D654'/%3E%3Crect x='66' y='8' width='3' height='38' fill='%239B05B9'/%3E%3Crect x='96' y='28' width='3' height='18' fill='%23FCC242'/%3E%3Crect x='126' y='22' width='3' height='24' fill='%2300BF9C'/%3E%3Crect x='156' y='34' width='3' height='12' fill='%239B05B9'/%3E%3Crect x='186' y='14' width='3' height='32' fill='%2363D654'/%3E%3Crect x='216' y='26' width='3' height='20' fill='%23FCC242'/%3E%3Crect x='246' y='4' width='3' height='42' fill='%239B05B9'/%3E%3Crect x='276' y='32' width='3' height='14' fill='%2300BF9C'/%3E%3Crect x='306' y='16' width='3' height='30' fill='%23FCC242'/%3E%3Crect x='336' y='24' width='3' height='22' fill='%2363D654'/%3E%3C/g%3E%3C/svg%3E") repeat-x bottom}
+.hero>*{position:relative;z-index:1}
+.hero{padding-bottom:108px!important}
+.topbar{border-bottom:0!important;box-shadow:0 1px 0 #E3E8EE}
+.card,.panel,.det,.orghead{border-color:#E3E8EE!important;border-radius:14px;box-shadow:0 6px 22px rgba(20,20,79,.07)}
+.card.svc:hover,.card.org:hover{box-shadow:0 10px 26px rgba(20,20,79,.12)}
+h1,h2,h3{font-family:'Cairo',sans-serif}
+.btn.gold,.btn.go{background:#00BF9C;color:#06222B}
+.btn.gold:hover{background:#00A88A}
+.go{background:#14144F}
+.sec-h h2,.name{position:relative}
+.sec-h h2:after{content:"";display:block;width:34px;height:3px;border-radius:2px;background:#00BF9C;margin-top:6px}
+::selection{background:#BDEBE0}

@@ -13,17 +13,17 @@
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <style>
 :root{
-  --navy-950:#12103C;
-  --navy-800:#1A1852;
-  --navy-700:#242066;
-  --teal-600:#0E7C7B;
+  --navy-950:#14144F;
+  --navy-800:#1D1D63;
+  --navy-700:#2A2A78;
+  --teal-600:#00A088;
   --teal-500:#149493;
-  --teal-100:#E4F3F2;
-  --gold-500:#C9A24B;
-  --gold-100:#F7EFDD;
-  --purple-500:#6B4FA0;
-  --green-500:#2FA36B;
-  --paper:#F5F6F9;
+  --teal-100:#E6F8F4;
+  --gold-500:#00BF9C;
+  --gold-100:#E6F8F4;
+  --purple-500:#9B05B9;
+  --green-500:#63D654;
+  --paper:#F2FCFA;
   --card:#FFFFFF;
   --ink-900:#121826;
   --ink-600:#4C5568;
@@ -36,7 +36,7 @@
   --amber:#B4790F;
   --amber-100:#FBF1DF;
   --radius:14px;
-  --shadow:0 4px 20px rgba(11,11,61,0.06);
+  --shadow:0 4px 20px rgba(20,20,79,0.06);
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
@@ -66,7 +66,7 @@ a{color:inherit;}
 .topbar{
   background:linear-gradient(180deg,var(--navy-950) 0%,var(--navy-800) 100%);
   color:#fff;padding:18px 28px;position:sticky;top:0;z-index:40;
-  box-shadow:0 6px 24px rgba(11,11,61,0.18);
+  box-shadow:0 6px 24px rgba(20,20,79,0.18);
 }
 .topbar-inner{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:16px;}
 .brand-mark{
@@ -143,9 +143,9 @@ a{color:inherit;}
 .section-num-badge{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;color:#fff;font-family:'Cairo',sans-serif;font-weight:800;font-size:13px;margin-inline-end:8px;vertical-align:middle;}
 .section-title::after{content:'';display:block;width:34px;height:3px;background:var(--teal-600);border-radius:2px;margin-top:8px;}
 .section-desc{font-size:13.5px;color:var(--ink-600);margin-top:6px;}
-.req-banner{background:var(--gold-100);border:1px solid #E9D6AB;border-radius:10px;padding:11px 14px;font-size:13px;color:#7A5C1E;margin-bottom:20px;display:flex;gap:8px;align-items:flex-start;}
+.req-banner{background:var(--gold-100);border:1px solid #BDEBE0;border-radius:10px;padding:11px 14px;font-size:13px;color:#00604F;margin-bottom:20px;display:flex;gap:8px;align-items:flex-start;}
 .ann-banner{background:var(--teal-100);border:1px solid rgba(20,148,147,.28);border-radius:10px;padding:11px 14px;font-size:13px;color:var(--teal-700,#0E5C5B);margin-bottom:12px;display:flex;gap:9px;align-items:flex-start;white-space:pre-wrap;line-height:1.7;}
-.req-banner b{color:#5C4315;}
+.req-banner b{color:#00604F;}
 
 .field{margin-bottom:18px;}
 .field-label{display:flex;gap:6px;font-size:13.5px;font-weight:600;color:var(--ink-900);margin-bottom:7px;}
@@ -156,7 +156,7 @@ input[type=text],input[type=number],input[type=date],input[type=email],input[typ
   background:#fff;color:var(--ink-900);font-family:inherit;font-size:14px;
   transition:border-color .15s, box-shadow .15s;
 }
-input:focus,textarea:focus,select:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(14,124,123,.13);}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--teal-600);box-shadow:0 0 0 3px rgba(0,191,156,.13);}
 textarea{min-height:96px;resize:vertical;}
 select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='9'><path d='M1 1l6 6 6-6' stroke='%234C5568' stroke-width='1.6' fill='none'/></svg>");background-repeat:no-repeat;background-position:left 13px center;padding-left:34px;}
 input:disabled,select:disabled{background:#F0F1F4;color:var(--ink-400);}
@@ -311,7 +311,7 @@ input:disabled,select:disabled{background:#F0F1F4;color:var(--ink-400);}
       <div class="brand-sub" id="subProjectName">جاري تحميل بيانات المشروع…</div>
     </div>
     <div class="project-pill"><span class="dot"></span><span class="mono" id="pillProjectId">—</span></div>
-    <div class="project-pill" id="deadlineCountdown" style="display:none;color:var(--gold-500);border-color:rgba(201,162,75,.35)"></div>
+    <div class="project-pill" id="deadlineCountdown" style="display:none;color:var(--gold-500);border-color:rgba(0,191,156,.35)"></div>
     <div class="topbar-actions">
       <button class="btn-topbar" id="btnTopSave" title="حفظ البيانات الآن">حفظ</button>
       <button class="btn-topbar" id="btnLogout" title="تسجيل الخروج">خروج</button>
@@ -321,23 +321,23 @@ input:disabled,select:disabled{background:#F0F1F4;color:var(--ink-400);}
   <div class="progress-label"><span id="progressText">0% مكتمل</span><span id="draftStatus">لم يتم الحفظ بعد</span></div>
 </div>
 <svg class="eq-divider" viewBox="0 0 1180 22" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-  <rect x="20" y="7" width="3" height="10" rx="1.5" fill="#6B4FA0"/><rect x="55" y="3" width="3" height="16" rx="1.5" fill="#2FA36B"/>
-  <rect x="90" y="8" width="3" height="9" rx="1.5" fill="#C9A24B"/><rect x="125" y="5" width="3" height="13" rx="1.5" fill="#0E7C7B"/>
-  <rect x="160" y="7" width="3" height="10" rx="1.5" fill="#6B4FA0"/><rect x="195" y="2" width="3" height="17" rx="1.5" fill="#C9A24B"/>
-  <rect x="230" y="6" width="3" height="11" rx="1.5" fill="#2FA36B"/><rect x="265" y="4" width="3" height="14" rx="1.5" fill="#0E7C7B"/>
-  <rect x="300" y="7" width="3" height="10" rx="1.5" fill="#C9A24B"/><rect x="335" y="1" width="3" height="18" rx="1.5" fill="#6B4FA0"/>
-  <rect x="370" y="6" width="3" height="11" rx="1.5" fill="#2FA36B"/><rect x="405" y="5" width="3" height="13" rx="1.5" fill="#0E7C7B"/>
-  <rect x="440" y="8" width="3" height="9" rx="1.5" fill="#C9A24B"/><rect x="475" y="3" width="3" height="16" rx="1.5" fill="#6B4FA0"/>
-  <rect x="510" y="7" width="3" height="10" rx="1.5" fill="#2FA36B"/><rect x="545" y="4" width="3" height="14" rx="1.5" fill="#0E7C7B"/>
-  <rect x="580" y="6" width="3" height="11" rx="1.5" fill="#C9A24B"/><rect x="615" y="2" width="3" height="17" rx="1.5" fill="#6B4FA0"/>
-  <rect x="650" y="7" width="3" height="10" rx="1.5" fill="#2FA36B"/><rect x="685" y="5" width="3" height="13" rx="1.5" fill="#0E7C7B"/>
-  <rect x="720" y="8" width="3" height="9" rx="1.5" fill="#C9A24B"/><rect x="755" y="3" width="3" height="16" rx="1.5" fill="#6B4FA0"/>
-  <rect x="790" y="6" width="3" height="11" rx="1.5" fill="#2FA36B"/><rect x="825" y="4" width="3" height="14" rx="1.5" fill="#0E7C7B"/>
-  <rect x="860" y="7" width="3" height="10" rx="1.5" fill="#C9A24B"/><rect x="895" y="2" width="3" height="17" rx="1.5" fill="#6B4FA0"/>
-  <rect x="930" y="6" width="3" height="11" rx="1.5" fill="#2FA36B"/><rect x="965" y="5" width="3" height="13" rx="1.5" fill="#0E7C7B"/>
-  <rect x="1000" y="8" width="3" height="9" rx="1.5" fill="#C9A24B"/><rect x="1035" y="3" width="3" height="16" rx="1.5" fill="#6B4FA0"/>
-  <rect x="1070" y="6" width="3" height="11" rx="1.5" fill="#2FA36B"/><rect x="1105" y="4" width="3" height="14" rx="1.5" fill="#0E7C7B"/>
-  <rect x="1140" y="7" width="3" height="10" rx="1.5" fill="#C9A24B"/>
+  <rect x="20" y="7" width="3" height="10" rx="1.5" fill="#9B05B9"/><rect x="55" y="3" width="3" height="16" rx="1.5" fill="#63D654"/>
+  <rect x="90" y="8" width="3" height="9" rx="1.5" fill="#FCC242"/><rect x="125" y="5" width="3" height="13" rx="1.5" fill="#00BF9C"/>
+  <rect x="160" y="7" width="3" height="10" rx="1.5" fill="#9B05B9"/><rect x="195" y="2" width="3" height="17" rx="1.5" fill="#FCC242"/>
+  <rect x="230" y="6" width="3" height="11" rx="1.5" fill="#63D654"/><rect x="265" y="4" width="3" height="14" rx="1.5" fill="#00BF9C"/>
+  <rect x="300" y="7" width="3" height="10" rx="1.5" fill="#FCC242"/><rect x="335" y="1" width="3" height="18" rx="1.5" fill="#9B05B9"/>
+  <rect x="370" y="6" width="3" height="11" rx="1.5" fill="#63D654"/><rect x="405" y="5" width="3" height="13" rx="1.5" fill="#00BF9C"/>
+  <rect x="440" y="8" width="3" height="9" rx="1.5" fill="#FCC242"/><rect x="475" y="3" width="3" height="16" rx="1.5" fill="#9B05B9"/>
+  <rect x="510" y="7" width="3" height="10" rx="1.5" fill="#63D654"/><rect x="545" y="4" width="3" height="14" rx="1.5" fill="#00BF9C"/>
+  <rect x="580" y="6" width="3" height="11" rx="1.5" fill="#FCC242"/><rect x="615" y="2" width="3" height="17" rx="1.5" fill="#9B05B9"/>
+  <rect x="650" y="7" width="3" height="10" rx="1.5" fill="#63D654"/><rect x="685" y="5" width="3" height="13" rx="1.5" fill="#00BF9C"/>
+  <rect x="720" y="8" width="3" height="9" rx="1.5" fill="#FCC242"/><rect x="755" y="3" width="3" height="16" rx="1.5" fill="#9B05B9"/>
+  <rect x="790" y="6" width="3" height="11" rx="1.5" fill="#63D654"/><rect x="825" y="4" width="3" height="14" rx="1.5" fill="#00BF9C"/>
+  <rect x="860" y="7" width="3" height="10" rx="1.5" fill="#FCC242"/><rect x="895" y="2" width="3" height="17" rx="1.5" fill="#9B05B9"/>
+  <rect x="930" y="6" width="3" height="11" rx="1.5" fill="#63D654"/><rect x="965" y="5" width="3" height="13" rx="1.5" fill="#00BF9C"/>
+  <rect x="1000" y="8" width="3" height="9" rx="1.5" fill="#FCC242"/><rect x="1035" y="3" width="3" height="16" rx="1.5" fill="#9B05B9"/>
+  <rect x="1070" y="6" width="3" height="11" rx="1.5" fill="#63D654"/><rect x="1105" y="4" width="3" height="14" rx="1.5" fill="#00BF9C"/>
+  <rect x="1140" y="7" width="3" height="10" rx="1.5" fill="#FCC242"/>
 </svg>
 
 <div class="layout">
@@ -938,7 +938,7 @@ function renderDeclareSection(section){
 }
 
 /* ---------------- عرض القسم الحالي ---------------- */
-const ACCENT_CYCLE = ['#0E7C7B','#6B4FA0','#C9A24B','#2FA36B'];
+const ACCENT_CYCLE = ['#00A088','#9B05B9','#00BF9C','#63D654'];
 function renderSection(){
   const sectionIndex = SECTIONS.findIndex(s=>s.id===state.current);
   const section = SECTIONS[sectionIndex] || SECTIONS[0];
@@ -1372,7 +1372,7 @@ function renderThankYouScreen(){
     ${ASSIGNED_COMMITTEE_NAME ? `
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--line)">
       <div style="font-weight:700;color:var(--navy-800);font-size:12.5px;margin-bottom:8px">${icon('file-text',{size:13})} ملف العرض التقديمي للتحكيم</div>
-      ${(PRESENTATION_DEADLINE_AT && !PRESENTATION_DEADLINE_PASSED) ? `<div style="font-size:11.5px;color:var(--amber,#B8860B);margin-bottom:10px">⏰ آخر موعد للرفع أو الاستبدال: ${new Date(PRESENTATION_DEADLINE_AT).toLocaleDateString('ar-SA')} — ${new Date(PRESENTATION_DEADLINE_AT).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</div>` : ''}
+      ${(PRESENTATION_DEADLINE_AT && !PRESENTATION_DEADLINE_PASSED) ? `<div style="font-size:11.5px;color:var(--amber,#00846E);margin-bottom:10px">⏰ آخر موعد للرفع أو الاستبدال: ${new Date(PRESENTATION_DEADLINE_AT).toLocaleDateString('ar-SA')} — ${new Date(PRESENTATION_DEADLINE_AT).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</div>` : ''}
       ${JUDGING_PRESENTATION ? `
       <div class="file-chip" style="margin-bottom:8px"><span class="fc-name">${icon('file-text',{size:13})} ${escHtml(JUDGING_PRESENTATION.file_name)}</span>${PRESENTATION_DEADLINE_PASSED ? '' : `<button type="button" class="fc-remove" id="btnReplacePresentation">استبدال</button>`}</div>
       <div style="font-size:11px;color:var(--ink-400)">تم الرفع بتاريخ ${new Date(JUDGING_PRESENTATION.uploaded_at).toLocaleDateString('ar-SA')}${PRESENTATION_DEADLINE_PASSED ? ' — انتهى موعد الاستبدال' : ''}</div>
@@ -1410,10 +1410,10 @@ function renderThankYouScreen(){
         <div style="font-size:12.5px;color:var(--ink-900);line-height:1.9;margin-bottom:10px">نأمل من كل عضو في الفريق تأكيد حضوره عبر رابطه الشخصي. حتى الآن: <b style="color:#1E7D4F">${c.yes}</b> سيحضر، <b style="color:#B3261E">${c.no}</b> يعتذر، <b>${c.pending}</b> لم يردّ.${st.is_open===false?' <b style="color:var(--danger)">انتهت فترة التأكيد.</b>':''}</div>
         <button class="btn btn-primary" id="btnGoToCeremony">متابعة تأكيد الحضور وإرسال الروابط</button>
       </div>`; })() : ''}
-      ${TEASER_ELIGIBLE ? `<div style="max-width:480px;margin:0 auto 22px;padding:16px 18px;border-radius:12px;background:var(--gold-100,#FBF0DA);border:1px solid var(--gold-300,#E6C570);text-align:right">
+      ${TEASER_ELIGIBLE ? `<div style="max-width:480px;margin:0 auto 22px;padding:16px 18px;border-radius:12px;background:var(--gold-100,#E6F8F4);border:1px solid var(--gold-300,#7EE8D2);text-align:right">
         <div style="font-weight:800;font-size:14px;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:6px">★ استكمال بيانات دليل المشاريع</div>
         <div style="font-size:12.5px;color:var(--ink-900);line-height:1.9;margin-bottom:10px">نأمل التكرُّم باستكمال نبذة المشروع وشعاره وبيانات التواصل وأعضاء الفريق، تمهيدًا لإدراجها في دليل المشاريع للحاضنة. ${(TEASER && TEASER.is_complete) ? '<b style="color:var(--success)">✓ بياناتكم مكتملة</b>' : (TEASER_OPEN ? '' : '<b style="color:var(--danger)">انتهت فترة الاستكمال</b>')}</div>
-        ${(TEASER_OPEN && TEASER_DEADLINE) ? `<div style="font-size:12px;color:var(--amber,#B8860B);font-weight:700;margin-bottom:10px">⏰ آخر موعد للاستكمال: ${teaserDeadlineText()}</div>` : ''}
+        ${(TEASER_OPEN && TEASER_DEADLINE) ? `<div style="font-size:12px;color:var(--amber,#00846E);font-weight:700;margin-bottom:10px">⏰ آخر موعد للاستكمال: ${teaserDeadlineText()}</div>` : ''}
         <button class="btn btn-gold" id="btnGoToTeaser">${(TEASER && TEASER.is_complete) ? 'مراجعة البيانات' : 'استكمال البيانات'}</button>
       </div>` : ''}
       ${PUBLISHED_REPORT ? `<div style="margin-bottom:22px"><button class="btn btn-primary" id="btnGoToReport">${icon('file-text',{size:14})} عرض تقرير مشروعكم</button></div>` : ''}
@@ -1526,7 +1526,7 @@ function renderReportScreen(){
         <div style="background:linear-gradient(135deg,var(--navy-800),#1a2456);padding:22px 24px">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:${qualRow?'16px':'0'}">
             <div>
-              <div style="font-size:11px;color:var(--gold-300,#E6C570);letter-spacing:.5px;font-family:'Cairo',sans-serif">حاضنة ابتكار 5 — تقرير تطوير مشروعكم</div>
+              <div style="font-size:11px;color:var(--gold-300,#7EE8D2);letter-spacing:.5px;font-family:'Cairo',sans-serif">حاضنة ابتكار 5 — تقرير تطوير مشروعكم</div>
               <div style="font-size:17px;font-weight:800;color:#fff;font-family:'Cairo',sans-serif;margin-top:4px">${escHtml(PROJECT_NAME||'')}</div>
             </div>
             <div id="reportLogoSlot" style="flex-shrink:0;width:64px"></div>
@@ -1534,7 +1534,7 @@ function renderReportScreen(){
           ${qualRow}
         </div>
         <div style="padding:24px">
-          <div style="display:inline-block;padding:6px 14px;border-radius:20px;background:var(--gold-100,#FBF0DA);color:var(--navy-800);font-weight:700;font-size:13px;margin-bottom:14px">${escHtml(rep.qualitative_level)}</div>
+          <div style="display:inline-block;padding:6px 14px;border-radius:20px;background:var(--gold-100,#E6F8F4);color:var(--navy-800);font-weight:700;font-size:13px;margin-bottom:14px">${escHtml(rep.qualitative_level)}</div>
           <p style="font-size:13.5px;line-height:1.9;color:var(--ink-900);margin-bottom:20px">${escHtml(rep.overall_message)}</p>
 
           ${rep.motivational_closing ? `<div style="background:var(--teal-100);border-radius:10px;padding:14px 16px">
@@ -1736,7 +1736,7 @@ function teaserPreviewHTML(){
     <div style="background:linear-gradient(135deg,var(--navy-800),#1a2456);padding:16px 18px;display:flex;align-items:center;gap:14px">
       <div style="width:64px;height:64px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">${logo}</div>
       <div style="min-width:0">
-        <div style="font-size:10.5px;color:var(--gold-300,#E6C570);font-family:'Cairo',sans-serif">حاضنة ابتكار 5</div>
+        <div style="font-size:10.5px;color:var(--gold-300,#7EE8D2);font-family:'Cairo',sans-serif">حاضنة ابتكار 5</div>
         <div style="font-size:16px;font-weight:800;color:#fff;font-family:'Cairo',sans-serif;margin-top:2px;overflow-wrap:anywhere">${escHtml(teaserTitle())}</div>
         ${meta ? `<div style="font-size:11px;color:rgba(255,255,255,.75);margin-top:3px">${meta}</div>` : ''}
       </div>
@@ -1746,7 +1746,7 @@ function teaserPreviewHTML(){
       <div style="font-size:13px;line-height:1.9;color:var(--ink-900);white-space:pre-wrap;overflow-wrap:anywhere">${TEASER.summary.trim() ? escHtml(TEASER.summary.trim()) : '<span style="color:var(--ink-400)">ستظهر النبذة هنا…</span>'}</div>
       ${(TEASER.show_members && members.length) ? `
       <div style="font-weight:800;font-size:12px;color:var(--navy-800);margin:14px 0 6px">فريق المشروع</div>
-      <div style="font-size:12.5px;line-height:2;color:var(--ink-900)">${members.map(m=>`<div>• ${escHtml(m.name)}${m.is_leader?' <span style="color:var(--gold-600,#B8860B);font-size:11px">(قائد الفريق)</span>':(m.role?` <span style="color:var(--ink-400);font-size:11px">— ${escHtml(m.role)}</span>`:'')}</div>`).join('')}</div>` : ''}
+      <div style="font-size:12.5px;line-height:2;color:var(--ink-900)">${members.map(m=>`<div>• ${escHtml(m.name)}${m.is_leader?' <span style="color:var(--gold-600,#00846E);font-size:11px">(قائد الفريق)</span>':(m.role?` <span style="color:var(--ink-400);font-size:11px">— ${escHtml(m.role)}</span>`:'')}</div>`).join('')}</div>` : ''}
       <div style="font-weight:800;font-size:12px;color:var(--navy-800);margin:14px 0 6px">التواصل</div>
       <div style="font-size:12.5px;line-height:2;color:var(--ink-900)">
         ${TEASER.contact_email ? `✉️ <span class="mono" dir="ltr">${escHtml(TEASER.contact_email)}</span><br>` : ''}
@@ -1798,7 +1798,7 @@ function renderTeaserScreen(){
     <div style="padding:8px 22px 30px;max-width:760px;margin:0 auto">
       <div style="font-size:20px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:6px">استكمال البيانات</div>
       <div style="font-size:13px;color:var(--ink-600);line-height:1.9;margin-bottom:14px">يسرّ فريق حاضنة ابتكار تهنئتكم على اجتياز مرحلة التحكيم. وتمهيدًا لإدراج مشروعكم في <b>دليل المشاريع</b> للحاضنة، الذي سيُوزَّع على الحضور والمهتمين، نأمل التكرُّم باستكمال البيانات الواردة أدناه والتأكد من صحتها.</div>
-      ${(!locked && TEASER_DEADLINE) ? `<div class="req-banner" style="background:var(--gold-100,#FBF0DA);color:var(--amber,#8A6D00);margin-bottom:14px"><div style="line-height:1.9"><b>⏰ آخر موعد لاستكمال البيانات:</b>&nbsp;${teaserDeadlineText()}</div></div>` : ''}
+      ${(!locked && TEASER_DEADLINE) ? `<div class="req-banner" style="background:var(--gold-100,#E6F8F4);color:var(--amber,#00604F);margin-bottom:14px"><div style="line-height:1.9"><b>⏰ آخر موعد لاستكمال البيانات:</b>&nbsp;${teaserDeadlineText()}</div></div>` : ''}
       ${locked ? `<div class="req-banner" style="background:var(--danger-100);color:var(--danger);margin-bottom:14px"><div style="line-height:1.9"><b>🔒 انتهت فترة استكمال البيانات.</b>&nbsp;يمكنكم الاطلاع على ما تم حفظه، لكن لا يمكن تعديله. للاستفسار: <span class="mono">icip@qu.edu.sa</span></div></div>` : ''}
 
       <div id="teaserChecklist" style="margin-bottom:18px"></div>
@@ -1828,7 +1828,7 @@ function renderTeaserScreen(){
       <div class="req-banner" style="margin-bottom:14px;padding:14px 16px;gap:12px;align-items:flex-start">
         <span style="font-size:20px;line-height:1.4">ⓘ</span>
         <div style="line-height:1.9">
-          <div style="font-weight:800;color:#5C4315;font-size:13.5px;margin-bottom:2px">دليل المشاريع متاح للعموم</div>
+          <div style="font-weight:800;color:#00604F;font-size:13.5px;margin-bottom:2px">دليل المشاريع متاح للعموم</div>
           <div>سيُتاح الدليل للحضور والمهتمين، وسيُنشر فيه بريد التواصل والجوال (إن أدخلتموه).</div>
           <div style="margin-top:4px">نوصي باستخدام بريد وجوال مخصصين للمشروع، وبإدخال ما ترغبون في نشره فقط.</div>
         </div>
@@ -2050,7 +2050,7 @@ function renderCeremonyScreen(){
     const personal = m.by_role==='member';
     return `<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:#fff">
       <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap">
-        <div style="font-weight:700;font-size:14px">${escHtml(m.full_name)}${m.is_leader?' <span style="color:#B8860B;font-size:12px">(قائد الفريق)</span>':''}</div>
+        <div style="font-weight:700;font-size:14px">${escHtml(m.full_name)}${m.is_leader?' <span style="color:#00846E;font-size:12px">(قائد الفريق)</span>':''}</div>
         ${badge(m)}
       </div>
       <div style="font-size:11.5px;color:var(--ink-400);margin:4px 0 8px">${m.status ? (personal ? 'ردّ بنفسه عبر رابطه الشخصي' : 'سُجِّل بواسطتكم') : 'لم يردّ بعد'}</div>
@@ -2065,7 +2065,7 @@ function renderCeremonyScreen(){
     <div style="padding:20px 20px 8px"><button class="btn btn-ghost btn-sm" id="btnBackFromCeremony">${icon('arrow-right',{size:13})} رجوع</button></div>
     <div style="padding:8px 22px 30px;max-width:760px;margin:0 auto">
       <div style="font-size:20px;font-weight:800;color:var(--navy-800);font-family:'Cairo',sans-serif;margin-bottom:4px">${escHtml(st.title||'تأكيد حضور الحفل الختامي')}</div>
-      <div style="font-size:13px;color:var(--gold-700,#8A6D00);font-weight:700;margin-bottom:10px">${escHtml(st.date_text||'')}</div>
+      <div style="font-size:13px;color:var(--gold-700,#00604F);font-weight:700;margin-bottom:10px">${escHtml(st.date_text||'')}</div>
       <div style="font-size:13px;color:var(--ink-600);line-height:1.9;margin-bottom:14px">نأمل من كل عضو في الفريق تأكيد حضوره عبر رابطه الشخصي أدناه. يمكنكم إرسال الرابط لكل عضو، كما يمكنكم تسجيل حضور من لم يردّ نيابةً عنه.</div>
       ${st.details ? `<div class="req-banner" style="margin-bottom:14px"><div style="line-height:1.9;white-space:pre-wrap">${escHtml(st.details)}</div></div>` : ''}
       ${!open ? `<div class="req-banner" style="background:var(--danger-100);color:var(--danger);margin-bottom:14px"><div style="line-height:1.9"><b>🔒 انتهت فترة تأكيد الحضور.</b></div></div>` : (st.deadline ? `<div class="req-banner" style="margin-bottom:14px"><div style="line-height:1.9"><b>⏰ آخر موعد للتأكيد:</b>&nbsp;${new Date(st.deadline).toLocaleDateString('ar-SA')} — ${new Date(st.deadline).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'})}</div></div>` : '')}
@@ -2340,7 +2340,7 @@ function bindTopbarActions(){
 /* تأكيد بسيط قبل تسجيل الخروج، مع خيار الحفظ أولًا لتفادي فقدان تعديلات غير محفوظة */
 function openLogoutConfirm(){
   const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(11,11,61,.45);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(20,20,79,.45);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;';
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:16px;padding:26px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.25);">
       <h3 style="margin:0 0 6px;font-size:16px;color:var(--navy-800)">تسجيل الخروج</h3>
