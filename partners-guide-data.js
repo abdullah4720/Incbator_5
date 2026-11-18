@@ -1,95 +1,95 @@
 /* بيانات دليل شركاء النجاح — مصدرها ملف Excel المرفق دون تعديل. لإضافة جهة أو خدمة عدّل هذا الملف فقط.
-   لتعيين شعار جهة: ضع مسار الصورة في الحقل logo (مثال: 'logos/nca.png'). */
+   الشعارات: ضع ملف كل جهة داخل مجلد logos بالاسم الظاهر في حقل logo (PNG بخلفية شفافة أو بيضاء). الجهة التي لا يوجد شعارها تعرض أيقونة بديلة تلقائيًا. */
 window.GUIDE_DATA = {
  "orgs": [
   {
    "id": "o1",
    "name": "وزارة الاتصالات وتقنية المعلومات - NTDP",
-   "logo": "",
+   "logo": "logos/mcit-ntdp.png",
    "count": 9
   },
   {
    "id": "o3",
    "name": "وزارة الاتصالات وتقنية المعلومات",
-   "logo": "",
+   "logo": "logos/mcit.png",
    "count": 3
   },
   {
    "id": "o4",
    "name": "وزارة الاتصالات وتقنية المعلومات - CODE",
-   "logo": "",
+   "logo": "logos/mcit-code.png",
    "count": 8
   },
   {
    "id": "o5",
    "name": "وزارة الصناعة والثروة المعدنية",
-   "logo": "",
+   "logo": "logos/mim.png",
    "count": 12
   },
   {
    "id": "o6",
    "name": "وزارة الطاقة",
-   "logo": "",
+   "logo": "logos/moenergy.png",
    "count": 7
   },
   {
    "id": "o7",
    "name": "وزارة الاقتصاد والتخطيط",
-   "logo": "",
+   "logo": "logos/mep.png",
    "count": 3
   },
   {
    "id": "o8",
    "name": "هيئة تنمية البحث والتطوير والابتكار",
-   "logo": "",
+   "logo": "logos/rdia.png",
    "count": 13
   },
   {
    "id": "o9",
    "name": "الهيئة العامة للمنشآت الصغيرة والمتوسطة",
-   "logo": "",
+   "logo": "logos/monsha-at.png",
    "count": 17
   },
   {
    "id": "o10",
    "name": "بنك المنشآت الصغيرة والمتوسطة",
-   "logo": "",
+   "logo": "logos/smebank.png",
    "count": 11
   },
   {
    "id": "o11",
    "name": "الهيئة السعودية للبيانات والذكاء الاصطناعي",
-   "logo": "",
+   "logo": "logos/sdaia.png",
    "count": 7
   },
   {
    "id": "o12",
    "name": "الهيئة العامة للصناعات العسكرية",
-   "logo": "",
+   "logo": "logos/gami.png",
    "count": 4
   },
   {
    "id": "o13",
    "name": "جامعة الملك عبدالله للعلوم والتقنية",
-   "logo": "",
+   "logo": "logos/kaust.png",
    "count": 6
   },
   {
    "id": "o14",
    "name": "غرفة الرياض",
-   "logo": "",
+   "logo": "logos/riyadh-chamber.png",
    "count": 2
   },
   {
    "id": "o15",
    "name": "أمازون لخدمات الويب (AWS)",
-   "logo": "",
+   "logo": "logos/aws.png",
    "count": 13
   },
   {
    "id": "o16",
    "name": "مدينة الملك عبدالله للطاقة الذرية والمتجددة",
-   "logo": "",
+   "logo": "logos/kacare.png",
    "count": 5
   }
  ],
