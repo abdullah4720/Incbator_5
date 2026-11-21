@@ -452,6 +452,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
   <div class="view" id="view-announcements"></div>
   <div class="view" id="view-datacenter"></div>
   <div class="view" id="view-guide"></div>
+  <div class="view" id="view-platformreport"></div>
   <div class="view" id="view-settings"></div>
 </div>
 </div>
@@ -841,6 +842,7 @@ function openConfirm(text, onOk, okLabel){
 const TABS = [
   {id:"dashboard", l:"لوحة القيادة", adminOnly:false},
   {id:"report", l:"التقرير الشامل", adminOnly:false},
+  {id:"platformreport", l:"التقرير المتكامل (PowerPoint)", adminOnly:true},
   {id:"analytics", l:"تحليل البيانات", adminOnly:false},
   {id:"finalists", l:"تحليل المتأهلين", adminOnly:false},
   {id:"shortlist", l:"الترشيح المبدئي", adminOnly:false},
@@ -867,7 +869,7 @@ function visibleTabs(){
 const TAB_GROUPS = [
   { primary: true, tabs: ['dashboard','datacenter','review','judging'] },
   { id:'verify', label:'التحقق والفرز', tabs: ['shortlist','duplicates','qualifying','candidates','nonqualifying'] },
-  { id:'reports', label:'التقارير', tabs: ['report','analytics','finalists'] },
+  { id:'reports', label:'التقارير', tabs: ['report','platformreport','analytics','finalists'] },
   { id:'admin', label:'الإدارة', tabs: ['builder','eligibility','users','announcements','guide','settings'] },
 ];
 
@@ -9618,6 +9620,284 @@ async function renderGuideAdmin(){
   el.querySelectorAll('[data-sd]').forEach(b=>b.onclick=async()=>{ const s=GA.svcs.find(x=>x.id==b.dataset.sd); if(!confirm(`حذف الخدمة «${s.title}»؟ لا يمكن التراجع.`)) return; const r=await sb.from('guide_services').delete().eq('id',s.id); if(r.error){ showToast('تعذّر الحذف: '+r.error.message); return; } GA.svcs=GA.svcs.filter(x=>x.id!==s.id); showToast('تم الحذف'); renderGuideAdmin(); });
 }
 
+/* ============================================================
+   التقرير المتكامل للمنصة — يقرأ الأرقام مباشرة من المنصة ويولّد عرض PowerPoint
+   كل قسم يُجمع بشكل مستقل؛ إن تعذّر قسم يُنبَّه عنه ولا يتعطل التقرير.
+   ============================================================ */
+let PR = null;
+async function prSafe(R, label, fn){ try{ await fn(); }catch(e){ R.warn.push(label+': '+((e&&e.message)||'تعذّر')); } }
+async function prCount(table, f){ let q=sb.from(table).select('*',{count:'exact',head:true}); if(f) q=f(q); const {count,error}=await q; if(error) throw error; return count||0; }
+async function collectPlatformReport(){
+  const R = { at:new Date(), warn:[], reg:{}, fin:{}, judge:{}, cer:{}, partners:{}, guide:{}, settings:{} };
+  await prSafe(R,'التسجيل والمراجعة', async()=>{
+    await loadDashboardStats();
+    const d = await gatherReportData();
+    R.reg = { teams:d.totalTeams, participants:d.totalParticipants, cities:d.cities, submitted:d.submittedCount, draft:d.draftCount,
+      files:d.totalFiles, filesMb:d.totalFilesSizeMb, dup:d.dupCount, readiness:d.readiness, requirements:d.requirements,
+      tracks:Object.entries(d.trackCounts).sort((a,b)=>b[1]-a[1]), avgAi:d.avgScore, aiN:d.evaluatedCount };
+    R.reg.eligible = await prCount('eligible_projects');
+  });
+  await prSafe(R,'المتأهلون والتحكيم', async()=>{
+    await loadFinalists();
+    const rows = FIN.rows||[];
+    const sc = rows.filter(r=>r.score!==null);
+    R.fin = { n:rows.length, judged:sc.length, avg: sc.length? sc.reduce((s,r)=>s+r.score,0)/sc.length : null,
+      track:finCount(rows,r=>r.track), domain:finCount(rows,r=>r.domain,{top:8}), city:finCount(rows,r=>r.city,{top:8}),
+      stage:finCount(rows,r=>r.stage), cr:finCount(rows,r=>r.cr),
+      qassim: rows.filter(r=>FIN_QASSIM.some(c=>(r.city||'').includes(c))).length,
+      top: sc.slice().sort((a,b)=>b.score-a.score).slice(0,10).map(r=>({id:r.project_id,name:r.name,track:r.track,score:r.score,judges:r.judges})) };
+    R.judge.judges = await prCount('judges',q=>q.eq('is_active',true));
+    R.judge.rounds = await prCount('judging_rounds');
+    R.judge.committees = await prCount('judging_committees');
+    R.judge.assign = await prCount('judge_assignments');
+    R.judge.evalsSub = await prCount('judge_evaluations',q=>q.eq('is_submitted',true));
+    R.judge.evalsAll = await prCount('judge_evaluations');
+  });
+  await prSafe(R,'الحفل — تأكيد الحضور', async()=>{
+    const teams = (await fetchCeremonyData()).filter(t=>t.included);
+    const mem = teams.flatMap(t=>t.members);
+    R.cer.teams = teams.length; R.cer.members = mem.length;
+    R.cer.yes = mem.filter(m=>m.rsvp&&m.rsvp.status==='attending').length;
+    R.cer.no = mem.filter(m=>m.rsvp&&m.rsvp.status==='declined').length;
+    R.cer.none = mem.length-R.cer.yes-R.cer.no;
+    R.cer.teamsYes = teams.filter(t=>t.members.some(m=>m.rsvp&&m.rsvp.status==='attending')).length;
+  });
+  await prSafe(R,'الحفل — التحضير والشهادات', async()=>{
+    R.cer.checked = await prCount('ceremony_attendance');
+    try{ R.cer.certs = await prCount('ceremony_attendance',q=>q.not('cert_code','is',null)); }catch(e){}
+  });
+  await prSafe(R,'الحفل — المدعوون', async()=>{
+    const g = await fetchAllRows('ceremony_guests','id, status, category','id');
+    R.cer.guests = g.length; R.cer.guestsApproved = g.filter(x=>x.status==='approved').length;
+    R.cer.guestsPending = g.filter(x=>x.status==='pending').length;
+    R.cer.guestsInvited = g.filter(x=>x.category==='invited'&&x.status==='approved').length;
+  });
+  await prSafe(R,'الحفل — المقاعد', async()=>{
+    const { data, error } = await sb.rpc('seats_state'); if(error) throw error; if(!data||!data.ok) throw new Error('غير مصرّح');
+    const seats = data.seats||[]; R.cer.seated = seats.length; R.cer.unseated = (data.unseated||[]).length;
+    const k={}; seats.forEach(s=>{ k[s.kind]=(k[s.kind]||0)+1; }); R.cer.seatKinds = k;
+  });
+  await prSafe(R,'شركاء النجاح', async()=>{
+    const rows = await fetchAllRows('partners','org, data','org');
+    const ds = rows.map(r=>({org:r.org, d:partnerNorm(r.data)}));
+    R.partners.n = ds.length;
+    R.partners.names = ds.map(x=>x.d.display_name||x.org);
+    R.partners.services = ds.reduce((s,x)=>s+x.d.services.length,0);
+    R.partners.reps = ds.reduce((s,x)=>s+(x.d.honoree.name?1:0)+(+x.d.attendees.count||0),0);
+    R.partners.complete = ds.filter(x=>!partnerMissing(x.d).length).length;
+    R.partners.booths = ds.filter(x=>x.d.wants_booth===true).length;
+  });
+  await prSafe(R,'دليل الشركاء', async()=>{
+    const [o,s] = await Promise.all([ sb.from('guide_orgs').select('id,name,hidden'), sb.from('guide_services').select('id,org,link,cats,hidden') ]);
+    if(o.error) throw o.error; if(s.error) throw s.error;
+    const sv = s.data||[], og = o.data||[];
+    R.guide.orgs = og.filter(x=>!x.hidden).length; R.guide.services = sv.filter(x=>!x.hidden).length;
+    R.guide.hidden = sv.filter(x=>x.hidden).length; R.guide.nolink = sv.filter(x=>!x.hidden&&!x.link).length;
+    const by={}; sv.filter(x=>!x.hidden).forEach(x=>{ by[x.org]=(by[x.org]||0)+1; });
+    R.guide.byOrg = og.filter(x=>!x.hidden).map(x=>[x.name,by[x.id]||0]).sort((a,b)=>b[1]-a[1]);
+    const ck={}; sv.filter(x=>!x.hidden).forEach(x=>(x.cats||[]).forEach(c=>{ ck[c]=(ck[c]||0)+1; }));
+    R.guide.byCat = GUIDE_CATS.map(c=>[c[1],ck[c[0]]||0]).filter(x=>x[1]).sort((a,b)=>b[1]-a[1]);
+  });
+  return R;
+}
+const prN = v=> (v==null||isNaN(v))?'—':Number(v).toLocaleString('ar-SA-u-nu-latn');
+const prP = (a,b)=> b? Math.round(a/b*100)+'%' : '—';
+function prInsights(R){
+  const L=[], r=R.reg, f=R.fin, j=R.judge, c=R.cer, p=R.partners, g=R.guide;
+  if(r.teams) L.push(`سجّلت ${prN(r.teams)} فرقًا بمشاركة ${prN(r.participants)} مشاركًا من ${prN(r.cities)} مدينة، وأكمل ${prN(r.submitted)} فريقًا طلب التحقق (${prP(r.submitted,r.teams)}).`);
+  if(r.tracks&&r.tracks.length) L.push(`أكثر المسارات حضورًا «${r.tracks[0][0]}» بعدد ${prN(r.tracks[0][1])} مشروعًا.`);
+  if(f.n) L.push(`بلغ عدد المشاريع المتأهلة للتحكيم ${prN(f.n)}، منها ${prN(f.judged)} مشروعًا حصل على تقييم${f.avg!=null?` بمتوسط ${f.avg.toFixed(1)}%`:''}.`);
+  if(f.top&&f.top.length) L.push(`تصدّر المشاريع «${f.top[0].name}» بنسبة ${f.top[0].score.toFixed(1)}%.`);
+  if(j.evalsAll) L.push(`اكتمل ${prP(j.evalsSub,j.evalsAll)} من تقييمات المحكّمين (${prN(j.evalsSub)} من ${prN(j.evalsAll)}).`);
+  if(c.members) L.push(`أكّد ${prN(c.yes)} من ${prN(c.members)} عضوًا حضور الحفل (${prP(c.yes,c.members)})، وتخلّف ${prN(c.none)} عن الرد.`);
+  if(c.checked!=null) L.push(`سُجّل حضور ${prN(c.checked)} شخصًا يوم الحفل${c.certs?`، وصدرت ${prN(c.certs)} شهادة مشاركة`:''}.`);
+  if(p.n) L.push(`شارك ${prN(p.n)} شريك نجاح قدّموا ${prN(p.services)} خدمة وفرصة للمشاركين.`);
+  if(g.services) L.push(`يضم دليل الشركاء ${prN(g.orgs)} جهة و${prN(g.services)} خدمة${g.nolink?`، منها ${prN(g.nolink)} بلا رابط استفادة يلزم استكمالها`:''}.`);
+  return L;
+}
+function renderPlatformReport(){
+  const el = document.getElementById('view-platformreport');
+  const R = PR;
+  const sec = (title,items)=>`<div class="card" style="margin-bottom:14px"><div style="font-weight:700;color:#14144F;margin-bottom:10px">${title}</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">${items.map(i=>`<div style="background:#F2FCFA;border:1px solid #E3E8EE;border-radius:10px;padding:10px 12px"><div style="font-size:22px;font-weight:800;color:#14144F">${i[0]}</div><div style="font-size:12px;color:#556">${i[1]}</div></div>`).join('')}</div></div>`;
+  el.innerHTML = `
+   <div class="section-title-row"><div><h2>التقرير المتكامل للمنصة</h2><p>يقرأ الأرقام مباشرة من المنصة (التسجيل، المراجعة، التحكيم، الحفل، الشركاء، الدليل) ويولّد عرض PowerPoint جاهزًا بقالب الحاضنة.</p></div>
+     <div style="display:flex;gap:8px"><button class="btn btn-ghost" id="prRefresh">تحديث الأرقام</button><button class="btn btn-primary" id="prPpt" ${R?'':'disabled'}>${icon('download',{size:13})} توليد PowerPoint</button></div></div>
+   ${R?`
+   ${R.warn.length?`<div class="card" style="margin-bottom:14px;border-color:#FCC242"><b>تنبيه:</b> تعذّر جلب بعض الأقسام وستظهر فارغة في العرض:<ul style="margin:6px 0 0">${R.warn.map(w=>`<li>${escHtml(w)}</li>`).join('')}</ul></div>`:''}
+   ${sec('التسجيل والمراجعة',[[prN(R.reg.teams),'فريقًا مسجّلًا'],[prN(R.reg.participants),'مشاركًا'],[prN(R.reg.cities),'مدينة'],[prN(R.reg.submitted),'طلبًا مُرسَلًا'],[prN(R.reg.readiness&&R.reg.readiness.ready),'جاهز للانتقال']])}
+   ${sec('المتأهلون والتحكيم',[[prN(R.fin.n),'مشروعًا متأهلًا'],[prN(R.fin.judged),'مشروعًا مُقيَّمًا'],[prN(R.judge.judges),'محكّمًا'],[prN(R.judge.committees),'لجنة'],[prN(R.judge.evalsSub),'تقييمًا مكتملًا']])}
+   ${sec('الحفل الختامي',[[prN(R.cer.yes),'أكّدوا الحضور'],[prN(R.cer.none),'لم يردّوا'],[prN(R.cer.checked),'سُجّل حضورهم'],[prN(R.cer.certs),'شهادة صادرة'],[prN(R.cer.guestsApproved),'مدعوًّا معتمدًا'],[prN(R.cer.seated),'مقعدًا مخصّصًا']])}
+   ${sec('الشركاء والدليل',[[prN(R.partners.n),'شريك نجاح'],[prN(R.partners.services),'خدمة من الشركاء'],[prN(R.guide.orgs),'جهة في الدليل'],[prN(R.guide.services),'خدمة في الدليل'],[prN(R.guide.nolink),'بلا رابط']])}
+   <div class="card"><div style="font-weight:700;color:#14144F;margin-bottom:8px">أبرز ما سيرد في الملخص</div><ul style="margin:0;line-height:1.9">${prInsights(R).map(x=>`<li>${escHtml(x)}</li>`).join('')}</ul><div style="font-size:12px;color:#667;margin-top:8px">حُسبت الأرقام في ${R.at.toLocaleString('ar-SA')}</div></div>`
+   : `<div class="card">جارٍ جمع الأرقام من المنصة…</div>`}`;
+  const rf = el.querySelector('#prRefresh'); if(rf) rf.onclick = async()=>{ PR=null; renderPlatformReport(); PR = await collectPlatformReport(); renderPlatformReport(); };
+  const pb = el.querySelector('#prPpt'); if(pb) pb.onclick = ()=>exportPlatformPpt(PR);
+}
+async function renderPlatformReportTab(){
+  if(!PR){ renderPlatformReport(); PR = await collectPlatformReport(); }
+  renderPlatformReport();
+}
+async function exportPlatformPpt(R){
+  if(typeof PptxGenJS==='undefined'){ showToast('تعذّر تحميل مكتبة PowerPoint — تحقق من الاتصال'); return; }
+  showToast('جارٍ تجهيز العرض…');
+  const pres = new PptxGenJS();
+  pres.defineLayout({name:'IBW',width:13.333,height:7.5}); pres.layout='IBW'; pres.rtlMode = true;
+  const C={navy:'14144F',navy2:'1D1D63',teal:'00BF9C',lime:'63D654',amber:'FCC242',purple:'9B05B9',mint:'F2FCFA',line:'E3E8EE',ink:'1F2430',gray:'6B7280'};
+  const PAL=[C.teal,C.navy,C.amber,C.purple,C.lime,'3D5A99','C2338A','D98E04','0E8F9E','6B4FA0'];
+  const F='Arial', today=R.at.toLocaleDateString('ar-SA',{year:'numeric',month:'long',day:'numeric'});
+  const T=(s,t,o)=>s.addText(String(t),Object.assign({fontFace:F,rtlMode:true,align:'right',color:C.ink,margin:0},o));
+  const strip=s=>[C.teal,C.lime,C.amber,C.purple].forEach((c,i)=>s.addShape(pres.ShapeType.rect,{x:i*3.3333,y:0,w:3.3333,h:0.1,fill:{color:c},line:{color:c}}));
+  function base(title,sub){
+    const s=pres.addSlide(); s.background={color:'FFFFFF'}; strip(s);
+    s.addShape(pres.ShapeType.rect,{x:12.5,y:0.55,w:0.1,h:0.7,fill:{color:C.teal},line:{color:C.teal}});
+    T(s,title,{x:0.6,y:0.5,w:11.7,h:0.5,fontSize:26,bold:true,color:C.navy});
+    if(sub) T(s,sub,{x:0.6,y:1.0,w:11.7,h:0.35,fontSize:13,color:C.gray});
+    s.addShape(pres.ShapeType.line,{x:0.6,y:7.0,w:12.13,h:0,line:{color:C.line,width:1}});
+    T(s,'حاضنة ابتكار 5 — التقرير المتكامل',{x:6.7,y:7.08,w:6,h:0.3,fontSize:10,color:C.gray});
+    T(s,today,{x:0.6,y:7.08,w:4,h:0.3,fontSize:10,color:C.gray,align:'left'});
+    return s;
+  }
+  function kpis(s,items,y,h,x0,W){
+    x0=x0==null?0.6:x0; W=W||12.13;
+    const n=items.length, gap=0.2, w=(W-gap*(n-1))/n;
+    items.forEach((it,i)=>{ const x=x0+W-(i+1)*w-i*gap;
+      s.addShape(pres.ShapeType.roundRect,{x,y,w,h,fill:{color:C.mint},line:{color:C.line,width:1},rectRadius:0.1});
+      s.addShape(pres.ShapeType.rect,{x:x+w-0.08,y:y+0.15,w:0.05,h:h-0.3,fill:{color:PAL[i%PAL.length]},line:{color:PAL[i%PAL.length]}});
+      T(s,it[0],{x:x+0.1,y:y+0.15,w:w-0.35,h:h*0.5,fontSize:h>1.3?34:28,bold:true,color:C.navy,valign:'middle'});
+      T(s,it[1],{x:x+0.1,y:y+h*0.58,w:w-0.35,h:h*0.35,fontSize:12,color:C.gray,valign:'top'});
+    });
+  }
+  const labelsVals=a=>({labels:a.map(x=>String(x[0])),values:a.map(x=>x[1])});
+  function chart(s,type,arr,pos,title){
+    if(!arr||!arr.length||!arr.some(x=>x[1])){ T(s,'لا توجد بيانات',{x:pos.x,y:pos.y+pos.h/2-0.2,w:pos.w,h:0.4,fontSize:14,color:C.gray,align:'center'}); return; }
+    const d=labelsVals(arr);
+    const common={x:pos.x,y:pos.y,w:pos.w,h:pos.h,chartColors:PAL,showLegend:type!=='bar',legendPos:'b',legendFontSize:11,legendFontFace:F,showTitle:!!title,title:title||'',titleFontSize:13,titleFontFace:F,titleColor:C.navy};
+    if(type==='bar') s.addChart(pres.charts.BAR,[{name:title||'العدد',labels:d.labels,values:d.values}],Object.assign(common,{barDir:'bar',chartColors:[C.teal],showValue:true,dataLabelFontSize:11,dataLabelFontFace:F,catAxisLabelFontSize:11,catAxisLabelFontFace:F,valAxisHidden:true,valGridLine:{style:'none'},catAxisOrientation:'maxMin',barGapWidthPct:40}));
+    else s.addChart(pres.charts.DOUGHNUT,[{name:title||'',labels:d.labels,values:d.values}],Object.assign(common,{holeSize:55,showPercent:true,showValue:false,dataLabelColor:'FFFFFF',dataLabelFontSize:11,dataLabelFontFace:F,dataBorder:{pt:1,color:'FFFFFF'}}));
+  }
+  function table(s,head,rows,pos,colW){
+    const hc={bold:true,color:'FFFFFF',fill:{color:C.navy},align:'right',fontFace:F,fontSize:12,rtlMode:true};
+    const body=rows.map((r,i)=>r.map(c=>({text:String(c),options:{fontFace:F,fontSize:12,align:'right',rtlMode:true,color:C.ink,fill:{color:i%2?'FFFFFF':C.mint}}})));
+    s.addTable([head.map(h=>({text:h,options:hc})),...body],Object.assign({x:pos.x,y:pos.y,w:pos.w,colW,border:{type:'solid',pt:0.5,color:C.line},rowH:0.36},{}));
+  }
+  const bullets=(s,arr,pos,fs)=>s.addText(arr.map(t=>({text:t,options:{bullet:{code:'25A0',indent:18},breakLine:true,paraSpaceAfter:8}})),{x:pos.x,y:pos.y,w:pos.w,h:pos.h,fontFace:F,fontSize:fs||15,color:C.ink,rtlMode:true,align:'right',valign:'top',margin:0});
+  const r=R.reg, f=R.fin, j=R.judge, c=R.cer, p=R.partners, g=R.guide;
+
+  // 1) الغلاف
+  { const s=pres.addSlide(); s.background={color:C.navy}; strip(s);
+    s.addImage({data:SHOW_LOGO_INC,x:0.7,y:0.6,w:2.3,h:0.95});
+    s.addImage({data:SHOW_LOGO_QU,x:10.3,y:0.6,w:2.3,h:0.95});
+    T(s,'التقرير المتكامل',{x:1,y:2.6,w:11.33,h:1,fontSize:48,bold:true,color:'FFFFFF',align:'center'});
+    T(s,'حاضنة ابتكار — النسخة الخامسة',{x:1,y:3.7,w:11.33,h:0.6,fontSize:24,color:C.teal,align:'center',bold:true});
+    T(s,'من التسجيل والتحقق إلى التحكيم والحفل الختامي وشركاء النجاح',{x:1,y:4.4,w:11.33,h:0.5,fontSize:16,color:'C9CCE6',align:'center'});
+    T(s,'تاريخ إعداد التقرير: '+today,{x:1,y:6.6,w:11.33,h:0.4,fontSize:12,color:'AEB2D8',align:'center'}); }
+
+  // 2) الملخص التنفيذي
+  { const s=base('الملخص التنفيذي','أبرز أرقام البرنامج في مكان واحد');
+    kpis(s,[[prN(r.teams),'فريقًا مسجّلًا'],[prN(r.participants),'مشاركًا'],[prN(r.cities),'مدينة'],[prN(f.n),'مشروعًا متأهلًا']],1.6,1.45);
+    kpis(s,[[prN(c.yes),'أكّدوا حضور الحفل'],[prN(c.checked),'سُجّل حضورهم'],[prN(p.n),'شريك نجاح'],[prN(g.services),'خدمة في الدليل']],3.25,1.45);
+    const ins=prInsights(R).slice(0,3); if(ins.length) bullets(s,ins,{x:0.6,y:5.0,w:12.13,h:1.8},13); }
+
+  // 3) رحلة المنصة
+  { const s=base('رحلة المشارك عبر المنصة','ست محطات متصلة ببيانات واحدة');
+    const st=[['التسجيل والتحقق',prN(r.teams)+' فريق'],['المراجعة والفرز',prN(r.readiness&&r.readiness.ready)+' جاهز'],['التحكيم',prN(j.evalsSub)+' تقييم'],['المتأهلون',prN(f.n)+' مشروع'],['الحفل الختامي',prN(c.yes)+' مؤكَّد'],['شركاء النجاح',prN(p.n)+' شريك']];
+    const w=1.85,gap=0.2;
+    st.forEach((x,i)=>{ const px=12.73-(i+1)*w-i*gap, col=PAL[i%PAL.length];
+      s.addShape(pres.ShapeType.ellipse,{x:px+w/2-0.4,y:2.2,w:0.8,h:0.8,fill:{color:col},line:{color:col}});
+      T(s,String(i+1),{x:px+w/2-0.4,y:2.2,w:0.8,h:0.8,fontSize:24,bold:true,color:'FFFFFF',align:'center',valign:'middle'});
+      s.addShape(pres.ShapeType.roundRect,{x:px,y:3.3,w,h:1.9,fill:{color:C.mint},line:{color:C.line,width:1},rectRadius:0.1});
+      T(s,x[0],{x:px+0.1,y:3.45,w:w-0.2,h:0.6,fontSize:15,bold:true,color:C.navy,align:'center'});
+      T(s,x[1],{x:px+0.1,y:4.2,w:w-0.2,h:0.7,fontSize:17,bold:true,color:col,align:'center'}); });
+    T(s,'تُدار جميع المحطات من لوحة تحكم واحدة، وتُقرأ أرقامها مباشرة من قاعدة البيانات دون إدخال يدوي.',{x:0.6,y:5.8,w:12.13,h:0.5,fontSize:14,color:C.gray,align:'center'}); }
+
+  // 4) التسجيل
+  { const s=base('التسجيل والتحقق','حجم المشاركة وحالة الطلبات');
+    kpis(s,[[prN(r.teams),'فريقًا'],[prN(r.participants),'مشاركًا'],[prN(r.submitted),'طلبًا مُرسَلًا'],[prN(r.draft),'مسودة'],[prN(r.files),'ملفًا مرفوعًا']],1.5,1.3);
+    chart(s,'doughnut',(r.tracks||[]).slice(0,8),{x:0.6,y:3.0,w:5.8,h:3.8},'توزيع المشاريع حسب المسار');
+    chart(s,'doughnut',[['مُرسَل',r.submitted||0],['مسودة',r.draft||0]],{x:6.9,y:3.0,w:5.8,h:3.8},'حالة الطلبات'); }
+
+  // 5) الجاهزية
+  { const s=base('جاهزية الطلبات للانتقال','نتيجة مراجعة متطلبات الانتقال');
+    const rd=r.readiness||{};
+    chart(s,'doughnut',[['جاهز للانتقال',rd.ready||0],['يحتاج استكمال',rd.needsCompletion||0],['غير مستوفٍ',rd.notReady||0],['مراجعة يدوية',rd.needsManualReview||0]],{x:0.6,y:1.6,w:5.8,h:5.2},'حالة الجاهزية');
+    chart(s,'bar',(r.requirements||[]).map(q=>[q.label||q.key,q.pct||0]),{x:6.9,y:1.6,w:5.8,h:5.2},'نسبة استيفاء كل متطلب %'); }
+
+  // 6) المتأهلون
+  { const s=base('المشاريع المتأهلة للتحكيم','التوزيع حسب المسار والمجال والمدينة');
+    kpis(s,[[prN(f.n),'مشروعًا متأهلًا'],[prN(f.qassim),'من منطقة القصيم'],[prN((f.n||0)-(f.qassim||0)),'من بقية المناطق']],1.5,1.2);
+    chart(s,'doughnut',f.track,{x:0.6,y:2.9,w:3.9,h:4},'المسار');
+    chart(s,'bar',f.domain,{x:4.7,y:2.9,w:4.1,h:4},'المجال');
+    chart(s,'bar',f.city,{x:9,y:2.9,w:3.8,h:4},'المدينة'); }
+
+  // 7) جاهزية المشاريع
+  { const s=base('نضج المشاريع المتأهلة','مرحلة المشروع ووجود سجل تجاري');
+    chart(s,'doughnut',f.stage,{x:0.6,y:1.6,w:5.8,h:5.2},'مرحلة تطور المشروع');
+    chart(s,'doughnut',f.cr,{x:6.9,y:1.6,w:5.8,h:5.2},'وجود سجل تجاري'); }
+
+  // 8) التحكيم
+  { const s=base('التحكيم','المحكّمون واللجان وسير التقييم');
+    kpis(s,[[prN(j.judges),'محكّمًا نشطًا'],[prN(j.committees),'لجنة تحكيم'],[prN(j.rounds),'جولة تحكيم'],[prN(j.assign),'مهمة تحكيم موزّعة']],1.5,1.3);
+    chart(s,'doughnut',[['مكتمل',j.evalsSub||0],['قيد التقييم',Math.max(0,(j.evalsAll||0)-(j.evalsSub||0))]],{x:0.6,y:3.1,w:5.8,h:3.7},'اكتمال التقييمات');
+    kpis(s,[[prP(j.evalsSub,j.evalsAll),'نسبة اكتمال التقييمات']],3.3,1.6,6.9,5.83);
+    kpis(s,[[f.avg!=null?f.avg.toFixed(1)+'%':'—','متوسط درجات المشاريع المقيَّمة']],5.1,1.6,6.9,5.83); }
+
+  // 9) الأعلى تقييمًا
+  { const s=base('المشاريع الأعلى تقييمًا','أعلى عشرة مشاريع حسب متوسط درجات المحكّمين');
+    if((f.top||[]).length) table(s,['#','رقم المشروع','اسم المشروع','المسار','المحكّمون','الدرجة %'],f.top.map((x,i)=>[i+1,x.id,x.name,x.track,x.judges,x.score.toFixed(1)]),{x:0.6,y:1.6,w:12.13},[0.6,1.7,5.0,2.2,1.2,1.43]);
+    else T(s,'لا توجد تقييمات مكتملة بعد',{x:0.6,y:3,w:12.13,h:0.5,fontSize:18,color:C.gray,align:'center'}); }
+
+  // 10) الحفل — الحضور
+  { const s=base('الحفل الختامي — تأكيد الحضور','أعضاء الفرق المؤهلة');
+    kpis(s,[[prN(c.teams),'فريقًا مدعوًّا'],[prN(c.members),'عضوًا'],[prN(c.yes),'أكّدوا الحضور'],[prN(c.no),'اعتذروا'],[prN(c.none),'لم يردّوا']],1.5,1.3);
+    chart(s,'doughnut',[['سيحضر',c.yes||0],['معتذر',c.no||0],['لم يرد',c.none||0]],{x:0.6,y:3.0,w:5.8,h:3.8},'استجابة الأعضاء');
+    kpis(s,[[prN(c.teamsYes),'فريقًا يحضر منه عضو على الأقل']],3.3,1.6,6.9,5.83);
+    kpis(s,[[prP(c.teamsYes,c.teams),'نسبة تمثيل الفرق في الحفل']],5.1,1.6,6.9,5.83); }
+
+  // 11) التحضير والمدعوون والمقاعد
+  { const s=base('الحفل الختامي — التحضير والمدعوون والمقاعد');
+    kpis(s,[[prN(c.checked),'سُجّل حضورهم'],[prN(c.certs),'شهادة مشاركة صادرة'],[prN(c.guestsApproved),'مدعوًّا معتمدًا'],[prN(c.guestsPending),'بانتظار الاعتماد']],1.5,1.3);
+    kpis(s,[[prN(c.seated),'مقعدًا مخصّصًا'],[prN(c.unseated),'بلا مقعد بعد'],[prN((c.seatKinds||{}).partner),'مقاعد الشركاء'],[prN((c.seatKinds||{}).guest),'مقاعد المدعوين']],3.1,1.3);
+    chart(s,'doughnut',Object.entries(c.seatKinds||{}).map(([k,v])=>[{member:'أعضاء الفرق',guest:'مدعوون',partner:'شركاء',manual:'يدوي'}[k]||k,v]),{x:3.5,y:4.6,w:6.3,h:2.3},null); }
+
+  // 12) الشركاء
+  { const s=base('شركاء النجاح','الجهات التي دعمت البرنامج ومخرجاته');
+    kpis(s,[[prN(p.n),'شريك نجاح'],[prN(p.services),'خدمة وفرصة مقدَّمة'],[prN(p.reps),'ممثلًا في الحفل'],[prN(p.complete),'ملفًا مكتمل البيانات']],1.5,1.3);
+    if((p.names||[]).length){ const cols=3, per=Math.ceil(p.names.length/cols);
+      for(let k=0;k<cols;k++) bullets(s,p.names.slice(k*per,(k+1)*per),{x:12.73-(k+1)*4.0-k*0.1,y:3.2,w:4.0,h:3.6},15); } }
+
+  // 13) الدليل
+  { const s=base('دليل شركاء النجاح والخدمات الداعمة','الجهات والخدمات المتاحة للمبتكرين');
+    kpis(s,[[prN(g.orgs),'جهة'],[prN(g.services),'خدمة'],[prN(g.nolink),'بلا رابط استفادة'],[prN(g.hidden),'مخفية']],1.5,1.2);
+    chart(s,'bar',(g.byOrg||[]).slice(0,8),{x:0.6,y:2.9,w:6.2,h:4},'الخدمات حسب الجهة');
+    chart(s,'bar',g.byCat||[],{x:7,y:2.9,w:5.7,h:4},'الخدمات حسب نوع الدعم'); }
+
+  // 14) مكونات المنصة
+  { const s=base('مكوّنات المنصة','منظومة رقمية متكاملة على بيانات موحدة');
+    const m=[['التسجيل والتحقق','نموذج ديناميكي، رفع ملفات، حفظ تلقائي، رصد التكرار'],['المراجعة والفرز','فحص المتطلبات، ترشيح، تقييم جاهزية بالذكاء الاصطناعي'],['بوابة المحكّمين','لجان وجولات ومعايير، تقييم إلكتروني ونتائج لحظية'],['الحفل الختامي','تأكيد الحضور، المدعوون، المقاعد، التحضير، الشهادات'],['شركاء النجاح','بوابة الشركاء، بيانات التكريم والممثلين والخدمات'],['دليل الشركاء','15 جهة وأكثر من 100 خدمة، بحث، مفضلة، مساعد ذكي'],['لوحة التحكم','أدوار وصلاحيات، تقارير، تصدير Excel وPowerPoint'],['البنية التقنية','Supabase وVercel، أمان على مستوى الصفوف (RLS)']];
+    m.forEach((x,i)=>{ const col=i%2, row=Math.floor(i/2), w=5.95, px=12.73-(col+1)*w-col*0.23, py=1.6+row*1.33;
+      s.addShape(pres.ShapeType.roundRect,{x:px,y:py,w,h:1.15,fill:{color:C.mint},line:{color:C.line,width:1},rectRadius:0.08});
+      s.addShape(pres.ShapeType.rect,{x:px+w-0.08,y:py+0.15,w:0.05,h:0.85,fill:{color:PAL[i%PAL.length]},line:{color:PAL[i%PAL.length]}});
+      T(s,x[0],{x:px+0.15,y:py+0.12,w:w-0.4,h:0.4,fontSize:15,bold:true,color:C.navy});
+      T(s,x[1],{x:px+0.15,y:py+0.55,w:w-0.4,h:0.5,fontSize:12,color:C.gray}); }); }
+
+  // 15) أبرز النتائج
+  { const s=base('أبرز النتائج والملاحظات');
+    const ins=prInsights(R); const extra=[];
+    if(r.dup) extra.push(`رُصد ${prN(r.dup)} ملفًا مكررًا بين طلبات مختلفة ويلزم التحقق منه.`);
+    if(c.none) extra.push(`لا يزال ${prN(c.none)} عضوًا لم يؤكدوا حضورهم؛ يُوصى بحملة تذكير.`);
+    if(g.nolink) extra.push(`يلزم استكمال روابط ${prN(g.nolink)} خدمة في دليل الشركاء.`);
+    if(c.unseated) extra.push(`يوجد ${prN(c.unseated)} شخصًا بلا مقعد؛ يلزم إعادة التخصيص قبل الحفل.`);
+    bullets(s,ins.concat(extra),{x:0.6,y:1.6,w:12.13,h:5.2},15); }
+
+  // 16) ختام
+  { const s=pres.addSlide(); s.background={color:C.navy}; strip(s);
+    T(s,'شكرًا لكل من ساهم في نجاح البرنامج',{x:1,y:2.9,w:11.33,h:1,fontSize:38,bold:true,color:'FFFFFF',align:'center'});
+    T(s,'الفرق المشاركة · اللجان والمحكّمون · شركاء النجاح',{x:1,y:4.1,w:11.33,h:0.5,fontSize:18,color:C.teal,align:'center'}); }
+
+  await pres.writeFile({fileName:`التقرير_المتكامل_حاضنة_ابتكار_5_${R.at.toISOString().slice(0,10)}.pptx`});
+  showToast('تم توليد العرض');
+}
+
 /* ---------------- عرض شامل ---------------- */
 function renderAll(){
   renderTabs();
@@ -9633,6 +9913,7 @@ function renderAll(){
   if(activeTab==='announcements') renderAnnouncements();
   if(activeTab==='datacenter') renderDataCenterTab();
   if(activeTab==='guide') renderGuideAdmin();
+  if(activeTab==='platformreport') renderPlatformReportTab();
   if(activeTab==='review') renderReview();
   if(activeTab==='judging') renderJudgingTab();
   if(activeTab==='builder') renderBuilder();
