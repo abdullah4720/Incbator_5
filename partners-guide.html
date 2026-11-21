@@ -2563,7 +2563,7 @@ var qrcode = function() {
 
 </script>
 <script>
-(function(){
+window.__pgMain=function(){
 const D = window.GUIDE_DATA || {orgs:[],services:[]};
 const ORGS = D.orgs, SVCS = D.services, OBY = {}, SBY = {};
 ORGS.forEach(o=>OBY[o.id]=o); SVCS.forEach(s=>SBY[s.id]=s);
@@ -2781,6 +2781,27 @@ render();
   $('#cbFab').addEventListener('click',open); $('#cbX').addEventListener('click',close);
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') close(); });
 })();
+};
+</script>
+<script>
+/* تحميل بيانات الدليل من قاعدة البيانات (قابلة للتعديل من لوحة التحكم)؛ عند تعذّر الاتصال يُستخدم الملف الثابت */
+(function(){
+  var done=false, URL='https://zxruviveljkywxbdqjxc.supabase.co', KEY='sb_publishable_URvlZnzYTl0CwwVxCikLvA_OeGSzhJh';
+  function go(){ if(done) return; done=true; window.__pgMain(); }
+  function recount(D){
+    var c={}, k={}; D.services.forEach(function(s){ c[s.org]=(c[s.org]||0)+1; (s.cats||[]).forEach(function(x){ k[x]=(k[x]||0)+1; }); });
+    D.orgs.forEach(function(o){ o.count=c[o.id]||0; });
+    (D.categories||[]).forEach(function(x){ x.count=k[x.id]||0; });
+  }
+  var ctl=window.AbortController?new AbortController():null, to=setTimeout(function(){ if(ctl) ctl.abort(); go(); },3500);
+  fetch(URL+'/rest/v1/rpc/guide_get',{method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+KEY,'Content-Type':'application/json'},body:'{}',signal:ctl&&ctl.signal})
+    .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+    .then(function(j){
+      if(j && j.orgs && j.orgs.length && j.services){
+        var D=window.GUIDE_DATA||{}; D.orgs=j.orgs; D.services=j.services.map(function(s){ s.tags=s.tags||[]; s.cats=s.cats||[]; if(!s.note) delete s.note; if(!s.raw) delete s.raw; return s; });
+        window.GUIDE_DATA=D; recount(D);
+      }
+    }).catch(function(){}).then(function(){ clearTimeout(to); go(); });
 })();
 </script>
 </body>

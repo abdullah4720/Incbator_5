@@ -451,6 +451,7 @@ label.flabel{display:block;font-size:12.5px;font-weight:600;color:var(--ink-900)
   <div class="view" id="view-users"></div>
   <div class="view" id="view-announcements"></div>
   <div class="view" id="view-datacenter"></div>
+  <div class="view" id="view-guide"></div>
   <div class="view" id="view-settings"></div>
 </div>
 </div>
@@ -854,6 +855,7 @@ const TABS = [
   {id:"users", l:"المستخدمون والأدوار", adminOnly:true},
   {id:"announcements", l:"التحديثات", adminOnly:true},
   {id:"datacenter", l:"مركز البيانات", adminOnly:true},
+  {id:"guide", l:"دليل الشركاء", adminOnly:true},
   {id:"settings", l:"إعدادات النموذج", adminOnly:true},
 ];
 function visibleTabs(){
@@ -866,7 +868,7 @@ const TAB_GROUPS = [
   { primary: true, tabs: ['dashboard','datacenter','review','judging'] },
   { id:'verify', label:'التحقق والفرز', tabs: ['shortlist','duplicates','qualifying','candidates','nonqualifying'] },
   { id:'reports', label:'التقارير', tabs: ['report','analytics','finalists'] },
-  { id:'admin', label:'الإدارة', tabs: ['builder','eligibility','users','announcements','settings'] },
+  { id:'admin', label:'الإدارة', tabs: ['builder','eligibility','users','announcements','guide','settings'] },
 ];
 
 function renderTabs(){
@@ -9509,6 +9511,113 @@ function openAiPromptModal(){
   });
 }
 
+
+/* ============================================================
+   إدارة دليل شركاء النجاح — الجهات والخدمات (جداول guide_orgs / guide_services)
+   ============================================================ */
+const GUIDE_CATS = [['fund','تمويل ومنح'],['invest','استثمار'],['mentor','إرشاد واستشارات'],['incub','احتضان وتسريع'],['train','تدريب وتأهيل'],['prod','تطوير المنتجات والنماذج'],['tech','بنية تقنية وسحابية'],['space','مساحات ومختبرات'],['market','أسواق وتوسع'],['compete','مسابقات وفعاليات'],['ip','ملكية فكرية']];
+let GA = { orgs:[], svcs:[], loaded:false, q:'', org:'', show:'all', err:'' };
+async function guideLoad(){
+  const [o,s] = await Promise.all([ sb.from('guide_orgs').select('*').order('sort').order('created_at'), sb.from('guide_services').select('*').order('sort').order('id') ]);
+  if(o.error||s.error){ GA.err = (o.error||s.error).message; GA.loaded = true; return; }
+  GA.err=''; GA.orgs=o.data||[]; GA.svcs=s.data||[]; GA.loaded=true;
+}
+function guideModal(title, bodyHtml, onSave){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(20,20,79,.55);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 12px';
+  ov.innerHTML=`<div style="background:#fff;border-radius:14px;max-width:680px;width:100%;padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.3)"><h3 style="margin:0 0 14px;color:var(--navy,#14144F)">${title}</h3><div id="gmBody">${bodyHtml}</div><div style="display:flex;gap:8px;justify-content:flex-start;margin-top:16px"><button class="btn btn-primary" id="gmSave">حفظ</button><button class="btn btn-ghost" id="gmCancel">إلغاء</button></div></div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();
+  ov.querySelector('#gmCancel').onclick=close;
+  ov.addEventListener('mousedown',e=>{ if(e.target===ov) close(); });
+  ov.querySelector('#gmSave').onclick=async ()=>{ const b=ov.querySelector('#gmSave'); b.disabled=true; const ok=await onSave(ov); b.disabled=false; if(ok!==false) close(); };
+  return ov;
+}
+function guideOrgForm(o){
+  o=o||{};
+  guideModal(o.id?'تعديل الجهة':'إضافة جهة', `
+    <div class="field-inline"><label class="flabel">اسم الجهة</label><input type="text" id="goName" value="${escHtml(o.name||'')}"></div>
+    <div class="field-inline"><label class="flabel">مسار الشعار أو رابطه</label><input type="text" id="goLogo" dir="ltr" placeholder="logos/اسم-الملف.png" value="${escHtml(o.logo||'')}"><div style="font-size:12px;color:var(--ink-500,#667);margin-top:4px">الشعارات الجديدة: ارفع الملف إلى مجلد logos في المستودع ثم اكتب مساره هنا، أو ضع رابطًا مباشرًا (https://…). بدون شعار تظهر أيقونة بديلة.</div></div>
+    <div class="field-inline"><label class="flabel">الترتيب (رقم أصغر = أولًا)</label><input type="number" id="goSort" value="${o.sort!=null?o.sort:GA.orgs.length+1}"></div>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="goHid" ${o.hidden?'checked':''}> إخفاء الجهة (وخدماتها) من الدليل العام</label>`,
+  async ov=>{
+    const name=ov.querySelector('#goName').value.trim(); if(!name){ showToast('اكتب اسم الجهة'); return false; }
+    const row={ name, logo: ov.querySelector('#goLogo').value.trim()||null, sort:+ov.querySelector('#goSort').value||0, hidden:ov.querySelector('#goHid').checked };
+    let r;
+    if(o.id) r=await sb.from('guide_orgs').update(row).eq('id',o.id);
+    else { const n=Math.max(0,...GA.orgs.map(x=>+String(x.id).replace(/\D/g,'')||0))+1; r=await sb.from('guide_orgs').insert(Object.assign({id:'o'+n},row)); }
+    if(r.error){ showToast('تعذّر الحفظ: '+r.error.message); return false; }
+    showToast('تم الحفظ'); await guideLoad(); renderGuideAdmin();
+  });
+}
+function guideSvcForm(s){
+  s=s||{};
+  const cats=s.cats||[];
+  guideModal(s.id?'تعديل الخدمة':'إضافة خدمة', `
+    <div class="field-inline"><label class="flabel">الجهة</label><select id="gsOrg">${GA.orgs.map(o=>`<option value="${escHtml(o.id)}" ${(s.org||GA.org)===o.id?'selected':''}>${escHtml(o.name)}</option>`).join('')}</select></div>
+    <div class="field-inline"><label class="flabel">عنوان الخدمة</label><input type="text" id="gsTitle" value="${escHtml(s.title||'')}"></div>
+    <div class="field-inline"><label class="flabel">الوصف</label><textarea id="gsDesc" rows="6">${escHtml(s.descr||'')}</textarea></div>
+    <div class="field-inline"><label class="flabel">رابط الاستفادة / التقديم</label><input type="text" id="gsLink" dir="ltr" placeholder="https://…" value="${escHtml(s.link||'')}"><div style="font-size:12px;color:var(--ink-500,#667);margin-top:4px">اتركه فارغًا لتظهر عبارة «رابط الاستفادة غير متاح حالياً». يُضاف https:// تلقائيًا إن نُسي.</div></div>
+    <div class="field-inline"><label class="flabel">الوسوم (مفصولة بفاصلة)</label><input type="text" id="gsTags" value="${escHtml((s.tags||[]).join('، '))}"></div>
+    <div class="field-inline"><label class="flabel">التصنيفات</label><div style="display:flex;flex-wrap:wrap;gap:6px 14px">${GUIDE_CATS.map(c=>`<label style="display:flex;gap:5px;align-items:center;font-size:13px"><input type="checkbox" class="gsCat" value="${c[0]}" ${cats.includes(c[0])?'checked':''}>${c[1]}</label>`).join('')}</div></div>
+    <div class="field-inline"><label class="flabel">ملاحظة تظهر مع الخدمة (اختياري)</label><input type="text" id="gsNote" value="${escHtml(s.note||'')}"></div>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="gsHid" ${s.hidden?'checked':''}> إخفاء الخدمة من الدليل العام</label>`,
+  async ov=>{
+    const title=ov.querySelector('#gsTitle').value.trim(); if(!title){ showToast('اكتب عنوان الخدمة'); return false; }
+    let link=ov.querySelector('#gsLink').value.trim();
+    const row={ org:ov.querySelector('#gsOrg').value, title, descr:ov.querySelector('#gsDesc').value.trim()||null,
+      link: link ? (/^https?:\/\//i.test(link)?link:'https://'+link) : null, raw: link||null,
+      tags: ov.querySelector('#gsTags').value.split(/[,،]/).map(x=>x.trim()).filter(Boolean),
+      cats: [...ov.querySelectorAll('.gsCat:checked')].map(x=>x.value),
+      note: ov.querySelector('#gsNote').value.trim()||null, hidden: ov.querySelector('#gsHid').checked, updated_at:new Date().toISOString() };
+    let r;
+    if(s.id) r=await sb.from('guide_services').update(row).eq('id',s.id);
+    else r=await sb.from('guide_services').insert(Object.assign({sort:(Math.max(0,...GA.svcs.map(x=>x.sort||0))+1)},row));
+    if(r.error){ showToast('تعذّر الحفظ: '+r.error.message); return false; }
+    showToast('تم الحفظ'); await guideLoad(); renderGuideAdmin();
+  });
+}
+async function renderGuideAdmin(){
+  const el=document.getElementById('view-guide');
+  if(!GA.loaded){ el.innerHTML='<div class="card">جارٍ التحميل…</div>'; await guideLoad(); }
+  if(GA.err){ el.innerHTML=`<div class="card"><b>تعذّر تحميل بيانات الدليل.</b><br>${escHtml(GA.err)}<br><br>شغّل الملف <code>add-guide-admin.sql</code> في Supabase ثم أعد المحاولة.<br><button class="btn btn-ghost btn-sm" id="gaRetry" style="margin-top:10px">إعادة المحاولة</button></div>`; el.querySelector('#gaRetry').onclick=async()=>{ GA.loaded=false; renderGuideAdmin(); }; return; }
+  const q=GA.q.trim(); const OBY={}; GA.orgs.forEach(o=>OBY[o.id]=o);
+  const cnt=id=>GA.svcs.filter(s=>s.org===id).length;
+  let list=GA.svcs.filter(s=>(!GA.org||s.org===GA.org)&&(GA.show==='all'||(GA.show==='hidden'?s.hidden:GA.show==='nolink'?!s.link:!s.hidden))&&(!q||(s.title+' '+(s.descr||'')+' '+((OBY[s.org]||{}).name||'')).includes(q)));
+  const nohid=GA.svcs.filter(s=>s.hidden).length, nolink=GA.svcs.filter(s=>!s.link).length;
+  el.innerHTML=`
+   <div class="section-title-row"><div><h2>دليل شركاء النجاح</h2><p>أي تعديل هنا يظهر فورًا في صفحة <a href="partners-guide.html" target="_blank" rel="noopener">partners-guide.html</a> دون إعادة نشر.</p></div></div>
+   <div class="card" style="margin-bottom:16px">
+     <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;font-size:13px"><span><b>${GA.orgs.length}</b> جهة</span><span><b>${GA.svcs.length}</b> خدمة</span><span><b>${nohid}</b> مخفية</span><span><b>${nolink}</b> بلا رابط</span></div>
+     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b style="font-size:13px">الجهات:</b><button class="btn btn-primary btn-sm" id="gaAddOrg">+ إضافة جهة</button></div>
+     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">${GA.orgs.map(o=>`<div style="border:1.5px solid ${GA.org===o.id?'#00BF9C':'#E3E8EE'};border-radius:10px;padding:6px 10px;display:flex;gap:8px;align-items:center;font-size:12.5px;${o.hidden?'opacity:.55':''}"><a href="#" data-gof="${escHtml(o.id)}" style="color:inherit;text-decoration:none"><b>${escHtml(o.name)}</b> <span style="color:#667">(${cnt(o.id)})</span></a><button class="btn btn-ghost btn-sm" data-goe="${escHtml(o.id)}">تعديل</button><button class="btn btn-danger-ghost btn-sm" data-god="${escHtml(o.id)}">حذف</button></div>`).join('')}</div>
+   </div>
+   <div class="card">
+     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+       <input type="text" id="gaQ" placeholder="بحث في الخدمات…" value="${escHtml(GA.q)}" style="max-width:240px">
+       <select id="gaOrg" style="max-width:240px"><option value="">كل الجهات</option>${GA.orgs.map(o=>`<option value="${escHtml(o.id)}" ${GA.org===o.id?'selected':''}>${escHtml(o.name)}</option>`).join('')}</select>
+       <select id="gaShow" style="max-width:160px"><option value="all">الكل</option><option value="vis" ${GA.show==='vis'?'selected':''}>الظاهرة</option><option value="hidden" ${GA.show==='hidden'?'selected':''}>المخفية</option><option value="nolink" ${GA.show==='nolink'?'selected':''}>بلا رابط</option></select>
+       <span style="flex:1"></span><button class="btn btn-primary btn-sm" id="gaAddSvc">+ إضافة خدمة</button>
+     </div>
+     <div style="font-size:12.5px;color:#667;margin-bottom:8px">${list.length} خدمة</div>
+     <div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:right;border-bottom:2px solid #E3E8EE"><th style="padding:6px">الخدمة</th><th>الجهة</th><th>الرابط</th><th>الحالة</th><th></th></tr></thead><tbody>
+     ${list.map(s=>`<tr style="border-bottom:1px solid #EEF1F5;${s.hidden?'opacity:.55':''}"><td style="padding:7px 6px;max-width:320px"><b>${escHtml(s.title)}</b></td><td>${escHtml((OBY[s.org]||{}).name||s.org)}</td><td>${s.link?`<a href="${escHtml(s.link)}" target="_blank" rel="noopener">فتح ↗</a>`:'<span style="color:#B45309">بلا رابط</span>'}</td><td>${s.hidden?'مخفية':'ظاهرة'}</td><td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" data-se="${s.id}">تعديل</button> <button class="btn btn-ghost btn-sm" data-sh="${s.id}">${s.hidden?'إظهار':'إخفاء'}</button> <button class="btn btn-danger-ghost btn-sm" data-sd="${s.id}">حذف</button></td></tr>`).join('')||'<tr><td colspan="5" style="padding:16px;color:#667">لا توجد نتائج</td></tr>'}
+     </tbody></table></div>
+   </div>`;
+  const $=s=>el.querySelector(s);
+  $('#gaAddOrg').onclick=()=>guideOrgForm();
+  $('#gaAddSvc').onclick=()=>{ if(!GA.orgs.length){ showToast('أضف جهة أولًا'); return; } guideSvcForm(); };
+  let t; $('#gaQ').addEventListener('input',e=>{ GA.q=e.target.value; clearTimeout(t); t=setTimeout(()=>{ renderGuideAdmin().then(()=>{ const i=document.querySelector('#view-guide #gaQ'); i.focus(); i.setSelectionRange(i.value.length,i.value.length); }); },250); });
+  $('#gaOrg').onchange=e=>{ GA.org=e.target.value; renderGuideAdmin(); };
+  $('#gaShow').onchange=e=>{ GA.show=e.target.value; renderGuideAdmin(); };
+  el.querySelectorAll('[data-gof]').forEach(a=>a.onclick=e=>{ e.preventDefault(); GA.org=GA.org===a.dataset.gof?'':a.dataset.gof; renderGuideAdmin(); });
+  el.querySelectorAll('[data-goe]').forEach(b=>b.onclick=()=>guideOrgForm(OBY[b.dataset.goe]));
+  el.querySelectorAll('[data-god]').forEach(b=>b.onclick=async()=>{ const o=OBY[b.dataset.god]; if(!confirm(`حذف «${o.name}» وجميع خدماتها (${cnt(o.id)})؟ لا يمكن التراجع. (للإخفاء المؤقت استخدم «تعديل»)`)) return; const r=await sb.from('guide_orgs').delete().eq('id',o.id); if(r.error){ showToast('تعذّر الحذف: '+r.error.message); return; } if(GA.org===o.id) GA.org=''; showToast('تم الحذف'); await guideLoad(); renderGuideAdmin(); });
+  el.querySelectorAll('[data-se]').forEach(b=>b.onclick=()=>guideSvcForm(GA.svcs.find(x=>x.id==b.dataset.se)));
+  el.querySelectorAll('[data-sh]').forEach(b=>b.onclick=async()=>{ const s=GA.svcs.find(x=>x.id==b.dataset.sh); const r=await sb.from('guide_services').update({hidden:!s.hidden}).eq('id',s.id); if(r.error){ showToast('تعذّر التحديث: '+r.error.message); return; } s.hidden=!s.hidden; renderGuideAdmin(); });
+  el.querySelectorAll('[data-sd]').forEach(b=>b.onclick=async()=>{ const s=GA.svcs.find(x=>x.id==b.dataset.sd); if(!confirm(`حذف الخدمة «${s.title}»؟ لا يمكن التراجع.`)) return; const r=await sb.from('guide_services').delete().eq('id',s.id); if(r.error){ showToast('تعذّر الحذف: '+r.error.message); return; } GA.svcs=GA.svcs.filter(x=>x.id!==s.id); showToast('تم الحذف'); renderGuideAdmin(); });
+}
+
 /* ---------------- عرض شامل ---------------- */
 function renderAll(){
   renderTabs();
@@ -9523,6 +9632,7 @@ function renderAll(){
   if(activeTab==='nonqualifying') renderQualificationTab(false);
   if(activeTab==='announcements') renderAnnouncements();
   if(activeTab==='datacenter') renderDataCenterTab();
+  if(activeTab==='guide') renderGuideAdmin();
   if(activeTab==='review') renderReview();
   if(activeTab==='judging') renderJudgingTab();
   if(activeTab==='builder') renderBuilder();
